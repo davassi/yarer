@@ -12,7 +12,7 @@ impl Parser {
     /* parse and split a str into a vec of &str */
     fn process(exp: &str) -> Result<Vec<&str>, &str> {
 
-        let regex = Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/()])").unwrap(); // always true
+        let regex = Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=,])").unwrap(); // always true
         
         Ok(regex.find_iter(exp)
            .map(|m| m.as_str())

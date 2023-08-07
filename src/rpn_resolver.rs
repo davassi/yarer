@@ -1,47 +1,81 @@
 
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-use crate::{parser::*, token::Token};
+use crate::{parser::*, token::{Token, Operator, Number}};
 
 pub struct RpnResolver {
-    rpn_expr: Vec<Token>,
+    rpn_expr: VecDeque<Token>,
     local_heap: HashMap<String, Token>,
+}
+
+fn dump_debug(v: &VecDeque<Token>) -> () {
+    v.iter().for_each(|f| print!("{}",f));      
 }
 
 impl RpnResolver {
 
     pub fn parse(exp : &str) -> Self {
 
-        println!("{:?}", exp);
-
-        let tokenised_expr: Vec<Token> = Parser::parse(exp).unwrap();
-        println!("{:?}", tokenised_expr);
+        let tokenised_expr: Vec<Token> = Parser::parse(exp).unwrap(); //dump_debug(&tokenised_expr);
         
-        let rpn_expr: Vec<Token> = self::RpnResolver::reverse_polish_notation(&tokenised_expr);
-        println!("{:?}", rpn_expr);
+        let (rpn_expr , local_heap) = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
-        RpnResolver { rpn_expr, local_heap : HashMap::new() }
+        RpnResolver { rpn_expr, local_heap }
     }
 
-    pub fn resolve(&self) -> Result<Token, &str> {
+    pub fn resolve(&mut self) -> Result<Number, &str> {
         
-        Ok(Token::Operand(crate::token::Number::NaturalNumber(42)))
+        //dump_debug(&self.rpn_expr);
+
+        let mut result_stack: VecDeque<Number> = VecDeque::new();
+
+        // a b + 
+        while !self.rpn_expr.is_empty() {
+            let t: Token = self.rpn_expr.pop_front().unwrap();
+           
+            match t {
+                Token::Operand(n) => {
+                    result_stack.push_back(n);
+                },
+                Token::Operator(op) => {
+                    let right_value: Number = result_stack.pop_back().unwrap();
+                    let left_value: Number = result_stack.pop_back().unwrap();
+
+                    match op {
+                        Operator::Add => result_stack.push_back(left_value+right_value),
+                        Operator::Sub => result_stack.push_back(left_value-right_value),
+                        Operator::Mul => result_stack.push_back(left_value*right_value),
+                        Operator::Div => result_stack.push_back(left_value/right_value),
+                        Operator::Pow => result_stack.push_back(left_value^right_value),
+                        _ => panic!("rpn_resolver.rs:55 - Not implemented!")
+                    }
+                },
+                _ => panic!("This '{}' cannot be yet recognised!", t),
+            }
+        }
+
+        //println!("The end... Debug Trait {:?}", result_stack);
+
+        result_stack.pop_front().map(|r| Ok(r)).unwrap_or(Err("Macello"))
+       // Ok(result_stack.pop_front().unwrap())
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
-    fn reverse_polish_notation(infix_stack: &Vec<Token>) -> Vec<Token> {
+    fn reverse_polish_notation(infix_stack: &Vec<Token>) -> (VecDeque<Token>, HashMap<String, Token>) {
         
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
-        let mut postfix_stack: Vec<Token> = Vec::new();
+        let mut postfix_stack: VecDeque<Token> = VecDeque::new();
+        let mut local_heap: HashMap<String, Token> = RpnResolver::init_local_heap();
 
         /* Scan the infix expression from left to right. */
         infix_stack.into_iter().for_each(|t: &Token| {
 
+            //println!("Inspecting... {}", *t);
             match *t {
                 /* If the token is an operand, add it to the output list. */
-                Token::Operand(_) => postfix_stack.push(*t),
+                Token::Operand(_) => postfix_stack.push_back(*t),
 
                 /* If the token is a left parenthesis, push it on the stack. */
                 Token::Bracket(crate::token::Bracket::Open) => operators_stack.push(*t),
@@ -54,10 +88,10 @@ impl RpnResolver {
                     while let Some(token) = operators_stack.pop() {
                         match token {
                             Token::Bracket(crate::token::Bracket::Open) => break,
-                            _ => postfix_stack.push(token),
+                            _ => postfix_stack.push_front(token),
                         }
                     }
-                    operators_stack.pop();
+                    operators_stack.pop(); // discard left parenthesis
                 },
 
                 /* If the token is an operator, op1, then:
@@ -66,20 +100,63 @@ impl RpnResolver {
                    or op1 is right-associative and its precedence is less than that of op2:
                       pop op2 off the stack, onto the output list;
                     push op1 on the stack.*/
-                Token::Operator(_) => {
+                    Token::Operator(_) => {
+                        let op1 = *t;
+                        if !operators_stack.is_empty() {
+                            let op2: &Token = operators_stack.last().unwrap();
+                            match op2 {
+                                Token::Operator(_) => {
+                                    if Token::compare_operator_priority(op1, *op2) {
+                                        postfix_stack.push_back(operators_stack.pop().unwrap());
+                                    }
+                                },
+                                _ => (),
+                            }
+                        }
+                        operators_stack.push(op1);   
+                    },
+             /*    Token::Operator(_) => {
+                    let op1 = *t;
+                    let wop2 = operators_stack.pop().and_then(|op2| {
 
-                },
+                        match op2 {
+                            Token::Operator(_) => {
+                                if Token::compare_operator_priority(op1, op2) {
+                                postfix_stack.push(op2);
+                                operators_stack.push(op1);
+                            },
+                            _ => (),
+                        };
+                }
+            },*/
 
                 Token::Function => { todo!();},
 
                 /* If the token is a variable, add it to the output list and to the local_heap */
-                Token::Variable => { todo!();},
+                Token::Variable => { 
+                    postfix_stack.push_back(*t);
+                    local_heap.insert(" ".to_string(), *t);
+                    todo!();
+                },
+                
             }            
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list.  */
-        postfix_stack
+        while !operators_stack.is_empty() {
+            postfix_stack.push_back(operators_stack.pop().unwrap());
+        }
+      
+        (postfix_stack, local_heap)
     }
+
+    fn init_local_heap() -> HashMap<String, Token> {
+        static PI: Token = crate::token::Token::Operand(crate::token::Number::DecimalNumber(3.14));
+        let mut local_heap: HashMap<String, Token> = HashMap::new();
+        local_heap.insert("PI".to_string(), PI);
+        local_heap
+    }
+
 }
 
 
@@ -92,7 +169,7 @@ mod tests {
     fn test_reverse_polish_notation() {
         let a: Vec<Token> = vec![Token::Operand(Number::NaturalNumber(1)), Token::Operator(Operator::Add), Token::Operand(Number::NaturalNumber(2))];
         let b: Vec<Token> = vec![Token::Operand(Number::NaturalNumber(1)), Token::Operand(Number::NaturalNumber(2)),Token::Operator(Operator::Add)];
-        assert_eq!(RpnResolver::reverse_polish_notation(&a), b);
+        assert_eq!(RpnResolver::reverse_polish_notation(&a).0, b);
     }
 
 
