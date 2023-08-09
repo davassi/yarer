@@ -41,7 +41,6 @@ impl Token {
 
     fn operator_priority(o : Token) -> (u8, Associate) {
         match o {
-            
             Token::Operator(Operator::Add) => (1 , Associate::LeftAssociative),
             Token::Operator(Operator::Sub) => (1 , Associate::LeftAssociative),
             Token::Operator(Operator::Mul) => (2 , Associate::LeftAssociative),
@@ -69,7 +68,7 @@ impl Token {
             '/' => Ok(Token::Operator(Operator::Div)),
             '^' => Ok(Token::Operator(Operator::Pow)),
             '=' => Ok(Token::Operator(Operator::Eql)),
-            _ => Err("Operator not supported."),
+            _ => Err("Math Operator not supported."),
         }
     }
 
@@ -77,7 +76,7 @@ impl Token {
         match c {
             '(' | '[' => Ok(Token::Bracket(Bracket::Open)),
             ')' | ']' => Ok(Token::Bracket(Bracket::Close)),
-            _ => Err("operator not supported."),
+            _ => Err("Bracket operator not supported."),
         }
     }
 
@@ -85,7 +84,7 @@ impl Token {
         
         match n.parse::<i32>() {
             Ok(v) => Ok(Token::Operand(Number::NaturalNumber(v))),
-            Err(_) => Err("Failed to parse natural number"),
+            Err(e) => Err("Failed to parse natural number: {}"),
         }
     }
 

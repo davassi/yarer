@@ -23,12 +23,23 @@ The library just returns a variant natural number, or a decimal number if one ex
 Yarer can handle also variables. Here an example:
 
 ```rust
-      let resolver = RpnResolver::parse("3/(5*x^2)");
-      resolver.set("x",4);
-      println!("The result of {} is {}", exp, resolver.resolve());
+      let resolver = RpnResolver::parse("1/(x^2)");
+      resolver.set("x",2);
+      println!("The result is {}", resolver.resolve());
 ```
 
-Yarer can be used also from command line, and behaves in a very similar manner to bc
+and of course, the expression can be re-evaluated if the variable changes.
+
+```rust
+      //...
+      resolver.set("x",-1);
+      println!("The result is {}", resolver.resolve());
+      resolver.set("x",0.001); 
+      println!("The result is {}", resolver.resolve());
+      //...
+```
+
+Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 
 ```rust
       Yarer
