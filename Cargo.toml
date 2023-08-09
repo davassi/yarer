@@ -1,5 +1,5 @@
 [package]
-name = "Yarer"
+name = "yarer"
 version = "0.1.0"
 authors = ["Davassi <gianluigi.davassi@gmail.com>"]
 description = "Yarer is a Reverse Polish Notation expression resolver"
