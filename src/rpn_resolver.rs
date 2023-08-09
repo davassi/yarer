@@ -3,7 +3,6 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{parser::*, token::{Token, Operator, Number}};
-
 pub struct RpnResolver {
     rpn_expr: VecDeque<Token>,
     local_heap: HashMap<String, Token>,
@@ -13,13 +12,16 @@ fn dump_debug(v: &VecDeque<Token>) -> () {
     v.iter().for_each(|f| print!("{}",f));      
 }
 
+fn dump_debug2(v: &Vec<Token>) -> () {
+    v.iter().for_each(|f| print!("{}",f));      
+}
+
 /// Here relies the core logic of Yarer. 
 impl RpnResolver {
 
     pub fn parse(exp : &str) -> Self {
 
         let tokenised_expr: Vec<Token> = Parser::parse(exp).unwrap(); //dump_debug(&tokenised_expr);
-        
         let (rpn_expr , local_heap) = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
         RpnResolver { rpn_expr, local_heap }
@@ -27,11 +29,8 @@ impl RpnResolver {
 
     pub fn resolve(&mut self) -> Result<Number, &str> {
         
-        //dump_debug(&self.rpn_expr);
-
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
-        // a b + 
         while !self.rpn_expr.is_empty() {
             let t: Token = self.rpn_expr.pop_front().unwrap();
            
@@ -70,7 +69,6 @@ impl RpnResolver {
         /* Scan the infix expression from left to right. */
         infix_stack.into_iter().for_each(|t: &Token| {
 
-            println!("Inspecting... {}", *t);
             match *t {
                 /* If the token is an operand, add it to the output list. */
                 Token::Operand(_) => postfix_stack.push_back(*t),
@@ -85,11 +83,10 @@ impl RpnResolver {
 
                     while let Some(token) = operators_stack.pop() {
                         match token {
-                            Token::Bracket(crate::token::Bracket::Open) => break,
-                            _ => postfix_stack.push_front(token),
+                            Token::Bracket(crate::token::Bracket::Open) => break, // discards left parenthesis
+                            _ => postfix_stack.push_back(token),
                         }
                     }
-                    operators_stack.pop(); // discard left parenthesis
                 },
 
                 /* If the token is an operator, op1, then:
@@ -124,6 +121,10 @@ impl RpnResolver {
                 },
                 
             }            
+            /*print!("Inspecting... {}", *t);
+            print!(" - OUT ");dump_debug(&postfix_stack);
+            print!(" - OP ");dump_debug2(&operators_stack);
+            println!();*/
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list.  */
@@ -131,6 +132,9 @@ impl RpnResolver {
             postfix_stack.push_back(operators_stack.pop().unwrap());
         }
       
+        /*print!(" - OUT ");dump_debug(&postfix_stack);
+        print!(" - OP ");dump_debug2(&operators_stack);
+        println!();*/
         (postfix_stack, local_heap)
     }
 
@@ -155,8 +159,5 @@ mod tests {
         let b: Vec<Token> = vec![Token::Operand(Number::NaturalNumber(1)), Token::Operand(Number::NaturalNumber(2)),Token::Operator(Operator::Add)];
         assert_eq!(RpnResolver::reverse_polish_notation(&a).0, b);
     }
-
-
-
 
 }

@@ -31,9 +31,10 @@ struct Cli {
 ///
 ///  Example 
 ///  ```   
-///      let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
-///      let resolver = RpnResolver::parse(exp);
-///      println!("The result of {} is {}", exp, resolver.resolve());
+///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
+///      let mut resolver : RpnResolver = RpnResolver::parse(exp);
+///      let result: token::Number = resolver.resolve().unwrap();
+///      println!("The result of {} is {}", exp, result);
 ///  ```
 ///
 fn main() {
@@ -44,14 +45,6 @@ fn main() {
         println!("Yarer v.{} - Yet Another Rust Rpn Expression Resolver.", VERSION);
         println!("License MIT OR Apache-2.0");
     }
-
-    //let exp = "3 + 4 * 2 / ( 1 − 5 ) ^ 2 ^ 3";
-    //let exp = "((10 + 5) – 3 * (9 / 3)) + 2"; // 10 5 + 3 9 3 / * - 2 +
-    let exp = "4 + 4 * 2 / ( 1 - 5 )";
-  
-    let mut resolver : RpnResolver = RpnResolver::parse(exp);
-    let result: token::Number = resolver.resolve().unwrap();
-    println!("The result of {} is {}", exp, result);
 
     loop {
         let mut input : String = String::new();

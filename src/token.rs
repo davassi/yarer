@@ -84,7 +84,7 @@ impl Token {
         
         match n.parse::<i32>() {
             Ok(v) => Ok(Token::Operand(Number::NaturalNumber(v))),
-            Err(e) => Err("Failed to parse natural number: {}"),
+            Err(_) => Err("Failed to parse natural number"),
         }
     }
 
@@ -107,7 +107,7 @@ impl Token {
         }
     }
 
-    /* Mapping a vec of str in a vec of Tokens */
+    /// Mapping a vec of str in a vec of Tokens
     pub fn tokenize_vec<'a>(v : &[&'a str]) -> Result<Vec<Token>, &'a str> {
         v.iter()
         .map(|t| Token::tokenize(t))
