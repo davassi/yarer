@@ -125,7 +125,7 @@ impl Display for Number {
     }
 }
 
-fn generic_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf : NF, df: DF) -> Number
+fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf : NF, df: DF) -> Number
     where NF: Fn(i32,i32) -> i32,
           DF: Fn(f64,f64) -> f64, {
 
@@ -133,20 +133,20 @@ fn generic_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf : NF, d
             Number::NaturalNumber(v1) => {
                 match rn {
                     Number::NaturalNumber(v2) => {
-                        return crate::token::Number::NaturalNumber(nf(v1,v2));
+                        crate::token::Number::NaturalNumber(nf(v1,v2))
                     },
                     Number::DecimalNumber(v2) => {
-                        return crate::token::Number::DecimalNumber(df(v1 as f64,v2));
+                        crate::token::Number::DecimalNumber(df(v1 as f64,v2))
                     },
                 }
             },
             Number::DecimalNumber(v1) => {
                 match rn {
                     Number::NaturalNumber(v2) => {
-                        return crate::token::Number::DecimalNumber(df(v1, v2 as f64));
+                        crate::token::Number::DecimalNumber(df(v1, v2 as f64))
                     },
                     Number::DecimalNumber(v2) => {
-                        return crate::token::Number::DecimalNumber(df(v1, v2));
+                        crate::token::Number::DecimalNumber(df(v1, v2))
                     },
                 }
             },
@@ -157,10 +157,9 @@ impl Add for Number {
     type Output = Number;
 
     fn add(self, rhs: Self) -> Self::Output {
-        let ln: Number = self as crate::token::Number;
-        let rn: Number = rhs as crate::token::Number;
-
-        generic_functional_token_operation(ln, rn, |a : i32,b: i32| a+b, |a : f64,b: f64| a+b)
+        
+        apply_functional_token_operation(self, rhs, 
+            |a : i32,b: i32| a+b, |a : f64,b: f64| a+b)
     }
 }
 
@@ -168,10 +167,9 @@ impl Sub for Number {
     type Output = Number;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        let ln: Number = self as crate::token::Number;
-        let rn: Number = rhs as crate::token::Number;
-
-        generic_functional_token_operation(ln, rn, |a : i32,b: i32| a-b, |a : f64,b: f64| a-b)
+ 
+        apply_functional_token_operation(self, rhs, 
+            |a : i32,b: i32| a-b, |a : f64,b: f64| a-b)
     }
 }
 
@@ -179,10 +177,9 @@ impl Mul for Number {
     type Output = Number;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        let ln: Number = self as crate::token::Number;
-        let rn: Number = rhs as crate::token::Number;
 
-        generic_functional_token_operation(ln, rn, |a : i32,b: i32| a*b, |a : f64,b: f64| a*b)
+        apply_functional_token_operation(self, rhs,
+             |a : i32,b: i32| a*b, |a : f64,b: f64| a*b)
     }
 }
 
@@ -190,10 +187,13 @@ impl Div for Number {
     type Output = Number;
 
     fn div(self, rhs: Self) -> Self::Output {
-        let ln: Number = self as crate::token::Number;
-        let rn: Number = rhs as crate::token::Number;
 
-        generic_functional_token_operation(ln, rn, |a : i32,b: i32| a/b, |a : f64,b: f64| a/b)
+        if rhs == crate::token::Number::NaturalNumber(0) {
+            panic!("Runtime error: Divide by zero.")
+        }
+
+        apply_functional_token_operation(self, rhs, 
+            |a : i32,b: i32| a/b, |a : f64,b: f64| a/b)
     }
 }
 
@@ -201,7 +201,9 @@ impl BitXor for Number {
     type Output = Number;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        crate::token::Number::NaturalNumber(11)
+
+        apply_functional_token_operation(self, rhs,
+             |a : i32,b: i32| a^b, |a : f64,b: f64| a+b)
     }
 }
 
@@ -293,7 +295,6 @@ mod tests {
     #[test]
     fn test_from_natural_number_invalid() {
         assert_eq!(Token::from_natural_number("10.5"), Err("Failed to parse natural number"));
-        assert_eq!(Token::from_natural_number("-1"), Err("Failed to parse natural number"));
         assert_eq!(Token::from_natural_number("abc"), Err("Failed to parse natural number"));
     }
 

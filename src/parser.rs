@@ -1,6 +1,6 @@
 
 
-use regex::{Regex, Error};
+use regex::{Regex};
 
 use crate::token::Token;
 
@@ -12,8 +12,8 @@ impl Parser {
     /* parse and split a str into a vec of &str */
     fn process(exp: &str) -> Result<Vec<&str>, &str> {
 
-        let regex = Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=,])").unwrap(); // always true
-        
+        let regex = Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=,×÷]|[a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
+
         Ok(regex.find_iter(exp)
            .map(|m| m.as_str())
            .collect())
@@ -37,6 +37,9 @@ mod tests {
     fn test_process_valid() {
         assert_eq!(Parser::process("1+2*3/(4-5)"), Ok(vec!["1", "+", "2", "*", "3", "/", "(", "4", "-", "5", ")"]));
         assert_eq!(Parser::process("100*3.14"), Ok(vec!["100", "*", "3.14"]));
+        assert_eq!(Parser::process("x-y"), Ok(vec!["x", "-", "y"]));  
+        assert_eq!(Parser::process("3+5*x"), Ok(vec!["3", "+", "5", "*", "x"]));
+        assert_eq!(Parser::process("-3.14*variableName123/alpha_beta"), Ok(vec!["-", "3.14", "*", "variableName123", "/", "alpha_beta"]));
     }
 
     #[test]

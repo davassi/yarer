@@ -57,8 +57,8 @@ impl RpnResolver {
 
         //println!("The end... Debug Trait {:?}", result_stack);
 
-        result_stack.pop_front().map(|r| Ok(r)).unwrap_or(Err("Macello"))
-       // Ok(result_stack.pop_front().unwrap())
+        result_stack.pop_front().ok_or("Something went terribly wrong here.")
+       
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
