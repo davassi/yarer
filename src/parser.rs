@@ -1,15 +1,16 @@
 
 
-use regex::{Regex};
+use regex::Regex;
 
 use crate::token::Token;
 
+/// The expression parser has only 2 functions: to parse and to tokenise a math expression
 #[derive(Debug)]
 pub struct Parser;
 
 impl Parser {
 
-    /* parse and split a str into a vec of &str */
+    /// The Parser parses and splits a str into a vec of &str using 
     fn process(exp: &str) -> Result<Vec<&str>, &str> {
 
         let regex = Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=,×÷]|[a-zA-Z_][a-zA-Z0-9_]*)").unwrap();
@@ -19,7 +20,7 @@ impl Parser {
            .collect())
     }
     
-    /* tokenise a processed str expression */
+    /// tokenise a processed str expression
     pub fn parse(exp: &str) -> Result<Vec<Token>, &str> {
 
         Self::process(exp)

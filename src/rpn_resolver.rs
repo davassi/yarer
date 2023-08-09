@@ -13,6 +13,7 @@ fn dump_debug(v: &VecDeque<Token>) -> () {
     v.iter().for_each(|f| print!("{}",f));      
 }
 
+/// Here relies the core logic of Yarer. 
 impl RpnResolver {
 
     pub fn parse(exp : &str) -> Self {
@@ -54,9 +55,6 @@ impl RpnResolver {
                 _ => panic!("This '{}' cannot be yet recognised!", t),
             }
         }
-
-        //println!("The end... Debug Trait {:?}", result_stack);
-
         result_stack.pop_front().ok_or("Something went terribly wrong here.")
        
     }
