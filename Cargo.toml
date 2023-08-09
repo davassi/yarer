@@ -1,9 +1,11 @@
 [package]
-name = "rpn_resolver"
+name = "Yarer"
 version = "0.1.0"
+authors = ["Davassi <gianluigi.davassi@gmail.com>"]
+description = "Yarer is a Reverse Polish Notation expression resolver"
+homepage = "https://github.com/davassi/Yarer"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+clap = { version = "4.3.21", features = ["derive"] }
 regex = "1.9.1"

@@ -1,5 +1,6 @@
 
 use std::io;
+use clap::Parser;
 
 pub mod parser;
 pub mod rpn_resolver;
@@ -7,29 +8,40 @@ pub mod token;
 
 use crate::rpn_resolver::*;
 
-static VERSION : f32 = 0.11;
+static VERSION : &str = env!("CARGO_PKG_VERSION");
 
 /*
   Yarer 
   Reverse Polish Notification expression resolver
  
-The flow is pretty simple: 
+  The flow is pretty simple: 
 
   1 parse and convert a string into a vec of &str
   2 map a vec of &str into a vec of tokens
   3 reverse polish notification the vec
   4 resolve the expression!
 
-  Example
-      
+  Example    
       let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
       let resolver = RpnResolver::parse(exp);
       println!("The result of {} is {}", exp, resolver.resolve());
  */
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)] // Read from `Cargo.toml`
+struct Cli {
+    #[arg(short,long)]
+    quiet: bool,
+}
+
 fn main() {
 
-    println!("Yarer v.{} - Yet Another Rust Rpn Expression Resolver.", VERSION);
-    println!("License MIT-Apache");
+    let cli = Cli::parse();
+
+    if !cli.quiet {
+        println!("Yarer v.{} - Yet Another Rust Rpn Expression Resolver.", VERSION);
+        println!("License MIT OR Apache-2.0");
+    }
 
     /* 
      Input: A + B * C + D
