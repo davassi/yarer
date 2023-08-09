@@ -72,7 +72,7 @@ impl RpnResolver {
         /* Scan the infix expression from left to right. */
         infix_stack.into_iter().for_each(|t: &Token| {
 
-            //println!("Inspecting... {}", *t);
+            println!("Inspecting... {}", *t);
             match *t {
                 /* If the token is an operand, add it to the output list. */
                 Token::Operand(_) => postfix_stack.push_back(*t),
@@ -100,35 +100,21 @@ impl RpnResolver {
                    or op1 is right-associative and its precedence is less than that of op2:
                       pop op2 off the stack, onto the output list;
                     push op1 on the stack.*/
-                    Token::Operator(_) => {
-                        let op1 = *t;
-                        if !operators_stack.is_empty() {
-                            let op2: &Token = operators_stack.last().unwrap();
-                            match op2 {
-                                Token::Operator(_) => {
-                                    if Token::compare_operator_priority(op1, *op2) {
-                                        postfix_stack.push_back(operators_stack.pop().unwrap());
-                                    }
-                                },
-                                _ => (),
-                            }
-                        }
-                        operators_stack.push(op1);   
-                    },
-             /*    Token::Operator(_) => {
+                Token::Operator(_) => {
                     let op1 = *t;
-                    let wop2 = operators_stack.pop().and_then(|op2| {
-
+                    if !operators_stack.is_empty() {
+                        let op2: &Token = operators_stack.last().unwrap();
                         match op2 {
                             Token::Operator(_) => {
-                                if Token::compare_operator_priority(op1, op2) {
-                                postfix_stack.push(op2);
-                                operators_stack.push(op1);
+                                if Token::compare_operator_priority(op1, *op2) {
+                                    postfix_stack.push_back(operators_stack.pop().unwrap());
+                                }
                             },
                             _ => (),
-                        };
-                }
-            },*/
+                        }
+                    }
+                    operators_stack.push(op1);   
+                },
 
                 Token::Function => { todo!();},
 

@@ -53,8 +53,8 @@ fn main() {
 
     */
     //let exp = "((10 + 5) – 3 * (9 / 3)) + 2"; // 10 5 + 3 9 3 / * - 2 +
-    let _exp = "4*5-6/2";
-    let exp = "3 + 4 * 2 / ( 1 − 5 ) ^ 2 ^ 3";
+    let exp = "4 + 4 * 2 / ( 1 - 5 )";
+    //let exp = "3 + 4 * 2 / ( 1 − 5 ) ^ 2 ^ 3";
     let mut resolver : RpnResolver = RpnResolver::parse(exp);
     let result: token::Number = resolver.resolve().unwrap();
     println!("The result of {} is {}", exp, result);
