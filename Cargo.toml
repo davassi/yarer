@@ -9,3 +9,4 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.3.21", features = ["derive"] }
 regex = "1.9.1"
+rustyline = "9.1.2"
