@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 
-use crate::{parser::*, token::{Token, Operator, Number}};
+use crate::{parser::*, token::{Token, Operator, Number, MathFunction}};
 pub struct RpnResolver {
     rpn_expr: VecDeque<Token>,
     local_heap: HashMap<String, Token>,
@@ -48,9 +48,29 @@ impl RpnResolver {
                         Operator::Mul => result_stack.push_back(left_value*right_value),
                         Operator::Div => result_stack.push_back(left_value/right_value),
                         Operator::Pow => result_stack.push_back(left_value^right_value),
-                        _ => panic!("rpn_resolver.rs:55 - Not implemented!")
+                        _ => panic!("rpn_resolver.rs:51 - Not implemented!")
                     }
                 },
+                Token::Function(fun) => {
+                    let value: Number = result_stack.pop_back().unwrap();
+                    
+                    let res = match fun {
+                        MathFunction::Sin => f64::sin(value.into()),
+                        MathFunction::Cos => f64::cos(value.into()),
+                        MathFunction::Tan => f64::tan(value.into()),
+                        MathFunction::Abs => f64::abs(value.into()),
+                        MathFunction::Max => {
+                            let value2: Number = result_stack.pop_back().unwrap();
+                            f64::max(value.into(), value2.into())
+                        },
+                        MathFunction::Min => {
+                            let value2: Number = result_stack.pop_back().unwrap();
+                            f64::min(value.into(), value2.into())
+                        },
+                        MathFunction::None => panic!("This should not happen!"),
+                    };
+                    result_stack.push_back(Number::DecimalNumber(res));
+                }
                 _ => panic!("This '{}' cannot be yet recognised!", t),
             }
         }
@@ -111,20 +131,21 @@ impl RpnResolver {
                     operators_stack.push(op1);   
                 },
 
-                Token::Function => { todo!();},
+                Token::Function(_) => { 
+                    operators_stack.push(*t);
+                },
 
                 /* If the token is a variable, add it to the output list and to the local_heap */
                 Token::Variable => { 
                     postfix_stack.push_back(*t);
                     local_heap.insert(" ".to_string(), *t);
-                    todo!();
                 },
                 
             }            
-            /*print!("Inspecting... {}", *t);
+            print!("Inspecting... {}", *t);
             print!(" - OUT ");dump_debug(&postfix_stack);
             print!(" - OP ");dump_debug2(&operators_stack);
-            println!();*/
+            println!();
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list.  */
@@ -146,7 +167,6 @@ impl RpnResolver {
     }
 
 }
-
 
 #[cfg(test)]
 mod tests {

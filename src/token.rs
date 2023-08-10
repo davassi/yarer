@@ -33,8 +33,19 @@ pub enum Token {
     Operand(Number),
     Operator(Operator),
     Bracket(Bracket),
-    Function,
+    Function(MathFunction),
     Variable,
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum MathFunction {
+    Sin,
+    Cos,
+    Tan,
+    Abs,
+    Max,
+    Min,
+    None
 }
 
 impl Token {
@@ -96,6 +107,27 @@ impl Token {
         }
     }
 
+    fn get_some(fun : &str) -> MathFunction {
+
+        match fun {
+            "sin" => MathFunction::Sin,
+            "cos" => MathFunction::Cos,
+            "tan" => MathFunction::Tan,
+            "abs" => MathFunction::Abs,
+            "max" => MathFunction::Max,
+            "min" => MathFunction::Min,
+            &_ => MathFunction::None,
+        }
+    }
+
+    fn wrap(fun: &str) -> Result<Token, &str> {
+        Ok(Token::Function(Token::get_some(fun)))
+    }
+
+    fn create_variable(v: &str) -> Result<Token, &'static str> {
+        Ok(Token::Variable)
+    }
+
     fn tokenize(t: &str) -> Result<Token, &str> {
         
         match t {
@@ -103,7 +135,8 @@ impl Token {
             b@ ("(" | ")" | "[" | "]") =>  Token::from_bracket(b.chars().next().unwrap()),
             n if n.parse::<u32>().is_ok() => Token::from_natural_number(n),
             f if f.parse::<f64>().is_ok() => Token::from_decimal_number(f),
-            _ => Err("The Token is not supported."),
+            fun if Token::get_some(fun) != MathFunction::None => Token::wrap(fun),
+            v => Token::create_variable(v),
         }
     }
 
@@ -113,6 +146,7 @@ impl Token {
         .map(|t| Token::tokenize(t))
         .collect::<Result<Vec<Token>, _>>()
     }
+
 }
 
 impl Display for Number {
@@ -132,20 +166,20 @@ fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf : NF, df:
             Number::NaturalNumber(v1) => {
                 match rn {
                     Number::NaturalNumber(v2) => {
-                        crate::token::Number::NaturalNumber(nf(v1,v2))
+                        Number::NaturalNumber(nf(v1,v2))
                     },
                     Number::DecimalNumber(v2) => {
-                        crate::token::Number::DecimalNumber(df(v1 as f64,v2))
+                        Number::DecimalNumber(df(v1 as f64,v2))
                     },
                 }
             },
             Number::DecimalNumber(v1) => {
                 match rn {
                     Number::NaturalNumber(v2) => {
-                        crate::token::Number::DecimalNumber(df(v1, v2 as f64))
+                        Number::DecimalNumber(df(v1, v2 as f64))
                     },
                     Number::DecimalNumber(v2) => {
-                        crate::token::Number::DecimalNumber(df(v1, v2))
+                        Number::DecimalNumber(df(v1, v2))
                     },
                 }
             },
@@ -202,7 +236,16 @@ impl BitXor for Number {
     fn bitxor(self, rhs: Self) -> Self::Output {
 
         apply_functional_token_operation(self, rhs,
-             |a : i32,b: i32| a^b, |a : f64,b: f64| a+b)
+             |a : i32,b: i32| i32::pow(a, b.try_into().unwrap()), |a : f64,b: f64| f64::powf(a, b))
+    }
+}
+
+impl Into<f64> for Number {
+    fn into(self) -> f64 {
+        match self {
+            Number::NaturalNumber(v) => v as f64,
+            Number::DecimalNumber(v) => v,
+        }
     }
 }
 
@@ -228,14 +271,20 @@ impl Display for Bracket {
     }
 }
 
+impl Display for MathFunction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", *self)
+    }
+}
+
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             Token::Operand(v) => write!(f, "({})", v),
             Token::Operator(v) => write!(f, "({})", v),
             Token::Bracket(v) => write!(f, "({})", v),
-            Token::Function => write!(f, "TBD"),
-            Token::Variable => write!(f, "TBD"),
+            Token::Function(v) => write!(f, "({})", v),
+            Token::Variable => write!(f, "({})", "v"),
         }
     }
 }
@@ -278,9 +327,9 @@ mod tests {
 
     #[test]
     fn test_from_operator_invalid() {
-        assert_eq!(Token::from_operator('a'), Err("Operator not supported."));
-        assert_eq!(Token::from_operator('1'), Err("Operator not supported."));
-        assert_eq!(Token::from_operator('!'), Err("Operator not supported."));
+        assert_eq!(Token::from_operator('a'), Err("Math Operator not supported."));
+        assert_eq!(Token::from_operator('1'), Err("Math Operator not supported."));
+        assert_eq!(Token::from_operator('!'), Err("Math Operator not supported."));
     }
 
     #[test]
