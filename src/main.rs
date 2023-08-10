@@ -51,7 +51,7 @@ fn main() {
     let mut rl = Editor::<()>::new();
 
     loop {
-        let readline = rl.readline("");
+        let readline = rl.readline("> ");
 
         match readline {
             Ok(line) => {
@@ -65,11 +65,7 @@ fn main() {
                     .and_then(|res: token::Number| {println!("{}", res); Ok(res)})
                     .or_else(|err| {println!("Error: {}", err); Err("Error")});
             },
-            Err(ReadlineError::Interrupted) => {
-                println!("quit");
-                break
-            },
-            Err(ReadlineError::Eof) => {
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 println!("quit");
                 break
             },
