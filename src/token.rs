@@ -162,28 +162,13 @@ fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf : NF, df:
     where NF: Fn(i32,i32) -> i32,
           DF: Fn(f64,f64) -> f64, {
 
-        match ln {
-            Number::NaturalNumber(v1) => {
-                match rn {
-                    Number::NaturalNumber(v2) => {
-                        Number::NaturalNumber(nf(v1,v2))
-                    },
-                    Number::DecimalNumber(v2) => {
-                        Number::DecimalNumber(df(v1 as f64,v2))
-                    },
-                }
-            },
-            Number::DecimalNumber(v1) => {
-                match rn {
-                    Number::NaturalNumber(v2) => {
-                        Number::DecimalNumber(df(v1, v2 as f64))
-                    },
-                    Number::DecimalNumber(v2) => {
-                        Number::DecimalNumber(df(v1, v2))
-                    },
-                }
-            },
-        }
+        match (ln,rn) {
+            (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => 
+                        Number::NaturalNumber(nf(v1,v2)),
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) =>
+                        Number::DecimalNumber(df(v1 as f64,v2)),
+            (Number::DecimalNumber(v1),_) => Number::DecimalNumber(df(v1, rn.into())),
+        }    
 }
 
 impl Add for Number {
@@ -221,7 +206,7 @@ impl Div for Number {
 
     fn div(self, rhs: Self) -> Self::Output {
 
-        if rhs == crate::token::Number::NaturalNumber(0) {
+        if rhs == Number::NaturalNumber(0) {
             panic!("Runtime error: Divide by zero.")
         }
 
