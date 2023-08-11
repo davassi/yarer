@@ -109,7 +109,7 @@ impl Token<'_> {
 
     fn get_some(fun : &str) -> MathFunction {
 
-        match fun {
+        match fun.to_lowercase().as_str() {
             "sin" => MathFunction::Sin,
             "cos" => MathFunction::Cos,
             "tan" => MathFunction::Tan,

@@ -49,7 +49,12 @@ impl RpnResolver<'_> {
                         Operator::Mul => result_stack.push_back(left_value*right_value),
                         Operator::Div => result_stack.push_back(left_value/right_value),
                         Operator::Pow => result_stack.push_back(left_value^right_value),
-                        _ => panic!("rpn_resolver.rs:51 - Not implemented!")
+                        Operator::Eql => {
+                            println!("LEFT VALUE {} RIGHT VALUE {}", left_value.to_string(), right_value);
+                            self.local_heap.insert(left_value.to_string(), right_value);
+                            result_stack.push_back(right_value)
+                        }
+                        _ => panic!("rpn_resolver.rs:55 - Operator {} Not implemented!", op)
                     }
                 },
                 Token::Function(fun) => {
@@ -167,7 +172,7 @@ impl RpnResolver<'_> {
     }
 
     fn init_local_heap() -> HashMap<String, Number> {
-        static PI: Number = Number::DecimalNumber(3.14);
+        static PI: Number = Number::DecimalNumber(3.1415);
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("PI".to_string(), PI);
         local_heap
