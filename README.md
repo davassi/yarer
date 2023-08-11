@@ -53,7 +53,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 
 For logging debug run with: 
 ```bash
-env RUST_LOG=yarer=debug cargo run 
+env RUST_LOG=yarer=debug cargo run -q -- 
 ```
 
 
