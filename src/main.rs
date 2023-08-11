@@ -1,7 +1,9 @@
 
+use std::error::Error;
+
 use clap::Parser;
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::{Result, DefaultEditor};
 
 pub mod parser;
 pub mod rpn_resolver;
@@ -10,6 +12,7 @@ pub mod token;
 use crate::rpn_resolver::*;
 
 static VERSION : &str = env!("CARGO_PKG_VERSION");
+static HISTORY_FILE : &str = ".yarer_history";
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)] // Read from `Cargo.toml`
@@ -38,7 +41,7 @@ struct Cli {
 ///      println!("The result of {} is {}", exp, result);
 ///  ```
 ///
-fn main() {
+fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
@@ -47,14 +50,15 @@ fn main() {
         println!("License MIT OR Apache-2.0");
     }
 
-    let mut rl = Editor::<()>::new();
+    let mut rl = DefaultEditor::new()?;
 
     loop {
         let readline = rl.readline("> ");
+        let _ = rl.load_history(HISTORY_FILE);
 
         match readline {
             Ok(line) => {
-                rl.add_history_entry(line.as_str());
+                let _ = rl.add_history_entry(line.as_str());
                 
                 if line.trim().is_empty() { continue; }
                 if line.trim().to_lowercase().eq("quit") { break; }
@@ -74,6 +78,8 @@ fn main() {
             }
         }
     }
+    let _ = rl.save_history(HISTORY_FILE);
+    Ok(())
 }
 
 
