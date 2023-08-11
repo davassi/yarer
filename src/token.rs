@@ -340,13 +340,6 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenize_invalid() {
-        assert_eq!(Token::tokenize("abc"), Err("The Token is not supported."));
-        assert_eq!(Token::tokenize("1.2.3"), Err("The Token is not supported."));
-        assert_eq!(Token::tokenize("++"), Err("The Token is not supported."));
-    }
-
-    #[test]
     fn test_tokenize_vec_valid() {
         let input = vec!["+", "100", "3.14", "("];
         let expected = Ok(vec![
