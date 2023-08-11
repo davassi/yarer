@@ -51,6 +51,11 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       > 3/(5*x^2)
 ```
 
+For logging debug run with: 
+```bash
+env RUST_LOG=yarer=debug cargo run 
+```
+
 
 
 

@@ -44,7 +44,8 @@ struct Cli {
 fn main() -> Result<()> {
 
     let cli = Cli::parse();
-
+    env_logger::init();
+    
     if !cli.quiet {
         println!("Yarer v.{} - Yet Another Rust Rpn Expression Resolver.", VERSION);
         println!("License MIT OR Apache-2.0");

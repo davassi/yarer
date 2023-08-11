@@ -2,18 +2,29 @@
 
 use std::collections::{HashMap, VecDeque};
 
+use log::debug;
+
 use crate::{parser::*, token::{Token, Operator, Number, MathFunction}};
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: HashMap<String, Number>,
 }
 
-fn dump_debug(v: &VecDeque<Token>) -> () {
-    v.iter().for_each(|f| print!("{}",f));      
+fn dump_debug(v: &VecDeque<Token>) -> String {
+    //v.iter().for_each(|f| debug!("{}",f));
+    let mut s : String = String::new();
+    for t in v {
+        s = s + &t.to_string();
+    }     
+    s
 }
 
-fn dump_debug2(v: &Vec<Token>) -> () {
-    v.iter().for_each(|f| print!("{}",f));      
+fn dump_debug2(v: &Vec<Token>) -> String {
+    let mut s : String = String::new();
+    for t in v {
+        s = s + &t.to_string();
+    }     
+    s    
 }
 
 /// Here relies the core logic of Yarer. 
@@ -29,7 +40,7 @@ impl RpnResolver<'_> {
     }
 
     pub fn resolve(&mut self) -> Result<Number, &str> {
-        
+    
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
         while !self.rpn_expr.is_empty() {
@@ -154,10 +165,7 @@ impl RpnResolver<'_> {
                 },
                 
             }            
-            print!("Inspecting... {}", *t);
-            print!(" - OUT ");dump_debug(&postfix_stack);
-            print!(" - OP ");dump_debug2(&operators_stack);
-            println!();
+            debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_debug(&postfix_stack), dump_debug2(&operators_stack));
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list.  */
@@ -165,9 +173,8 @@ impl RpnResolver<'_> {
             postfix_stack.push_back(operators_stack.pop().unwrap());
         }
       
-        /*print!(" - OUT ");dump_debug(&postfix_stack);
-        print!(" - OP ");dump_debug2(&operators_stack);
-        println!();*/
+        debug!("Inspecting... EOF - OUT {} - OP - {}", dump_debug(&postfix_stack), dump_debug2(&operators_stack));
+        
         (postfix_stack, local_heap)
     }
 
