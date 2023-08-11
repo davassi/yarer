@@ -5,7 +5,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::{parser::*, token::{Token, Operator, Number, MathFunction}};
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
-    local_heap: HashMap<String, Token<'a>>,
+    local_heap: HashMap<String, Number>,
 }
 
 fn dump_debug(v: &VecDeque<Token>) -> () {
@@ -71,6 +71,12 @@ impl RpnResolver<'_> {
                         MathFunction::None => panic!("This should not happen!"),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
+                },
+                Token::Variable(v) => {
+
+                    let n = self.local_heap.get(v)
+                        .unwrap_or_else(|| {&Number::NaturalNumber(0)});
+                    result_stack.push_back(*n);
                 }
                 _ => panic!("This '{}' cannot be yet recognised!", t),
             }
@@ -80,12 +86,12 @@ impl RpnResolver<'_> {
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
-    fn reverse_polish_notation<'a>(infix_stack: &Vec<Token<'a>>) -> (VecDeque<Token<'a>>, HashMap<String, Token<'a>>) {
+    fn reverse_polish_notation<'a>(infix_stack: &Vec<Token<'a>>) -> (VecDeque<Token<'a>>, HashMap<String, Number>) {
         
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
-        let mut local_heap: HashMap<String, Token> = RpnResolver::init_local_heap();
+        let mut local_heap: HashMap<String, Number> = RpnResolver::init_local_heap();
 
         /* Scan the infix expression from left to right. */
         infix_stack.into_iter().for_each(|t: &Token| {
@@ -136,10 +142,10 @@ impl RpnResolver<'_> {
                     operators_stack.push(*t);
                 },
 
-                /* If the token is a variable, add it to the output list and to the local_heap */
+                /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => { 
                     postfix_stack.push_back(*t);
-                    local_heap.insert(s.to_string(), *t);
+                    local_heap.insert(s.to_string(), Number::NaturalNumber(0));
                 },
                 
             }            
@@ -160,9 +166,9 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    fn init_local_heap() -> HashMap<String, Token<'static>> {
-        static PI: Token = crate::token::Token::Operand(crate::token::Number::DecimalNumber(3.14));
-        let mut local_heap: HashMap<String, Token> = HashMap::new();
+    fn init_local_heap() -> HashMap<String, Number> {
+        static PI: Number = Number::DecimalNumber(3.14);
+        let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("PI".to_string(), PI);
         local_heap
     }
@@ -172,7 +178,7 @@ impl RpnResolver<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::token::{Number,Operator,Bracket};
+    use crate::token::{Number,Operator};
 
     #[test]
     fn test_reverse_polish_notation() {
