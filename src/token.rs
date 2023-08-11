@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Add, Sub, Div, BitXor, Mul}, rc::Rc, borrow::Cow};
+use std::{fmt::Display, ops::{Add, Sub, Div, BitXor, Mul}};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
@@ -29,12 +29,12 @@ pub enum Bracket {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Token {
+pub enum Token<'a> {
     Operand(Number),
     Operator(Operator),
     Bracket(Bracket),
     Function(MathFunction),
-    Variable,
+    Variable(&'a str),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -48,7 +48,7 @@ pub enum MathFunction {
     None
 }
 
-impl Token {
+impl Token<'_> {
 
     fn operator_priority(o : Token) -> (u8, Associate) {
         match o {
@@ -71,7 +71,7 @@ impl Token {
             v_op1.1 == Associate::RightAssociative && v_op1.0 < v_op2.0
     }
    
-    fn from_operator(c : char) -> Result<Token, &'static str> {
+    fn from_operator(c : char) -> Result<Token<'static>, &'static str> {
         match c {
             '+' => Ok(Token::Operator(Operator::Add)),
             '-' => Ok(Token::Operator(Operator::Sub)),
@@ -83,7 +83,7 @@ impl Token {
         }
     }
 
-    fn from_bracket(c : char) -> Result<Token, &'static str> {
+    fn from_bracket(c : char) -> Result<Token<'static>, &'static str> {
         match c {
             '(' | '[' => Ok(Token::Bracket(Bracket::Open)),
             ')' | ']' => Ok(Token::Bracket(Bracket::Close)),
@@ -125,7 +125,7 @@ impl Token {
     }
 
     fn create_variable(v: &str) -> Result<Token, &'static str> {
-        Ok(Token::Variable)
+        Ok(Token::Variable(v))
     }
 
     fn tokenize(t: &str) -> Result<Token, &str> {
@@ -141,7 +141,7 @@ impl Token {
     }
 
     /// Mapping a vec of str in a vec of Tokens
-    pub fn tokenize_vec<'a>(v : &[&'a str]) -> Result<Vec<Token>, &'a str> {
+    pub fn tokenize_vec<'a>(v : &[&'a str]) -> Result<Vec<Token<'a>>, &'a str> {
         v.iter()
         .map(|t| Token::tokenize(t))
         .collect::<Result<Vec<Token>, _>>()
@@ -262,14 +262,14 @@ impl Display for MathFunction {
     }
 }
 
-impl Display for Token {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
             Token::Operand(v) => write!(f, "({})", v),
             Token::Operator(v) => write!(f, "({})", v),
             Token::Bracket(v) => write!(f, "({})", v),
             Token::Function(v) => write!(f, "({})", v),
-            Token::Variable => write!(f, "({})", "v"),
+            Token::Variable(s) => write!(f, "({})", s),
         }
     }
 }

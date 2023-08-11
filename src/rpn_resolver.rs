@@ -3,9 +3,9 @@
 use std::collections::{HashMap, VecDeque};
 
 use crate::{parser::*, token::{Token, Operator, Number, MathFunction}};
-pub struct RpnResolver {
-    rpn_expr: VecDeque<Token>,
-    local_heap: HashMap<String, Token>,
+pub struct RpnResolver<'a> {
+    rpn_expr: VecDeque<Token<'a>>,
+    local_heap: HashMap<String, Token<'a>>,
 }
 
 fn dump_debug(v: &VecDeque<Token>) -> () {
@@ -17,12 +17,13 @@ fn dump_debug2(v: &Vec<Token>) -> () {
 }
 
 /// Here relies the core logic of Yarer. 
-impl RpnResolver {
+impl RpnResolver<'_> {
 
-    pub fn parse(exp : &str) -> Self {
+    pub fn parse<'a>(exp : &'a str) -> RpnResolver {
 
-        let tokenised_expr: Vec<Token> = Parser::parse(exp).unwrap(); //dump_debug(&tokenised_expr);
-        let (rpn_expr , local_heap) = RpnResolver::reverse_polish_notation(&tokenised_expr);
+        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap(); //dump_debug(&tokenised_expr);
+        let (rpn_expr , local_heap)
+             = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
         RpnResolver { rpn_expr, local_heap }
     }
@@ -79,7 +80,7 @@ impl RpnResolver {
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
-    fn reverse_polish_notation(infix_stack: &Vec<Token>) -> (VecDeque<Token>, HashMap<String, Token>) {
+    fn reverse_polish_notation<'a>(infix_stack: &Vec<Token<'a>>) -> (VecDeque<Token<'a>>, HashMap<String, Token<'a>>) {
         
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
@@ -136,9 +137,9 @@ impl RpnResolver {
                 },
 
                 /* If the token is a variable, add it to the output list and to the local_heap */
-                Token::Variable => { 
+                Token::Variable(s) => { 
                     postfix_stack.push_back(*t);
-                    local_heap.insert(" ".to_string(), *t);
+                    local_heap.insert(s.to_string(), *t);
                 },
                 
             }            
@@ -159,7 +160,7 @@ impl RpnResolver {
         (postfix_stack, local_heap)
     }
 
-    fn init_local_heap() -> HashMap<String, Token> {
+    fn init_local_heap() -> HashMap<String, Token<'static>> {
         static PI: Token = crate::token::Token::Operand(crate::token::Number::DecimalNumber(3.14));
         let mut local_heap: HashMap<String, Token> = HashMap::new();
         local_heap.insert("PI".to_string(), PI);
