@@ -4,7 +4,7 @@ use regex::Regex;
 
 use crate::token::Token;
 
-/// The expression parser has only 2 functions: to parse and to tokenise a math expression
+/// The Parser has only 2 functions: to parse with a Regex and to tokenise a math &str expression
 #[derive(Debug)]
 pub struct Parser;
 
@@ -26,7 +26,6 @@ impl Parser {
         Self::process(exp)
             .and_then(|v: Vec<&str>| Token::tokenize_vec(&v))
     }
-
 }
 
 #[cfg(test)]
