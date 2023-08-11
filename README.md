@@ -20,11 +20,11 @@ Example of usage of the library:
 All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
 The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.+1').
 
-Yarer can handle also variables. Here an example:
+Yarer can handle also variables and functions. Here an example:
 
 ```rust
-      let resolver = RpnResolver::parse("1/(x^2)");
-      resolver.set("x",2);
+      let resolver = RpnResolver::parse("1/cos(x^2)");
+      resolver.set("x",1);
       println!("The result is {}", resolver.resolve());
 ```
 
@@ -45,10 +45,12 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       Yarer
       > 4+2.2
       6.2
-      > (1./2)
-      0.5
+      > (1./2)+max(10,8)
+      10.5
       > x=10
       > 3/(5*x^2)
 ```
+
+
 
 

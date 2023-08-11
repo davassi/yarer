@@ -4,9 +4,10 @@ version = "0.1.0"
 authors = ["Davassi <gianluigi.davassi@gmail.com>"]
 description = "Yarer is a Reverse Polish Notation expression resolver"
 homepage = "https://github.com/davassi/Yarer"
+license = "MIT OR Apache-2.0"
 edition = "2021"
 
 [dependencies]
 clap = { version = "4.3.21", features = ["derive"] }
-regex = "1.9.1"
+regex = "1.9.3"
 rustyline = "9.1.2"
