@@ -51,17 +51,17 @@ fn main() -> Result<()> {
     }
 
     let mut rl = DefaultEditor::new()?;
+    let _ = rl.load_history(HISTORY_FILE);
 
     loop {
         let readline = rl.readline("> ");
-        let _ = rl.load_history(HISTORY_FILE);
 
         match readline {
             Ok(line) => {
-                let _ = rl.add_history_entry(line.as_str());
-                
                 if line.trim().is_empty() { continue; }
                 if line.trim().to_lowercase().eq("quit") { break; }
+
+                let _ = rl.add_history_entry(line.as_str());
                 
                 let mut resolver : RpnResolver = RpnResolver::parse(&line);
                 let _ = resolver.resolve()
@@ -70,7 +70,7 @@ fn main() -> Result<()> {
             },
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 println!("quit");
-                break
+                break;
             },
             Err(err) => {
                 println!("Error: {:?}", err);
