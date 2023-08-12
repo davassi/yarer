@@ -175,9 +175,12 @@ impl RpnResolver<'_> {
     }
 
     fn init_local_heap() -> HashMap<String, Number> {
-        static PI: Number = Number::DecimalNumber(3.1415);
+        static PI: Number = Number::DecimalNumber(3.14159265);
+        static E: Number = Number::DecimalNumber(2.7182818);
         let mut local_heap: HashMap<String, Number> = HashMap::new();
-        local_heap.insert("PI".to_string(), PI);
+        local_heap.insert("pi".to_string(), PI);
+        local_heap.insert("π".to_string(), PI);
+        local_heap.insert("e".to_string(), E);   
         local_heap
     }
 

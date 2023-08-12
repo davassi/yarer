@@ -26,8 +26,8 @@ struct Cli {
 ///  The internal flow is conceptually pretty simple: 
 ///
 ///  1 Yarer parses and converts a str into a vec of borrowed &str
-///  2 map a vec of &str into a vec of tokens
-///  3 reverse polish notification the vec
+///  2 Then it maps a vec of &str into a vec of tokens
+///  3 Then converts the infix expression to the postfix the vec
 ///  4 resolve the expression!
 /// 
 ///  Point 1 and 2 are executed by the Parser, 3 and 4 by the RpnResolver
@@ -81,6 +81,5 @@ fn main() -> Result<()> {
     let _ = rl.save_history(HISTORY_FILE);
     Ok(())
 }
-
 
 
