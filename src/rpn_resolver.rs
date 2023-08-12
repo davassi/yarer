@@ -1,19 +1,31 @@
 
 
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, VecDeque}, error, fmt, any};
 
 use log::debug;
 
 use crate::{parser::*, token::{Token, Operator, Number, MathFunction, self}};
+use anyhow::{Result,anyhow};
+
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: HashMap<String, Number>,
 }
 
+#[derive(Debug)]
+struct ResolveError;
+
+impl error::Error for ResolveError {}
+
+impl fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error while Resolving!")
+    }
+}
+
 fn dump_debug(v: &VecDeque<Token>) -> String {
     v.iter().map(ToString::to_string).collect()
 }
-
 fn dump_debug2(v: &[Token]) -> String {
     v.iter().map(ToString::to_string).collect() 
 }
@@ -30,20 +42,22 @@ impl RpnResolver<'_> {
         RpnResolver { rpn_expr, local_heap }
     }
 
-    pub fn resolve(&mut self) -> Result<Number, &str> {
+    pub fn resolve(&mut self) -> anyhow::Result<Number> {
     
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
         while !self.rpn_expr.is_empty() {
-            let t: Token = self.rpn_expr.pop_front().unwrap();
+            let t: Token = self.rpn_expr.pop_front().ok_or(anyhow!("Expression is invalid"))?;
            
             match t {
                 Token::Operand(n) => {
                     result_stack.push_back(n);
                 },
                 Token::Operator(op) => {
-                    let right_value: Number = result_stack.pop_back().unwrap();
-                    let left_value: Number = result_stack.pop_back().unwrap();
+                    let right_value: Number = result_stack.pop_back()
+                        .ok_or_else(|| anyhow!("Operator {} is invalid",op))?;
+                    let left_value: Number = result_stack.pop_back()
+                        .ok_or_else(|| anyhow!("Operator {} is invalid",op))?;
 
                     match op {
                         Operator::Add => result_stack.push_back(left_value+right_value),
@@ -65,6 +79,11 @@ impl RpnResolver<'_> {
                         MathFunction::Sin => f64::sin(value.into()),
                         MathFunction::Cos => f64::cos(value.into()),
                         MathFunction::Tan => f64::tan(value.into()),
+                        MathFunction::ASin => f64::asin(value.into()),
+                        MathFunction::ACos => f64::acos(value.into()),
+                        MathFunction::ATan => f64::atan(value.into()),
+                        MathFunction::Ln => f64::ln(value.into()),
+                        MathFunction::Log => f64::log10(value.into()),
                         MathFunction::Abs => f64::abs(value.into()),
                         MathFunction::Max => {
                             let value2: Number = result_stack.pop_back().unwrap();
@@ -84,10 +103,10 @@ impl RpnResolver<'_> {
                         .unwrap_or(&Number::NaturalNumber(0));
                     result_stack.push_back(*n);
                 }
-                _ => panic!("This '{}' cannot be yet recognised!", t),
+                _ => return Err(anyhow!("This {} cannot be yet recognised!",t)),
             }
         }
-        result_stack.pop_front().ok_or("Something went terribly wrong here.")
+        result_stack.pop_front().ok_or(anyhow!("Something went terribly wrong here."))
        
     }
 

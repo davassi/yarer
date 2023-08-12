@@ -24,6 +24,7 @@ regex = "1.9.3"
 rustyline = "12.0.0"
 log = "0.4"
 env_logger = "0.10.0"
+anyhow = "1.0.72"
 
 [profile.release]
 opt-level = 3

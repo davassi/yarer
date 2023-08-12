@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Add, Sub, Div, BitXor, Mul}};
+use std::{fmt::{Display, self}, ops::{Add, Sub, Div, BitXor, Mul}, error};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
@@ -42,10 +42,26 @@ pub enum MathFunction {
     Sin,
     Cos,
     Tan,
+    ASin,
+    ACos,
+    ATan,
+    Ln,
+    Log,
     Abs,
     Max,
     Min,
     None
+}
+
+#[derive(Debug, Clone)]
+struct ParseError;
+
+impl error::Error for ParseError {}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error while parsing!")
+    }
 }
 
 impl Token<'_> {
@@ -113,6 +129,11 @@ impl Token<'_> {
             "sin" => MathFunction::Sin,
             "cos" => MathFunction::Cos,
             "tan" => MathFunction::Tan,
+            "asin" => MathFunction::Sin,
+            "acos" => MathFunction::Cos,
+            "atan" => MathFunction::Tan,
+            "ln" => MathFunction::Ln,
+            "log" => MathFunction::Log,
             "abs" => MathFunction::Abs,
             "max" => MathFunction::Max,
             "min" => MathFunction::Min,
