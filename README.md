@@ -48,10 +48,11 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       > (1./2)+max(10,8)
       10.5
       > x=10
-      > 3/(5*x^2)
+      > 3/sin(5*x^2)
 ```
 
-For logging debug run with: 
+For logging debug just run with:
+
 ```bash
 env RUST_LOG=yarer=debug cargo run -q -- 
 ```

@@ -4,27 +4,18 @@ use std::collections::{HashMap, VecDeque};
 
 use log::debug;
 
-use crate::{parser::*, token::{Token, Operator, Number, MathFunction}};
+use crate::{parser::*, token::{Token, Operator, Number, MathFunction, self}};
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: HashMap<String, Number>,
 }
 
 fn dump_debug(v: &VecDeque<Token>) -> String {
-    //v.iter().for_each(|f| debug!("{}",f));
-    let mut s : String = String::new();
-    for t in v {
-        s = s + &t.to_string();
-    }     
-    s
+    v.iter().map(ToString::to_string).collect()
 }
 
 fn dump_debug2(v: &Vec<Token>) -> String {
-    let mut s : String = String::new();
-    for t in v {
-        s = s + &t.to_string();
-    }     
-    s    
+    v.iter().map(ToString::to_string).collect() 
 }
 
 /// Here relies the core logic of Yarer. 
@@ -32,7 +23,7 @@ impl RpnResolver<'_> {
 
     pub fn parse<'a>(exp : &'a str) -> RpnResolver {
 
-        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap(); //dump_debug(&tokenised_expr);
+        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
         let (rpn_expr , local_heap)
              = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
@@ -116,16 +107,16 @@ impl RpnResolver<'_> {
                 Token::Operand(_) => postfix_stack.push_back(*t),
 
                 /* If the token is a left parenthesis, push it on the stack. */
-                Token::Bracket(crate::token::Bracket::Open) => operators_stack.push(*t),
+                Token::Bracket(token::Bracket::Open) => operators_stack.push(*t),
                 
                 /* If the token is a right parenthesis:
                     Pop the stack and add operators to the output list until you encounter a left parenthesis.
                     Pop the left parenthesis from the stack but do not add it to the output list.*/
-                Token::Bracket(crate::token::Bracket::Close) => {
+                Token::Bracket(token::Bracket::Close) => {
 
                     while let Some(token) = operators_stack.pop() {
                         match token {
-                            Token::Bracket(crate::token::Bracket::Open) => break, // discards left parenthesis
+                            Token::Bracket(token::Bracket::Open) => break, // discards left parenthesis
                             _ => postfix_stack.push_back(token),
                         }
                     }
@@ -139,15 +130,21 @@ impl RpnResolver<'_> {
                     push op1 on the stack.*/
                 Token::Operator(_) => {
                     let op1 = *t;
-                    if !operators_stack.is_empty() {
+                    debug!("{}", *t);
+                    while !operators_stack.is_empty() {
                         let op2: &Token = operators_stack.last().unwrap();
                         match op2 {
                             Token::Operator(_) => {
                                 if Token::compare_operator_priority(op1, *op2) {
                                     postfix_stack.push_back(operators_stack.pop().unwrap());
+                                } else {
+                                    break;
                                 }
                             },
-                            _ => (),
+                            Token::Function(_) => { 
+                                postfix_stack.push_back(operators_stack.pop().unwrap());
+                            }
+                            _ => break,
                         }
                     }
                     operators_stack.push(op1);   
