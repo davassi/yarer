@@ -49,6 +49,11 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       10.5
       > x=10
       > 3/sin(5*x^2)
+      -6.41338354698791
+      > ln(1)
+      0
+      > log(10)
+      1
 ```
 
 For logging debug just run with:
