@@ -1,26 +1,15 @@
 
 
-use std::{collections::{HashMap, VecDeque}, error, fmt, any};
+use std::collections::{HashMap, VecDeque};
 
 use log::debug;
 
 use crate::{parser::*, token::{Token, Operator, Number, MathFunction, self}};
-use anyhow::{Result,anyhow};
+use anyhow::anyhow;
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: HashMap<String, Number>,
-}
-
-#[derive(Debug)]
-struct ResolveError;
-
-impl error::Error for ResolveError {}
-
-impl fmt::Display for ResolveError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error while Resolving!")
-    }
 }
 
 fn dump_debug(v: &VecDeque<Token>) -> String {
