@@ -64,9 +64,10 @@ fn main() -> Result<()> {
                 let _ = rl.add_history_entry(line.as_str());
                 
                 let mut resolver : RpnResolver = RpnResolver::parse(&line);
-                let _ = resolver.resolve()
-                    .and_then(|res: token::Number| {println!("{}", res); Ok(res)})
-                    .or_else(|err| {println!("Error: {}", err); Err("Error")});
+                match resolver.resolve() {
+                    Ok(value) => println!("{}", value),
+                    Err(e) => println!("Error: {}", e),
+                }
             },
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 println!("quit");

@@ -221,7 +221,7 @@ impl BitXor for Number {
     fn bitxor(self, rhs: Self) -> Self::Output {
 
         apply_functional_token_operation(self, rhs,
-             |a : i32,b: i32| i32::pow(a, b.try_into().unwrap()), |a : f64,b: f64| f64::powf(a, b))
+             |a : i32,b: i32| i32::pow(a, b.try_into().unwrap()), f64::powf)
     }
 }
 

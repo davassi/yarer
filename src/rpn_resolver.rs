@@ -14,7 +14,7 @@ fn dump_debug(v: &VecDeque<Token>) -> String {
     v.iter().map(ToString::to_string).collect()
 }
 
-fn dump_debug2(v: &Vec<Token>) -> String {
+fn dump_debug2(v: &[Token]) -> String {
     v.iter().map(ToString::to_string).collect() 
 }
 
@@ -81,7 +81,7 @@ impl RpnResolver<'_> {
                 Token::Variable(v) => {
 
                     let n = self.local_heap.get(v)
-                        .unwrap_or_else(|| {&Number::NaturalNumber(0)});
+                        .unwrap_or(&Number::NaturalNumber(0));
                     result_stack.push_back(*n);
                 }
                 _ => panic!("This '{}' cannot be yet recognised!", t),
@@ -92,7 +92,7 @@ impl RpnResolver<'_> {
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
-    fn reverse_polish_notation<'a>(infix_stack: &Vec<Token<'a>>) -> (VecDeque<Token<'a>>, HashMap<String, Number>) {
+    fn reverse_polish_notation<'a>(infix_stack: &[Token<'a>]) -> (VecDeque<Token<'a>>, HashMap<String, Number>) {
         
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
@@ -100,7 +100,7 @@ impl RpnResolver<'_> {
         let mut local_heap: HashMap<String, Number> = RpnResolver::init_local_heap();
 
         /* Scan the infix expression from left to right. */
-        infix_stack.into_iter().for_each(|t: &Token| {
+        infix_stack.iter().for_each(|t: &Token| {
 
             match *t {
                 /* If the token is an operand, add it to the output list. */
@@ -130,7 +130,6 @@ impl RpnResolver<'_> {
                     push op1 on the stack.*/
                 Token::Operator(_) => {
                     let op1 = *t;
-                    debug!("{}", *t);
                     while !operators_stack.is_empty() {
                         let op2: &Token = operators_stack.last().unwrap();
                         match op2 {
@@ -175,8 +174,8 @@ impl RpnResolver<'_> {
     }
 
     fn init_local_heap() -> HashMap<String, Number> {
-        static PI: Number = Number::DecimalNumber(3.14159265);
-        static E: Number = Number::DecimalNumber(2.7182818);
+        static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
+        static E: Number = Number::DecimalNumber(std::f64::consts::E);
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("pi".to_string(), PI);
         local_heap.insert("π".to_string(), PI);
