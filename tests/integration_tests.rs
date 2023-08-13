@@ -13,10 +13,10 @@ macro_rules! resolve {
 
 #[test]
 fn test_expressions() {
-    resolve!("(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4", Number::NaturalNumber(14));
-    /*resolve!("3 * 2^3 + 6 / (2 + 1)", Number::NaturalNumber(26));
-    resolve!("PI * 4 + 2^PI", Number::DecimalNumber(std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI)));
-    resolve!("sin(PI / 4) + cos(PI / 4)", Number::DecimalNumber(1.414213562373095)); // Approximately sqrt(2)
+    resolve!("(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4", Number::NaturalNumber(-122));
+    resolve!("3 * 2^3 + 6 / (2 + 1)", Number::NaturalNumber(26));
+    //resolve!("PI * 4. + 2^PI", Number::DecimalNumber(std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI)));
+    /*resolve!("sin(PI / 4) + cos(PI / 4)", Number::DecimalNumber(1.414213562373095)); // Approximately sqrt(2)
     resolve!("tan(PI / 4) * cos(PI / 6)", Number::DecimalNumber(0.86602540378)); // Approximately sqrt(3)/2
     resolve!("ln(e) + log10(100)", Number::NaturalNumber(3));
     resolve!("3 * 2^3! - 2 * 3 + 6 / (2 + 1)", Number::NaturalNumber(230));
