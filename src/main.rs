@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     env_logger::init();
     
     if !cli.quiet {
-        println!("Yarer v.{} - Yet Another Rust Rpn Expression Resolver.", VERSION);
+        println!("Yarer v.{} - Yet Another (Rusty||Rpn) Expression Resolver.", VERSION);
         println!("License MIT OR Apache-2.0");
     }
 

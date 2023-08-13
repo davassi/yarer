@@ -1,7 +1,7 @@
 [package]
 name = "yarer"
-version = "0.1.0"
-description = "Yarer (Yet another Rpn expression resolver) is a library for the processing, compilation and evaluation of Reverse Polish mathematical expressions."
+version = "0.1.1"
+description = "Yarer (Yet another (Rusty||Rpn) expression resolver) is a library for the processing, compilation and evaluation of Reverse Polish mathematical expressions."
 repository = "https://github.com/davassi/yarer"
 homepage = "https://github.com/davassi/yarer"
 license = "MIT OR Apache-2.0"
