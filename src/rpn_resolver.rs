@@ -111,6 +111,7 @@ impl RpnResolver<'_> {
                             let value2: Number = result_stack.pop_back().unwrap();
                             f64::min(value.into(), value2.into())
                         }
+                        MathFunction::Sqrt => f64::sqrt(value.into()),
                         MathFunction::None => panic!("This should not happen!"),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));

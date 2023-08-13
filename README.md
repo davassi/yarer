@@ -47,10 +47,10 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       $ yarer
       Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
       License MIT OR Apache-2.0
-      > 4+2.2
-      6.2
+      > (1+9)*(8+2)
+      100
       > (1./2)+atan(10)
-      10.5
+      1.1483608274590869
       > x=10
       > 3/sin(5*x^2)
       -6.41338354698791
@@ -58,11 +58,33 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       0
       > log(10)
       1
-      > 2^-2
+      > -2^-2
       0.25
       > 1/(log(10)+cos(0))^-2
       4
+      > 4.5+7.9*2.2
+      21.88
+      > 9801/(2206*sqrt(2)) // approx of PI
+      3.1415927300133055
       
+      
+```
+
+## Built-in Defined Functions
+
+There are several math functions defined that you can use in your expression. More to come!
+
+```rust
+    Sin
+    Cos
+    Tan
+    ASin
+    ACos
+    ATan
+    Ln
+    Log
+    Abs
+    Sqrt
 ```
 
 ## Execute
