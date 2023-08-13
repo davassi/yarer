@@ -4,11 +4,7 @@ use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{Result, DefaultEditor};
 
-pub mod parser;
-pub mod rpn_resolver;
-pub mod token;
-
-use crate::rpn_resolver::*;
+use yarer::rpn_resolver::*;
 
 static VERSION : &str = env!("CARGO_PKG_VERSION");
 static HISTORY_FILE : &str = ".yarer_history";
