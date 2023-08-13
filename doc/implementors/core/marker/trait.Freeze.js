@@ -1,3 +1,0 @@
-(function() {var implementors = {
-"token":[["impl Freeze for <a class=\"enum\" href=\"token/enum.Number.html\" title=\"enum token::Number\">Number</a>",1,["token::Number"]],["impl Freeze for <a class=\"enum\" href=\"token/enum.Operator.html\" title=\"enum token::Operator\">Operator</a>",1,["token::Operator"]],["impl Freeze for <a class=\"enum\" href=\"token/enum.Bracket.html\" title=\"enum token::Bracket\">Bracket</a>",1,["token::Bracket"]],["impl Freeze for <a class=\"enum\" href=\"token/enum.Token.html\" title=\"enum token::Token\">Token</a>",1,["token::Token"]]]
-};if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()

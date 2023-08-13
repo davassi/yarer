@@ -38,8 +38,9 @@ impl Parser {
                         debug!("-> Unary operator detected");
                         match o {
                             token::Operator::Add => {
+                                // an unary + is simply ignored.
                                 continue;
-                            } // an unary + is simply ignored.
+                            }
                             token::Operator::Sub => {
                                 // an unary - is a special op
                                 mod_vec.push(token::Token::Operator(token::Operator::Une));
