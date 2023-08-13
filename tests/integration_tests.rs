@@ -1,19 +1,19 @@
-
 use yarer::rpn_resolver::*;
 use yarer::token::*;
 
 macro_rules! resolve {
-    ($expr:expr, $expected:expr) => {
-        {
-            let mut resolver = RpnResolver::parse($expr);
-            assert_eq!(resolver.resolve().unwrap(), $expected);
-        }
-    };
+    ($expr:expr, $expected:expr) => {{
+        let mut resolver = RpnResolver::parse($expr);
+        assert_eq!(resolver.resolve().unwrap(), $expected);
+    }};
 }
 
 #[test]
 fn test_expressions() {
-    resolve!("(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4", Number::NaturalNumber(-122));
+    resolve!(
+        "(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4",
+        Number::NaturalNumber(-122)
+    );
     resolve!("3 * 2^3 + 6 / (2 + 1)", Number::NaturalNumber(26));
     //resolve!("PI * 4. + 2^PI", Number::DecimalNumber(std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI)));
     /*resolve!("sin(PI / 4) + cos(PI / 4)", Number::DecimalNumber(1.414213562373095)); // Approximately sqrt(2)
