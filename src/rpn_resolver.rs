@@ -56,7 +56,17 @@ impl RpnResolver<'_> {
                             }
                             result_stack.push_back(left_value/right_value)
                         },
-                        Operator::Pow => result_stack.push_back(left_value^right_value),
+                        Operator::Pow => {
+                            if right_value < ZERO {
+                                if left_value == ZERO {
+                                    return Err(anyhow!("Runtime error - Divide by zero."));
+                                }
+                                let left_value : Number = Number::DecimalNumber(left_value.into());
+                                result_stack.push_back(left_value^right_value)
+                            } else {
+                               result_stack.push_back(left_value^right_value)
+                            }
+                        },
                         Operator::Eql => {
                             debug!("LEFT VALUE {} RIGHT VALUE {}", left_value.to_string(), right_value);
                             self.local_heap.insert(left_value.to_string(), right_value);

@@ -1,13 +1,15 @@
 
 YARER - Rpn Resolver
 ===========================
-[<img alt="github" src="https://img.shields.io/badge/github-davassi/davassi?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/davassi/Yarer)
+[<img alt="github" src="https://img.shields.io/badge/github-davassi/davassi?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/davassi/yarer)
 [<img alt="build status" src="https://github.com/davassi/yarer/actions/workflows/rust.yml/badge.svg" height="20">](https://github.com/davassi/yarer/actions?query=branch%3Amaster)
 [<img alt="crates.io" src="https://img.shields.io/crates/v/syn.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/yarer)
 [<img alt="docs.rs" src="https://img.shields.io/docsrs/yarer?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/yarer)
+[![Downloads](https://img.shields.io/crates/d/yarer.svg)](https://crates.io/crates/yarer)
+[![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
 
-Yarer (Yet another Rpn expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of Reverse Polish mathematical expressions.
+Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
 
 Example of usage of the library: 
       
@@ -18,7 +20,7 @@ Example of usage of the library:
 ```
 
 All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
-The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.+1').
+The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
 
 Yarer can handle also variables and functions. Here an example:
 
@@ -62,6 +64,9 @@ For logging debug just run with:
 env RUST_LOG=yarer=debug cargo run -q -- 
 ```
 
+## Contribution
 
+Besides being stable, Yarer is a work in progress. If you have suggestions for features, or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues). 
+We appreciate very much your feedback.
 
 

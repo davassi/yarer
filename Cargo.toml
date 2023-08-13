@@ -8,6 +8,7 @@ license = "MIT OR Apache-2.0"
 edition = "2021"
 authors = ["Davassi <gianluigi.davassi@gmail.com>"]
 categories = ["command-line-interface"]
+readme = "README.md"
 keywords = [
   "rpn",
   "math",

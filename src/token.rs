@@ -1,5 +1,7 @@
 use std::{fmt::{Display, self}, ops::{Add, Sub, Div, BitXor, Mul}, error};
 
+use log::debug;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
     NaturalNumber(i32),
@@ -243,8 +245,25 @@ impl BitXor for Number {
 
     fn bitxor(self, rhs: Self) -> Self::Output {
 
+        debug!("{} {}",self,rhs);
         apply_functional_token_operation(self, rhs,
              |a : i32,b: i32| i32::pow(a, b.try_into().unwrap()), f64::powf)
+    }
+}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+
+        match (*self,*other) {
+            (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => 
+                    v1.partial_cmp(&v2),
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) =>
+                    (v1 as f64).partial_cmp(&v2),
+            (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => 
+                    v1.partial_cmp(&(v2 as f64)),
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => 
+                    v1.partial_cmp(&v2),
+        }    
     }
 }
 
