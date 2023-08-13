@@ -9,7 +9,7 @@ use crate::{
     parser::*,
     token::{self, MathFunction, Number, Operator, Token, ZERO},
 };
-use anyhow::anyhow;
+use anyhow::{anyhow, Error, Result};
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
@@ -196,7 +196,10 @@ impl RpnResolver<'_> {
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => {
                     postfix_stack.push_back(*t);
-                    local_heap.insert(s.to_string(), token::ZERO);
+                    let s = s.to_lowercase();
+                    if !local_heap.contains_key(&s) { // let's not override consts
+                        local_heap.insert(s, token::ZERO);
+                    }
                 },
             }
             debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_debug(&postfix_stack), dump_debug2(&operators_stack));
@@ -224,6 +227,11 @@ impl RpnResolver<'_> {
         local_heap.insert("π".to_string(), PI);
         local_heap.insert("e".to_string(), E);
         local_heap
+    }
+
+    pub fn set(&mut self, key: String, value: f64) -> anyhow::Result<bool> {
+        self.local_heap.insert(key, Number::DecimalNumber(value));
+        Ok(true)
     }
 }
 
