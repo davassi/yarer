@@ -31,7 +31,9 @@ anyhow = "1.0.72"
 opt-level = 3
 debug = true
 
-
+[[bin]]
+name = "yarer"
+path = "src/bin/main.rs"
 
 
 

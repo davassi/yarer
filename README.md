@@ -65,15 +65,31 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       
 ```
 
+## Execute
+
+To run it from cargo, just type:
+
+```console
+cargo run -q -- 
+```
+
 For logging debug just run with:
 
-```bash
+```console
 env RUST_LOG=yarer=debug cargo run -q -- 
+```
+
+or to build a release from the code:
+
+```console
+cargo build --release
+./target/release/yarer
 ```
 
 ## Contribution
 
 Besides being stable, Yarer is a work in progress. If you have suggestions for features, or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues). 
-We appreciate very much your feedback.
+
+I appreciate very much your feedback!
 
 
