@@ -8,11 +8,12 @@ pub enum Number {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
-    Add,
+    Add, 
     Sub,
     Mul,
     Div,
     Pow,
+    Une, // unary neg ('-1')
     Eql
 }
 
@@ -64,6 +65,9 @@ impl fmt::Display for ParseError {
     }
 }
 
+pub static ZERO : crate::token::Number = Number::NaturalNumber(0);
+pub static MINUS_ONE : crate::token::Number = Number::NaturalNumber(-1);
+
 impl Token<'_> {
 
     fn operator_priority(o : Token) -> (u8, Associate) {
@@ -73,6 +77,7 @@ impl Token<'_> {
             Token::Operator(Operator::Mul) => (2 , Associate::LeftAssociative),
             Token::Operator(Operator::Div) => (2 , Associate::LeftAssociative),
             Token::Operator(Operator::Pow) => (3 , Associate::RightAssociative),
+            Token::Operator(Operator::Une) => (4 , Associate::RightAssociative),
             Token::Operator(Operator::Eql) => (0 , Associate::LeftAssociative),
             _ => panic!("Operator '{}' not recognised. This must not happen!", o),
         }
@@ -94,8 +99,9 @@ impl Token<'_> {
             '*' => Ok(Token::Operator(Operator::Mul)),
             '/' => Ok(Token::Operator(Operator::Div)),
             '^' => Ok(Token::Operator(Operator::Pow)),
+            '#' => Ok(Token::Operator(Operator::Une)),
             '=' => Ok(Token::Operator(Operator::Eql)),
-            _ => Err("Math Operator not supported."),
+             _ => Err("Math Operator not supported."),
         }
     }
 
@@ -227,10 +233,6 @@ impl Div for Number {
 
     fn div(self, rhs: Self) -> Self::Output {
 
-        if rhs == Number::NaturalNumber(0) {
-            panic!("Runtime error: Divide by zero.")
-        }
-
         apply_functional_token_operation(self, rhs, 
             |a : i32,b: i32| a/b, |a : f64,b: f64| a/b)
     }
@@ -263,6 +265,7 @@ impl Display for Operator {
             Operator::Mul => write!(f, "*"),
             Operator::Div => write!(f, "/"),
             Operator::Pow => write!(f, "^"),
+            Operator::Une => write!(f, "#"),
             Operator::Eql => write!(f, "="),
         }
     }

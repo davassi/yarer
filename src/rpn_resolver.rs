@@ -1,22 +1,15 @@
 
 
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, VecDeque}, panic};
 
 use log::debug;
 
-use crate::{parser::*, token::{Token, Operator, Number, MathFunction, self}};
+use crate::{parser::*, token::{Token, Operator, Number, MathFunction, self, ZERO}};
 use anyhow::anyhow;
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: HashMap<String, Number>,
-}
-
-fn dump_debug(v: &VecDeque<Token>) -> String {
-    v.iter().map(ToString::to_string).collect()
-}
-fn dump_debug2(v: &[Token]) -> String {
-    v.iter().map(ToString::to_string).collect() 
 }
 
 /// Here relies the core logic of Yarer. 
@@ -45,20 +38,33 @@ impl RpnResolver<'_> {
                 Token::Operator(op) => {
                     let right_value: Number = result_stack.pop_back()
                         .ok_or_else(|| anyhow!("Operator {} is invalid",op))?;
-                    let left_value: Number = result_stack.pop_back()
-                        .ok_or_else(|| anyhow!("Operator {} is invalid",op))?;
+                    
+                    let mut left_value: Number = ZERO;
+                    
+                    if op != Operator::Une {
+                        left_value = result_stack.pop_back()
+                            .ok_or_else(|| anyhow!("Operator {} is invalid",op))?;
+                    }
 
                     match op {
                         Operator::Add => result_stack.push_back(left_value+right_value),
                         Operator::Sub => result_stack.push_back(left_value-right_value),
                         Operator::Mul => result_stack.push_back(left_value*right_value),
-                        Operator::Div => result_stack.push_back(left_value/right_value),
+                        Operator::Div => {
+                            if right_value == ZERO {
+                                return Err(anyhow!("Runtime error - Divide by zero."));
+                            }
+                            result_stack.push_back(left_value/right_value)
+                        },
                         Operator::Pow => result_stack.push_back(left_value^right_value),
                         Operator::Eql => {
                             debug!("LEFT VALUE {} RIGHT VALUE {}", left_value.to_string(), right_value);
                             self.local_heap.insert(left_value.to_string(), right_value);
                             result_stack.push_back(right_value)
                         }
+                        Operator::Une => { //# unary neg
+                            result_stack.push_back(right_value*token::MINUS_ONE);
+                        },
                     }
                 },
                 Token::Function(fun) => {
@@ -89,13 +95,14 @@ impl RpnResolver<'_> {
                 Token::Variable(v) => {
 
                     let n = self.local_heap.get(v)
-                        .unwrap_or(&Number::NaturalNumber(0));
+                        .unwrap_or(&token::ZERO);
                     result_stack.push_back(*n);
                 }
                 _ => return Err(anyhow!("This {} cannot be yet recognised!",t)),
             }
         }
-        result_stack.pop_front().ok_or(anyhow!("Something went terribly wrong here."))
+        result_stack.pop_front()
+            .ok_or(anyhow!("Something went terribly wrong here."))
        
     }
 
@@ -136,8 +143,9 @@ impl RpnResolver<'_> {
                    or op1 is right-associative and its precedence is less than that of op2:
                       pop op2 off the stack, onto the output list;
                     push op1 on the stack.*/
-                Token::Operator(_) => {
-                    let op1 = *t;
+                Token::Operator(_op) => {
+                    let op1: Token<'_> = *t;
+                   
                     while !operators_stack.is_empty() {
                         let op2: &Token = operators_stack.last().unwrap();
                         match op2 {
@@ -154,7 +162,7 @@ impl RpnResolver<'_> {
                             _ => break,
                         }
                     }
-                    operators_stack.push(op1);   
+                    operators_stack.push(op1);
                 },
 
                 Token::Function(_) => { 
@@ -164,7 +172,7 @@ impl RpnResolver<'_> {
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => { 
                     postfix_stack.push_back(*t);
-                    local_heap.insert(s.to_string(), Number::NaturalNumber(0));
+                    local_heap.insert(s.to_string(), token::ZERO);
                 },
                 
             }            
@@ -191,6 +199,13 @@ impl RpnResolver<'_> {
         local_heap
     }
 
+}
+
+fn dump_debug(v: &VecDeque<Token>) -> String {
+    v.iter().map(ToString::to_string).collect()
+}
+fn dump_debug2(v: &[Token]) -> String {
+    v.iter().map(ToString::to_string).collect() 
 }
 
 #[cfg(test)]
