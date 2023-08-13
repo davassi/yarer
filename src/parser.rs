@@ -32,28 +32,30 @@ impl Parser { //r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷]|[a-zA-Z_][a-zA-Z0-9_]*)"
     fn mod_unary_operators<'a>(v: &[Token<'a>]) -> Result<Vec<Token<'a>>, &'a str> {
 
         let mut mod_vec: Vec<Token> = Vec::new();
-        let mut last_was_operator = true;
+        let mut expect_operand_next = true;
       
         for &token in v.iter() {
             debug!("{}", token);
 
             match token {
-                Token::Operand(_) => { last_was_operator = false; },
+                Token::Operand(_) => { 
+                    expect_operand_next = false; 
+                },
                 Token::Operator(o) => {
-                    if last_was_operator {
+                    if expect_operand_next {
                         debug!("-> Unary operator detected");
-                        last_was_operator = false;
                         match o {
-                            token::Operator::Add => continue, // an unary + is simply ignored.
+                            token::Operator::Add => { 
+                                continue;
+                            }, // an unary + is simply ignored.
                             token::Operator::Sub => { // an unary - is a special op
                                 mod_vec.push(token::Token::Operator(token::Operator::Une));
-                                last_was_operator = true;
                                 continue;
                             },
                             _ => (),
                         }
                     }
-                    last_was_operator = true;
+                    expect_operand_next = true;
                 },
                 _ => (),
             }
@@ -99,6 +101,41 @@ mod tests {
             ])
         );
     }
+    
+    #[test]
+    fn test_multiple_unary_ops2() { 
 
+        // -(+(-5*-5)) to #((#5*#5))
+
+        let input = vec![ 
+            Token::Operator(Operator::Sub), 
+            Token::Bracket(Bracket::Open),
+            Token::Operator(Operator::Add),
+            Token::Bracket(Bracket::Open),
+            Token::Operator(Operator::Sub), 
+            Token::Operand(Number::NaturalNumber(5)),
+            Token::Operator(Operator::Mul),
+            Token::Operator(Operator::Sub),
+            Token::Operand(Number::NaturalNumber(5)),
+            Token::Bracket(Bracket::Close),
+            Token::Bracket(Bracket::Close),
+        ];
+
+        let expected = vec![
+                Token::Operator(Operator::Une), 
+                Token::Bracket(Bracket::Open),
+                Token::Bracket(Bracket::Open),
+                Token::Operator(Operator::Une), 
+                Token::Operand(Number::NaturalNumber(5)),
+                Token::Operator(Operator::Mul),
+                Token::Operator(Operator::Une),
+                Token::Operand(Number::NaturalNumber(5)),
+                Token::Bracket(Bracket::Close),
+                Token::Bracket(Bracket::Close),
+            ];
+
+        let result = Parser::mod_unary_operators(&input).unwrap();
+        assert_eq!(result, expected);
+    }
    
 }
