@@ -62,6 +62,7 @@ impl RpnResolver<'_> {
                             if right_value == ZERO {
                                 return Err(anyhow!("Runtime error - Divide by zero."));
                             }
+                            let left_value: Number = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value)
                         }
                         Operator::Pow => {
