@@ -143,8 +143,8 @@ impl Token<'_> {
             "ln" => MathFunction::Ln,
             "log" => MathFunction::Log,
             "abs" => MathFunction::Abs,
-            "max" => MathFunction::Max,
-            "min" => MathFunction::Min,
+         //   "max" => MathFunction::Max,
+         //   "min" => MathFunction::Min,
             &_ => MathFunction::None,
         }
     }

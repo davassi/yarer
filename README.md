@@ -44,10 +44,12 @@ and of course, the expression can be re-evaluated if the variable changes.
 Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 
 ```rust
-      Yarer
+      $ yarer
+      Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
+      License MIT OR Apache-2.0
       > 4+2.2
       6.2
-      > (1./2)+max(10,8)
+      > (1./2)+atan(10)
       10.5
       > x=10
       > 3/sin(5*x^2)
@@ -56,6 +58,11 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       0
       > log(10)
       1
+      > 2^-2
+      0.25
+      > 1/(log(10)+cos(0))^-2
+      4
+      
 ```
 
 For logging debug just run with:
