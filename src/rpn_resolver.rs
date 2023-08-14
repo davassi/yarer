@@ -9,7 +9,7 @@ use crate::{
     parser::*,
     token::{self, MathFunction, Number, Operator, Token, ZERO},
 };
-use anyhow::{anyhow, Error, Result};
+use anyhow::anyhow;
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
@@ -196,17 +196,16 @@ impl RpnResolver<'_> {
                 Token::Variable(s) => {
                     postfix_stack.push_back(*t);
                     let s = s.to_lowercase();
-                    if !local_heap.contains_key(&s) { // let's not override consts
-                        local_heap.insert(s, token::ZERO);
-                    }
+                    local_heap.entry(s) // let's not override consts
+                        .or_insert(token::ZERO); 
                 },
             }
             debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_debug(&postfix_stack), dump_debug2(&operators_stack));
         });
 
-        /* After all tokens are read, pop remaining operators from the stack and add them to the list.  */
-        while !operators_stack.is_empty() {
-            postfix_stack.push_back(operators_stack.pop().unwrap());
+        /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
+        while let Some(operators) = operators_stack.pop() {
+            postfix_stack.push_back(operators);
         }
 
         debug!(
