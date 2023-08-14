@@ -2,14 +2,12 @@ use std::{
     collections::{HashMap, VecDeque},
     panic,
 };
-
-use log::debug;
-
 use crate::{
     parser::*,
     token::{self, MathFunction, Number, Operator, Token, ZERO},
 };
 use anyhow::anyhow;
+use log::debug;
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,

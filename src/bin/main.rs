@@ -52,7 +52,6 @@ fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let _ = rl.load_history(HISTORY_FILE);
 
-    //let mut variable_heap = RpnResolver::init_local_heap();
     let mut session = Session::init();
     loop {
         let readline = rl.readline("> ");

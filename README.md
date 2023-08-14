@@ -15,7 +15,8 @@ Example of usage of the library:
       
 ```rust
       let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
-      let resolver = RpnResolver::parse(exp);
+      let mut session = Session::init();
+      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
       println!("The result of {} is {}", exp, resolver.resolve());
 ```
 

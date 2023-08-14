@@ -81,7 +81,7 @@ fn test_expressions() {
 #[test]
 fn test_programmatic() {
     let mut session: Session = Session::init();
-    let mut resolver: RpnResolver = session.build_resolver_for("(x^2)");
+    let mut resolver: RpnResolver = session.build_resolver_for("x^2");
 
     for i in 1..=64 {
         resolver.set(String::from("x"), i);
