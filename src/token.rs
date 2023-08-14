@@ -259,11 +259,20 @@ impl PartialOrd for Number {
     }
 }
 
-impl Into<f64> for Number {
-    fn into(self) -> f64 {
-        match self {
+impl From<Number> for f64 {
+    fn from(n: Number) -> f64 {
+        match n {
             Number::NaturalNumber(v) => v as f64,
             Number::DecimalNumber(v) => v,
+        }
+    }
+}
+
+impl From<Number> for i32 {
+    fn from(n: Number) -> i32 {
+        match n {
+            Number::NaturalNumber(v) => v,
+            Number::DecimalNumber(v) => v as i32,
         }
     }
 }

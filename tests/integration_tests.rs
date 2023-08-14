@@ -86,6 +86,6 @@ fn test_programmatic() {
         let result: Number = resolver.resolve().unwrap();
 
         println!("{}^2={}", i, result);
-        assert!(result == yarer::token::Number::NaturalNumber(i * i));
+        assert!(i32::from(result) == (i * i));
     }
 }
