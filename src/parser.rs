@@ -1,19 +1,17 @@
-
-
 use crate::token::{self, Token};
-use lazy_static::lazy_static;
+use clap::__derive_refs::once_cell;
 
 use log::debug;
 use regex::Regex;
+
+use once_cell::sync::Lazy;
 
 /// The Parser has only 2 functions: to parse with a Regex and to tokenise a math &str expression
 #[derive(Debug)]
 pub struct Parser;
 
-lazy_static! {
-    static ref EXPRESSION_REGEX: Result<Regex, regex::Error> =
-        Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)");
-}
+static EXPRESSION_REGEX: Lazy<Result<Regex, regex::Error>> =
+    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)"));
 
 impl Parser {
     /// The Parser parses and splits a str into a vec of &str using
@@ -22,8 +20,6 @@ impl Parser {
             Ok(r) => Ok(r.find_iter(exp).map(|m| m.as_str()).collect()),
             Err(_) => Err("Regex Failed"),
         }
-
-        //.map(|regex| regex.find_iter(exp).map(|m| m.as_str()).collect())
     }
 
     /// tokenise a processed str expression
