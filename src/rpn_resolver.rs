@@ -200,12 +200,11 @@ impl RpnResolver<'_> {
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
-        while let Some(operators) = operators_stack.pop() {
-            postfix_stack.push_back(operators);
-        }
+        operators_stack.reverse();
+        postfix_stack.extend(operators_stack.iter());
 
         debug!(
-            "Inspecting... EOF - OUT {} - OP - {}",
+            "Inspecting... EOF - OUT {:?} - OP - {:?}",
             dump_debug(&postfix_stack),
             dump_debug2(&operators_stack)
         );
@@ -246,6 +245,6 @@ mod tests {
             Token::Operand(Number::NaturalNumber(2)),
             Token::Operator(Operator::Add),
         ];
-        //assert_eq!(RpnResolver::reverse_polish_notation(&a,).0, b);
+        assert_eq!(RpnResolver::reverse_polish_notation(&a, &mut HashMap::new()).0, b);
     }
 }

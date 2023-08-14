@@ -30,7 +30,9 @@ struct Cli {
 ///  Example
 ///  ```   
 ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
-///      let mut resolver : RpnResolver = RpnResolver::parse(exp);
+///      let mut session = Session::init();
+///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+///
 ///      let result: token::Number = resolver.resolve().unwrap();
 ///      println!("The result of {} is {}", exp, result);
 ///  ```
@@ -67,7 +69,6 @@ fn main() -> Result<()> {
                 let _ = rl.add_history_entry(line.as_str());
 
                 let mut resolver: RpnResolver = session.build_resolver_for(&line);
-                //RpnResolver::parse_with_borrowed_heap(&line, &mut variable_heap);
 
                 match resolver.resolve() {
                     Ok(value) => println!("{}", value),
