@@ -73,6 +73,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 ## Built-in Defined Functions
 
 There are several math functions defined that you can use in your expression. More to come!
+There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs)
 
 ```rust
     Sin

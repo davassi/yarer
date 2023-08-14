@@ -78,12 +78,13 @@ fn test_expressions() {
 
 #[test]
 fn test_programmatic() {
-    let line: &str = "x^2";
-    let mut resolver: RpnResolver = RpnResolver::parse(&line);
+    let mut resolver: RpnResolver = RpnResolver::parse("x^2");
 
     for i in 1..=64 {
         resolver.set(String::from("x"), i);
+
         let result: Number = resolver.resolve().unwrap();
+
         println!("{}^2={}", i, result);
         assert!(result == yarer::token::Number::NaturalNumber(i * i));
     }
