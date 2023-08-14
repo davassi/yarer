@@ -3,7 +3,8 @@ use yarer::token::*;
 
 macro_rules! resolve {
     ($expr:expr, $expected:expr) => {{
-        let mut resolver = RpnResolver::parse($expr);
+        let mut heap = RpnResolver::init_local_heap();
+        let mut resolver = RpnResolver::parse_with_borrowed_heap(($expr), &mut heap);
         assert_eq!(resolver.resolve().unwrap(), $expected);
     }};
 }
@@ -78,7 +79,8 @@ fn test_expressions() {
 
 #[test]
 fn test_programmatic() {
-    let mut resolver: RpnResolver = RpnResolver::parse("x^2");
+    let mut heap = RpnResolver::init_local_heap();
+    let mut resolver: RpnResolver = RpnResolver::parse_with_borrowed_heap("x^2", &mut heap);
 
     for i in 1..=64 {
         resolver.set(String::from("x"), i);

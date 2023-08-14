@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let _ = rl.load_history(HISTORY_FILE);
 
-    let mut a_local_heap = RpnResolver::init_local_heap();
+    let mut variable_heap = RpnResolver::init_local_heap();
     loop {
         let readline = rl.readline("> ");
 
@@ -65,12 +65,12 @@ fn main() -> Result<()> {
                 let _ = rl.add_history_entry(line.as_str());
 
                 let mut resolver: RpnResolver =
-                    RpnResolver::parse_with_borrowed_heap(&line, a_local_heap.clone());
+                    RpnResolver::parse_with_borrowed_heap(&line, &mut variable_heap);
+
                 match resolver.resolve() {
                     Ok(value) => println!("{}", value),
                     Err(e) => println!("Error: {}", e),
                 }
-                a_local_heap = resolver.get_local_heap();
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
                 println!("quit");

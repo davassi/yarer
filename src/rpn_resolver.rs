@@ -13,29 +13,31 @@ use anyhow::anyhow;
 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
-    local_heap: HashMap<String, Number>,
+    local_heap: &'a mut HashMap<String, Number>,
 }
 
 /// Here relies the core logic of Yarer.
 impl RpnResolver<'_> {
-    pub fn parse<'a>(exp: &'a str) -> RpnResolver {
+
+  /*  pub fn parse<'a>(exp: &'a str) -> RpnResolver {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
-        let (rpn_expr, local_heap) = RpnResolver::reverse_polish_notation(&tokenised_expr);
+        let (rpn_expr, _) = RpnResolver::reverse_polish_notation(&tokenised_expr);
+        static mut heap: HashMap<String, Number> = RpnResolver::init_local_heap();
 
         RpnResolver {
             rpn_expr,
-            local_heap,
+            local_heap : &mut heap,
         }
-    }
+    } */
 
-    pub fn parse_with_borrowed_heap<'a>(exp: &'a str, local_heap: HashMap<String, Number>) -> RpnResolver {
+    pub fn parse_with_borrowed_heap<'a>(exp: &'a str, borrowed_heap: &'a mut HashMap<String, Number>) -> RpnResolver<'a> {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
         let (rpn_expr, _) 
             = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
         RpnResolver {
             rpn_expr,
-            local_heap,
+            local_heap : borrowed_heap
         }
     }
 
@@ -227,6 +229,7 @@ impl RpnResolver<'_> {
     pub fn init_local_heap() -> HashMap<String, Number> {
         static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
         static E: Number = Number::DecimalNumber(std::f64::consts::E);
+        
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("pi".to_string(), PI);
         local_heap.insert("e".to_string(), E);
@@ -239,10 +242,6 @@ impl RpnResolver<'_> {
     }
     pub fn set(&mut self, key: String, value: i32) {
         self.local_heap.insert(key, Number::NaturalNumber(value));
-    }
-
-    pub fn get_local_heap(&self) -> HashMap<String, Number> {
-        self.local_heap.clone()
     }
 }
 
