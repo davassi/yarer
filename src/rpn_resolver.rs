@@ -226,9 +226,12 @@ impl RpnResolver<'_> {
         local_heap
     }
 
-    pub fn set(&mut self, key: String, value: f64) -> anyhow::Result<bool> {
+    /// Dear Rust, why there's no static method overloading?
+    pub fn setf(&mut self, key: String, value: f64) {
         self.local_heap.insert(key, Number::DecimalNumber(value));
-        Ok(true)
+    }
+    pub fn set(&mut self, key: String, value: i32) {
+        self.local_heap.insert(key, Number::NaturalNumber(value));
     }
 }
 

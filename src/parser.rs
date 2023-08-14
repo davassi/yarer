@@ -30,7 +30,7 @@ impl Parser {
             debug!("{}", token);
 
             match token {
-                Token::Operand(_) => {
+                Token::Operand(_) | Token::Variable(_) => {
                     expect_operand_next = false;
                 }
                 Token::Operator(o) => {
