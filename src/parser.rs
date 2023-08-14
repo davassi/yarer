@@ -6,25 +6,26 @@ use regex::Regex;
 
 use once_cell::sync::Lazy;
 
-/// The Parser has only 2 functions: to parse with a Regex and to tokenise a math &str expression
+/// The Parser has 2 primary functions:
+/// to parse the math expression with a Regex and to tokenise the math &str expression
 #[derive(Debug)]
 pub struct Parser;
 
-static EXPRESSION_REGEX: Lazy<Result<Regex, regex::Error>> =
-    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)"));
+static EXPRESSION_REGEX: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)").unwrap());
 
 impl Parser {
     /// The Parser parses and splits a str into a vec of &str using
-    fn process(exp: &str) -> Result<Vec<&str>, &str> {
-        match &*EXPRESSION_REGEX {
-            Ok(r) => Ok(r.find_iter(exp).map(|m| m.as_str()).collect()),
-            Err(_) => Err("Regex Failed"),
-        }
+    fn process(exp: &str) -> Vec<&str> {
+        EXPRESSION_REGEX
+            .find_iter(exp)
+            .map(|m| m.as_str())
+            .collect()
     }
 
     /// tokenise a processed str expression
     pub fn parse(exp: &str) -> Result<Vec<Token>, &str> {
-        Self::process(exp)
+        Ok(Self::process(exp))
             .and_then(|v: Vec<&str>| Token::tokenize_vec(&v))
             .and_then(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
     }
@@ -75,19 +76,19 @@ mod tests {
     fn test_process_valid() {
         assert_eq!(
             Parser::process("1+2*3/(4-5)"),
-            Ok(vec!["1", "+", "2", "*", "3", "/", "(", "4", "-", "5", ")"])
+            vec!["1", "+", "2", "*", "3", "/", "(", "4", "-", "5", ")"]
         );
-        assert_eq!(Parser::process("100*3.14"), Ok(vec!["100", "*", "3.14"]));
-        assert_eq!(Parser::process("x-y"), Ok(vec!["x", "-", "y"]));
-        assert_eq!(Parser::process("cos(10)"), Ok(vec!["cos", "(", "10", ")"]));
+        assert_eq!(Parser::process("100*3.14"), (vec!["100", "*", "3.14"]));
+        assert_eq!(Parser::process("x-y"), (vec!["x", "-", "y"]));
+        assert_eq!(Parser::process("cos(10)"), (vec!["cos", "(", "10", ")"]));
         assert_eq!(
             Parser::process("cos(-10)"),
-            Ok(vec!["cos", "(", "-", "10", ")"])
+            vec!["cos", "(", "-", "10", ")"]
         );
-        assert_eq!(Parser::process("3+5*x"), Ok(vec!["3", "+", "5", "*", "x"]));
+        assert_eq!(Parser::process("3+5*x"), (vec!["3", "+", "5", "*", "x"]));
         assert_eq!(
             Parser::process("-3.14*variableName123/alpha_beta"),
-            Ok(vec!["-", "3.14", "*", "variableName123", "/", "alpha_beta"])
+            (vec!["-", "3.14", "*", "variableName123", "/", "alpha_beta"])
         );
     }
 

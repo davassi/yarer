@@ -9,12 +9,12 @@ use crate::{
 use anyhow::anyhow;
 use log::debug;
 
+/// The main RpnResolver: here relies the core logic of Yarer for parsing and evaluating a math expression.
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: &'a mut HashMap<String, Number>,
 }
 
-/// Here relies the core logic of Yarer.
 impl RpnResolver<'_> {
 
     pub fn parse_with_borrowed_heap<'a>(exp: &'a str, borrowed_heap: &'a mut HashMap<String, Number>) -> RpnResolver<'a> {
@@ -28,6 +28,7 @@ impl RpnResolver<'_> {
         }
     }
 
+    /// This method evaluates the stack 
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
@@ -194,7 +195,7 @@ impl RpnResolver<'_> {
                         .or_insert(token::ZERO); 
                 },
             }
-            debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_debug(&postfix_stack), dump_debug2(&operators_stack));
+            debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_deque_on_cout(&postfix_stack), dump_vec_on_cout(&operators_stack));
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
@@ -203,14 +204,13 @@ impl RpnResolver<'_> {
 
         debug!(
             "Inspecting... EOF - OUT {:?} - OP - {:?}",
-            dump_debug(&postfix_stack),
-            dump_debug2(&operators_stack)
+            dump_deque_on_cout(&postfix_stack),
+            dump_vec_on_cout(&operators_stack)
         );
 
         (postfix_stack, local_heap)
     }
 
-    /// Dear Rust, why there's no static method overloading?
     pub fn setf(&mut self, key: String, value: f64) {
         self.local_heap.insert(key, Number::DecimalNumber(value));
     }
@@ -219,10 +219,10 @@ impl RpnResolver<'_> {
     }
 }
 
-fn dump_debug(v: &VecDeque<Token>) -> String {
+fn dump_deque_on_cout(v: &VecDeque<Token>) -> String {
     v.iter().map(ToString::to_string).collect()
 }
-fn dump_debug2(v: &[Token]) -> String {
+fn dump_vec_on_cout(v: &[Token]) -> String {
     v.iter().map(ToString::to_string).collect()
 }
 
