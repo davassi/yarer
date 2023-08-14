@@ -1,3 +1,4 @@
+use yarer::parser::Parser;
 use yarer::rpn_resolver::*;
 use yarer::token::*;
 
@@ -52,4 +53,13 @@ fn test_expressions() {
        resolve!("(2^2 + 3^2) * (4^2 + 5^2)", Number::NaturalNumber(725));
        resolve!("PI * e * (PI - e)", Number::DecimalNumber(std::f64::consts::PI * std::f64::consts::E * (std::f64::consts::PI - std::f64::consts::E)));
        */
+}
+
+#[test]
+fn test_programmatic() {
+    let line: &str = "x+1";
+    let mut resolver: RpnResolver = RpnResolver::parse(&line);
+    println!("yee {}", resolver.resolve().unwrap());
+    resolver.set("x".to_string(), 1.0);
+    println!("{}", resolver.resolve().unwrap());
 }

@@ -26,6 +26,8 @@ rustyline = "12.0.0"
 log = "0.4"
 env_logger = "0.10.0"
 anyhow = "1.0.72"
+phf = "0.11.2"
+thiserror = "1.0.44"
 
 [profile.release]
 opt-level = 3
@@ -34,6 +36,9 @@ debug = true
 [[bin]]
 name = "yarer"
 path = "src/bin/main.rs"
+
+[lib]
+name = "yarer"
 
 
 

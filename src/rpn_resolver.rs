@@ -16,6 +16,8 @@ pub struct RpnResolver<'a> {
     local_heap: HashMap<String, Number>,
 }
 
+//static static_heap: HashMap<String, Number> = Lazy::new(|| RpnResolver::init_local_heap());
+
 /// Here relies the core logic of Yarer.
 impl RpnResolver<'_> {
     pub fn parse<'a>(exp: &'a str) -> RpnResolver {
@@ -31,15 +33,12 @@ impl RpnResolver<'_> {
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
-        while !self.rpn_expr.is_empty() {
-            let t: Token = self
-                .rpn_expr
-                .pop_front()
-                .ok_or(anyhow!("Expression is invalid"))?;
+        let mut last_var_ref: &str = "";
 
+        for t in &self.rpn_expr {
             match t {
                 Token::Operand(n) => {
-                    result_stack.push_back(n);
+                    result_stack.push_back(*n);
                 }
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
@@ -48,7 +47,7 @@ impl RpnResolver<'_> {
 
                     let mut left_value: Number = ZERO;
 
-                    if op != Operator::Une {
+                    if op != &Operator::Une {
                         left_value = result_stack
                             .pop_back()
                             .ok_or_else(|| anyhow!("Operator {} is invalid", op))?;
@@ -77,12 +76,10 @@ impl RpnResolver<'_> {
                             }
                         }
                         Operator::Eql => {
-                            debug!(
-                                "LEFT VALUE {} RIGHT VALUE {}",
-                                left_value.to_string(),
-                                right_value
-                            );
-                            self.local_heap.insert(left_value.to_string(), right_value);
+                            self.local_heap
+                                .insert(last_var_ref.to_string(), right_value);
+
+                            debug!("Heap {:?}", self.local_heap);
                             result_stack.push_back(right_value)
                         }
                         Operator::Une => {
@@ -90,6 +87,12 @@ impl RpnResolver<'_> {
                             result_stack.push_back(right_value * token::MINUS_ONE);
                         }
                     }
+                }
+                Token::Variable(v) => {
+                    last_var_ref = v;
+                    debug!("Heap {:?}", self.local_heap);
+                    let n = self.local_heap.get(*v).unwrap();
+                    result_stack.push_back(*n);
                 }
                 Token::Function(fun) => {
                     let value: Number = result_stack.pop_back().unwrap();
@@ -116,10 +119,6 @@ impl RpnResolver<'_> {
                         MathFunction::None => panic!("This should not happen!"),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
-                }
-                Token::Variable(v) => {
-                    let n = self.local_heap.get(v).unwrap_or(&token::ZERO);
-                    result_stack.push_back(*n);
                 }
                 _ => return Err(anyhow!("This {} cannot be yet recognised!", t)),
             }
@@ -224,7 +223,6 @@ impl RpnResolver<'_> {
         static E: Number = Number::DecimalNumber(std::f64::consts::E);
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("pi".to_string(), PI);
-        local_heap.insert("π".to_string(), PI);
         local_heap.insert("e".to_string(), E);
         local_heap
     }
