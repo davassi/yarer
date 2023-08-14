@@ -36,6 +36,7 @@ and of course, the expression can be re-evaluated if the variable changes.
       //...
       resolver.set("x",-1);
       println!("The result is {}", resolver.resolve());
+      
       resolver.set("x",0.001); 
       println!("The result is {}", resolver.resolve());
       //...

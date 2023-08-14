@@ -16,13 +16,22 @@ pub struct RpnResolver<'a> {
     local_heap: HashMap<String, Number>,
 }
 
-//static static_heap: HashMap<String, Number> = Lazy::new(|| RpnResolver::init_local_heap());
-
 /// Here relies the core logic of Yarer.
 impl RpnResolver<'_> {
     pub fn parse<'a>(exp: &'a str) -> RpnResolver {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
         let (rpn_expr, local_heap) = RpnResolver::reverse_polish_notation(&tokenised_expr);
+
+        RpnResolver {
+            rpn_expr,
+            local_heap,
+        }
+    }
+
+    pub fn parse_with_borrowed_heap<'a>(exp: &'a str, local_heap: HashMap<String, Number>) -> RpnResolver {
+        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
+        let (rpn_expr, _) 
+            = RpnResolver::reverse_polish_notation(&tokenised_expr);
 
         RpnResolver {
             rpn_expr,
@@ -69,11 +78,9 @@ impl RpnResolver<'_> {
                                 if left_value == ZERO {
                                     return Err(anyhow!("Runtime error - Divide by zero."));
                                 }
-                                let left_value: Number = Number::DecimalNumber(left_value.into());
-                                result_stack.push_back(left_value ^ right_value)
-                            } else {
-                                result_stack.push_back(left_value ^ right_value)
-                            }
+                                left_value = Number::DecimalNumber(left_value.into());
+                            } 
+                            result_stack.push_back(left_value ^ right_value)
                         }
                         Operator::Eql => {
                             self.local_heap
@@ -91,7 +98,7 @@ impl RpnResolver<'_> {
                 Token::Variable(v) => {
                     last_var_ref = v;
                     debug!("Heap {:?}", self.local_heap);
-                    let n = self.local_heap.get(*v).unwrap();
+                    let n = self.local_heap.get(*v).unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(*n);
                 }
                 Token::Function(fun) => {
@@ -217,7 +224,7 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    fn init_local_heap() -> HashMap<String, Number> {
+    pub fn init_local_heap() -> HashMap<String, Number> {
         static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
         static E: Number = Number::DecimalNumber(std::f64::consts::E);
         let mut local_heap: HashMap<String, Number> = HashMap::new();
@@ -232,6 +239,10 @@ impl RpnResolver<'_> {
     }
     pub fn set(&mut self, key: String, value: i32) {
         self.local_heap.insert(key, Number::NaturalNumber(value));
+    }
+
+    pub fn get_local_heap(&self) -> HashMap<String, Number> {
+        self.local_heap.clone()
     }
 }
 
