@@ -1,10 +1,11 @@
 use yarer::rpn_resolver::*;
+use yarer::session::Session;
 use yarer::token::*;
 
 macro_rules! resolve {
     ($expr:expr, $expected:expr) => {{
-        let mut heap = RpnResolver::init_local_heap();
-        let mut resolver = RpnResolver::parse_with_borrowed_heap(($expr), &mut heap);
+        let mut session = Session::init();
+        let mut resolver = session.build_resolver_for($expr);
         assert_eq!(resolver.resolve().unwrap(), $expected);
     }};
 }
@@ -79,8 +80,8 @@ fn test_expressions() {
 
 #[test]
 fn test_programmatic() {
-    let mut heap = RpnResolver::init_local_heap();
-    let mut resolver: RpnResolver = RpnResolver::parse_with_borrowed_heap("x^2", &mut heap);
+    let mut session: Session = Session::init();
+    let mut resolver: RpnResolver = session.build_resolver_for("(x^2)");
 
     for i in 1..=64 {
         resolver.set(String::from("x"), i);

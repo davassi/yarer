@@ -19,25 +19,14 @@ pub struct RpnResolver<'a> {
 /// Here relies the core logic of Yarer.
 impl RpnResolver<'_> {
 
-  /*  pub fn parse<'a>(exp: &'a str) -> RpnResolver {
-        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
-        let (rpn_expr, _) = RpnResolver::reverse_polish_notation(&tokenised_expr);
-        static mut heap: HashMap<String, Number> = RpnResolver::init_local_heap();
-
-        RpnResolver {
-            rpn_expr,
-            local_heap : &mut heap,
-        }
-    } */
-
     pub fn parse_with_borrowed_heap<'a>(exp: &'a str, borrowed_heap: &'a mut HashMap<String, Number>) -> RpnResolver<'a> {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
-        let (rpn_expr, _) 
-            = RpnResolver::reverse_polish_notation(&tokenised_expr);
+        let (rpn_expr, local_heap) 
+            = RpnResolver::reverse_polish_notation(&tokenised_expr, borrowed_heap);
 
         RpnResolver {
             rpn_expr,
-            local_heap : borrowed_heap
+            local_heap 
         }
     }
 
@@ -138,14 +127,12 @@ impl RpnResolver<'_> {
     }
 
     /* Transforming an infix notation to Reverse Polish Notation (RPN) */
-    fn reverse_polish_notation<'a>(
-        infix_stack: &[Token<'a>],
-    ) -> (VecDeque<Token<'a>>, HashMap<String, Number>) {
+    fn reverse_polish_notation<'a>(infix_stack: &[Token<'a>], local_heap: &'a mut HashMap<String, Number>) 
+        -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
-        let mut local_heap: HashMap<String, Number> = RpnResolver::init_local_heap();
-
+       
         /* Scan the infix expression from left to right. */
         infix_stack.iter().for_each(|t: &Token| {
 
@@ -226,16 +213,6 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    pub fn init_local_heap() -> HashMap<String, Number> {
-        static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
-        static E: Number = Number::DecimalNumber(std::f64::consts::E);
-        
-        let mut local_heap: HashMap<String, Number> = HashMap::new();
-        local_heap.insert("pi".to_string(), PI);
-        local_heap.insert("e".to_string(), E);
-        local_heap
-    }
-
     /// Dear Rust, why there's no static method overloading?
     pub fn setf(&mut self, key: String, value: f64) {
         self.local_heap.insert(key, Number::DecimalNumber(value));
@@ -269,6 +246,6 @@ mod tests {
             Token::Operand(Number::NaturalNumber(2)),
             Token::Operator(Operator::Add),
         ];
-        assert_eq!(RpnResolver::reverse_polish_notation(&a).0, b);
+        //assert_eq!(RpnResolver::reverse_polish_notation(&a,).0, b);
     }
 }

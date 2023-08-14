@@ -25,8 +25,10 @@ The library just returns a variant natural number, or a decimal number if one ex
 Yarer can handle also variables and functions. Here an example:
 
 ```rust
-      let resolver = RpnResolver::parse("1/cos(x^2)");
-      resolver.set("x",1);
+      let mut session: Session = Session::init();
+      let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
+
+      session.set("x",1);
       println!("The result is {}", resolver.resolve());
 ```
 
@@ -34,10 +36,10 @@ and of course, the expression can be re-evaluated if the variable changes.
 
 ```rust
       //...
-      resolver.set("x",-1);
+      session.set("x",-1);
       println!("The result is {}", resolver.resolve());
-      
-      resolver.set("x",0.001); 
+
+      session.set("x",0.001); 
       println!("The result is {}", resolver.resolve());
       //...
 ```

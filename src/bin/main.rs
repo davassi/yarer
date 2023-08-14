@@ -3,6 +3,7 @@ use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
 use yarer::rpn_resolver::*;
+use yarer::session::*;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static HISTORY_FILE: &str = ".yarer_history";
@@ -49,7 +50,8 @@ fn main() -> Result<()> {
     let mut rl = DefaultEditor::new()?;
     let _ = rl.load_history(HISTORY_FILE);
 
-    let mut variable_heap = RpnResolver::init_local_heap();
+    //let mut variable_heap = RpnResolver::init_local_heap();
+    let mut session = Session::init();
     loop {
         let readline = rl.readline("> ");
 
@@ -64,8 +66,8 @@ fn main() -> Result<()> {
 
                 let _ = rl.add_history_entry(line.as_str());
 
-                let mut resolver: RpnResolver =
-                    RpnResolver::parse_with_borrowed_heap(&line, &mut variable_heap);
+                let mut resolver: RpnResolver = session.build_resolver_for(&line);
+                //RpnResolver::parse_with_borrowed_heap(&line, &mut variable_heap);
 
                 match resolver.resolve() {
                     Ok(value) => println!("{}", value),
