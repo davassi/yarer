@@ -3,9 +3,9 @@
 #![warn(clippy::nursery)]
 #![warn(clippy::cargo)]
 //!
-//!  Yarer - Reverse Polish Notification expression resolver
+//! Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
 //!
-//!  The internal flow is conceptually pretty simple:
+//! The internal flow is conceptually pretty simple:
 //!
 //!  1 Yarer parses and converts a str into a vec of borrowed &str
 //!  2 Then it maps a vec of &str into a vec of tokens
