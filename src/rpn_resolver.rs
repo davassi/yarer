@@ -98,7 +98,8 @@ impl RpnResolver<'_> {
                     result_stack.push_back(*n);
                 }
                 Token::Function(fun) => {
-                    let value: Number = result_stack.pop_back().unwrap();
+                    let value: Number = result_stack.pop_back()
+                        .ok_or(anyhow!("Wrong use of function"))?;
 
                     let res = match fun {
                         MathFunction::Sin => f64::sin(value.into()),
