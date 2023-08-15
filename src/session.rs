@@ -17,8 +17,8 @@ impl Session {
     /// # Examples
     ///   
     /// ```
-    ///      use yarer::session::Session;
-    ///      use yarer::rpn_resolver::RpnResolver;
+    /// #     use yarer::session::Session;
+    /// #     use yarer::rpn_resolver::RpnResolver;
     ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
     ///      let mut session = Session::init();
