@@ -206,7 +206,9 @@ impl RpnResolver<'_> {
                         .or_insert(token::ZERO); 
                 },
             }
-            debug!("Inspecting... {} - OUT {} - OP - {}", *t, dump_deque_on_cout(&postfix_stack), dump_vec_on_cout(&operators_stack));
+            debug!("Inspecting... {} - OUT {} - OP - {}", *t, 
+                postfix_stack.iter().map(ToString::to_string).collect::<String>(), 
+                operators_stack.iter().map(ToString::to_string).collect::<String>());
         });
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
@@ -214,9 +216,9 @@ impl RpnResolver<'_> {
         postfix_stack.extend(operators_stack.iter());
 
         debug!(
-            "Inspecting... EOF - OUT {:?} - OP - {:?}",
-            dump_deque_on_cout(&postfix_stack),
-            dump_vec_on_cout(&operators_stack)
+            "Inspecting... EOF - OUT {} - OP - {}",
+            postfix_stack.iter().map(ToString::to_string).collect::<String>(), 
+            operators_stack.iter().map(ToString::to_string).collect::<String>()
         );
 
         (postfix_stack, local_heap)
@@ -243,13 +245,6 @@ impl RpnResolver<'_> {
     pub fn setf(&mut self, key: String, value: f64) {
         self.local_heap.insert(key, Number::DecimalNumber(value));
     }
-}
-
-fn dump_deque_on_cout(v: &VecDeque<Token>) -> String {
-    v.iter().map(ToString::to_string).collect()
-}
-fn dump_vec_on_cout(v: &[Token]) -> String {
-    v.iter().map(ToString::to_string).collect()
 }
 
 #[cfg(test)]
