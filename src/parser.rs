@@ -29,7 +29,7 @@ impl Parser {
     ///
     pub fn parse(expr: &str) -> Result<Vec<Token>, &str> {
         Ok(expr)
-            .map(|a| Self::process(a))
+            .map(Self::process)
             .map(|v: Vec<&str>| Token::tokenize_vec(&v))
             .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
     }

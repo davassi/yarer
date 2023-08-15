@@ -52,13 +52,11 @@ impl RpnResolver<'_> {
                         .pop_back()
                         .ok_or_else(|| anyhow!("Operator {} is invalid", op))?;
 
-                    let mut left_value: Number = ZERO;
-
-                    if op != &Operator::Une {
-                        left_value = result_stack
-                            .pop_back()
-                            .ok_or_else(|| anyhow!("Operator {} is invalid", op))?;
-                    }
+                    let mut left_value = if op != &Operator::Une {
+                        result_stack
+                        .pop_back()
+                        .ok_or_else(|| anyhow!("Operator {} is invalid", op))?
+                    } else { ZERO };
 
                     match op {
                         Operator::Add => result_stack.push_back(left_value + right_value),
@@ -68,7 +66,7 @@ impl RpnResolver<'_> {
                             if right_value == ZERO {
                                 return Err(anyhow!("Runtime error - Divide by zero."));
                             }
-                            let left_value: Number = Number::DecimalNumber(left_value.into());
+                            left_value = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value)
                         }
                         Operator::Pow => {

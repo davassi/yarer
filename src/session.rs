@@ -2,16 +2,33 @@ use std::collections::HashMap;
 
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
+/// A [Session] is an object that holds a variable heap in the form of a [HashMap]
+/// that is borrowed to all the [RpnResolver] that are built from the builder [build_resolver_for()]
+///
+/// Example
+///
 pub struct Session {
     variable_heap: HashMap<String, Number>,
 }
 
 impl Session {
+    /// Default builder constructor without any arguments
+    ///
+    /// # Example
+    ///   
+    /// ```
+    ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
+    ///      let mut session = Session::init();
+    ///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+    ///  ```
+    ///
     pub fn init() -> Session {
         let variable_heap: HashMap<String, Number> = Session::init_local_heap();
         Session { variable_heap }
     }
 
+    /// The [RpnResolver] single line builder. Needs the math expression to process
+    ///
     pub fn build_resolver_for<'a>(&'a mut self, line: &'a str) -> RpnResolver<'_> {
         RpnResolver::parse_with_borrowed_heap(line, &mut self.variable_heap)
     }

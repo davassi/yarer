@@ -69,7 +69,9 @@ pub enum MathFunction {
     None,
 }
 
+/// The [ZERO] static constant. It represents the '0' Natural Number
 pub static ZERO: crate::token::Number = Number::NaturalNumber(0);
+/// The [MINUS_ONE] static constant. It represents the '-1' Natural Number
 pub static MINUS_ONE: crate::token::Number = Number::NaturalNumber(-1);
 
 impl Token<'_> {

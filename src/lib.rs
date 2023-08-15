@@ -1,6 +1,6 @@
 //#![warn(missing_docs)]
-#![warn(clippy::all)]
-#![warn(clippy::nursery)]
+//#![warn(clippy::all)]
+//#![warn(clippy::nursery)]
 #![warn(clippy::cargo)]
 //!
 //! Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
