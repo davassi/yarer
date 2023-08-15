@@ -97,85 +97,92 @@ impl Token<'_> {
             || v_op1.1 == Associate::RightAssociative && v_op1.0 < v_op2.0
     }
 
-    fn from_operator(c: char) -> Result<Token<'static>, &'static str> {
+    /// Converts a char to a [Token::Operator]
+    /// or just returns [None] if nothing matches.
+    ///
+    const fn from_operator(c: char) -> Option<Token<'static>> {
         match c {
-            '+' => Ok(Token::Operator(Operator::Add)),
-            '-' => Ok(Token::Operator(Operator::Sub)),
-            '*' => Ok(Token::Operator(Operator::Mul)),
-            '/' => Ok(Token::Operator(Operator::Div)),
-            '^' => Ok(Token::Operator(Operator::Pow)),
-            '#' => Ok(Token::Operator(Operator::Une)),
-            '=' => Ok(Token::Operator(Operator::Eql)),
-            _ => Err("Math Operator not supported."),
+            '+' => Some(Token::Operator(Operator::Add)),
+            '-' => Some(Token::Operator(Operator::Sub)),
+            '*' => Some(Token::Operator(Operator::Mul)),
+            '/' => Some(Token::Operator(Operator::Div)),
+            '^' => Some(Token::Operator(Operator::Pow)),
+            '#' => Some(Token::Operator(Operator::Une)),
+            '=' => Some(Token::Operator(Operator::Eql)),
+            _ => None,
         }
     }
 
-    fn from_bracket(c: char) -> Result<Token<'static>, &'static str> {
+    /// Converts a char to a [Token::Bracket]
+    /// or just returns [None] if nothing matches.
+    ///
+    const fn from_bracket(c: char) -> Option<Token<'static>> {
         match c {
-            '(' | '[' => Ok(Token::Bracket(Bracket::Open)),
-            ')' | ']' => Ok(Token::Bracket(Bracket::Close)),
-            _ => Err("Bracket operator not supported."),
+            '(' | '[' => Some(Token::Bracket(Bracket::Open)),
+            ')' | ']' => Some(Token::Bracket(Bracket::Close)),
+            _ => None,
         }
     }
 
-    fn from_natural_number(n: &str) -> Result<Token, &'static str> {
-        match n.parse::<i32>() {
-            Ok(v) => Ok(Token::Operand(Number::NaturalNumber(v))),
-            Err(_) => Err("Failed to parse natural number"),
-        }
-    }
-
-    fn from_decimal_number(f: &str) -> Result<Token, &'static str> {
-        match f.parse::<f64>() {
-            Ok(v) => Ok(Token::Operand(Number::DecimalNumber(v))),
-            Err(_) => Err("Failed to parse decimal number"),
-        }
-    }
-
-    fn get_some(fun: &str) -> MathFunction {
+    /// Converts a &str to a [MathFunction]
+    /// or just returns [None] if nothing matches.
+    ///
+    fn get_some(fun: &str) -> Option<MathFunction> {
         match fun.to_lowercase().as_str() {
-            "sin" => MathFunction::Sin,
-            "cos" => MathFunction::Cos,
-            "tan" => MathFunction::Tan,
-            "asin" => MathFunction::Sin,
-            "acos" => MathFunction::Cos,
-            "atan" => MathFunction::Tan,
-            "ln" => MathFunction::Ln,
-            "log" => MathFunction::Log,
-            "abs" => MathFunction::Abs,
-            "sqrt" => MathFunction::Sqrt,
+            "sin" => Some(MathFunction::Sin),
+            "cos" => Some(MathFunction::Cos),
+            "tan" => Some(MathFunction::Tan),
+            "asin" => Some(MathFunction::Sin),
+            "acos" => Some(MathFunction::Cos),
+            "atan" => Some(MathFunction::Tan),
+            "ln" => Some(MathFunction::Ln),
+            "log" => Some(MathFunction::Log),
+            "abs" => Some(MathFunction::Abs),
+            "sqrt" => Some(MathFunction::Sqrt),
             //   "max" => MathFunction::Max,
             //   "min" => MathFunction::Min,
-            &_ => MathFunction::None,
+            &_ => None,
         }
     }
 
-    fn wrap(fun: &str) -> Result<Token, &str> {
-        Ok(Token::Function(Token::get_some(fun)))
-    }
-
-    fn create_variable(v: &str) -> Result<Token, &'static str> {
-        Ok(Token::Variable(v))
-    }
-
-    fn tokenize(t: &str) -> Result<Token, &str> {
+    /// Transforms a specific chunk of chars into a specific [Token]. i.e.
+    ///
+    /// "+"   -> [Token::Operator]
+    /// "("   -> [Token::Bracket]
+    /// "42"  -> [Token::Operand(Token::NaturalNumber)]
+    /// "6.6" -> [Token::Operand(Token::DecimalNumber)]
+    /// "sin" -> [Token::Function]
+    /// "x"   -> [Token::Variable]
+    ///
+    fn tokenize(t: &str) -> Token {
         match t {
             c @ ("+" | "-" | "*" | "/" | "^" | "=") => {
-                Token::from_operator(c.chars().next().unwrap())
+                return Token::from_operator(c.chars().next().unwrap()).unwrap()
             }
-            b @ ("(" | ")" | "[" | "]") => Token::from_bracket(b.chars().next().unwrap()),
-            n if n.parse::<u32>().is_ok() => Token::from_natural_number(n),
-            f if f.parse::<f64>().is_ok() => Token::from_decimal_number(f),
-            fun if Token::get_some(fun) != MathFunction::None => Token::wrap(fun),
-            v => Token::create_variable(v),
+            b @ ("(" | ")" | "[" | "]") => {
+                return Token::from_bracket(b.chars().next().unwrap()).unwrap()
+            }
+            _ => (),
         }
+
+        if let Ok(v) = t.parse::<i32>() {
+            return Token::Operand(Number::NaturalNumber(v));
+        }
+
+        if let Ok(v) = t.parse::<f64>() {
+            return Token::Operand(Number::DecimalNumber(v));
+        }
+
+        if let Some(fun) = Token::get_some(t) {
+            return Token::Function(fun);
+        }
+
+        Token::Variable(t)
     }
 
     /// Mapping a vec of str in a vec of Tokens
-    pub fn tokenize_vec<'a>(v: &[&'a str]) -> Result<Vec<Token<'a>>, &'a str> {
-        v.iter()
-            .map(|t| Token::tokenize(t))
-            .collect::<Result<Vec<Token>, _>>()
+    pub fn tokenize_vec<'a>(v: &[&'a str]) -> Vec<Token<'a>> {
+        v.iter().map(|t| Token::tokenize(t)).collect::<Vec<Token>>()
     }
 }
 
@@ -294,8 +301,8 @@ impl Display for Operator {
 impl Display for Bracket {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Bracket::Open => write!(f, "("),
-            Bracket::Close => write!(f, ")"),
+            Self::Open => write!(f, "("),
+            Self::Close => write!(f, ")"),
         }
     }
 }
@@ -339,16 +346,13 @@ mod tests {
     #[test]
     fn test_tokenise_operators() {
         let v = vec!["1", "+", "2.1"];
+        assert_eq!(Token::tokenize(v[1]), Token::Operator(Operator::Add));
         assert_eq!(
-            Token::tokenize(v[1]).unwrap(),
-            Token::Operator(Operator::Add)
-        );
-        assert_eq!(
-            Token::tokenize(v[0]).unwrap(),
+            Token::tokenize(v[0]),
             Token::Operand(Number::NaturalNumber(1))
         );
         assert_eq!(
-            Token::tokenize(v[2]).unwrap(),
+            Token::tokenize(v[2]),
             Token::Operand(Number::DecimalNumber(2.1))
         );
     }
@@ -357,93 +361,52 @@ mod tests {
     fn test_from_operator_valid() {
         assert_eq!(
             Token::from_operator('+'),
-            Ok(Token::Operator(Operator::Add))
+            Some(Token::Operator(Operator::Add))
         );
         assert_eq!(
             Token::from_operator('-'),
-            Ok(Token::Operator(Operator::Sub))
+            Some(Token::Operator(Operator::Sub))
         );
         assert_eq!(
             Token::from_operator('*'),
-            Ok(Token::Operator(Operator::Mul))
+            Some(Token::Operator(Operator::Mul))
         );
         assert_eq!(
             Token::from_operator('/'),
-            Ok(Token::Operator(Operator::Div))
+            Some(Token::Operator(Operator::Div))
         );
     }
 
     #[test]
     fn test_from_operator_invalid() {
-        assert_eq!(
-            Token::from_operator('a'),
-            Err("Math Operator not supported.")
-        );
-        assert_eq!(
-            Token::from_operator('1'),
-            Err("Math Operator not supported.")
-        );
-        assert_eq!(
-            Token::from_operator('!'),
-            Err("Math Operator not supported.")
-        );
-    }
-
-    #[test]
-    fn test_from_natural_number() {
-        assert_eq!(
-            Token::from_natural_number("42"),
-            Ok(Token::Operand(Number::NaturalNumber(42)))
-        );
-        assert_eq!(
-            Token::from_natural_number("10"),
-            Ok(Token::Operand(Number::NaturalNumber(10)))
-        );
-        assert_eq!(
-            Token::from_natural_number("0"),
-            Ok(Token::Operand(Number::NaturalNumber(0)))
-        );
-        assert_eq!(
-            Token::from_natural_number("123456"),
-            Ok(Token::Operand(Number::NaturalNumber(123456)))
-        );
-    }
-
-    #[test]
-    fn test_from_natural_number_invalid() {
-        assert_eq!(
-            Token::from_natural_number("10.5"),
-            Err("Failed to parse natural number")
-        );
-        assert_eq!(
-            Token::from_natural_number("abc"),
-            Err("Failed to parse natural number")
-        );
+        assert_eq!(Token::from_operator('a'), None);
+        assert_eq!(Token::from_operator('1'), None);
+        assert_eq!(Token::from_operator('!'), None);
     }
 
     #[test]
     fn test_tokenize_valid() {
-        assert_eq!(Token::tokenize("+"), Ok(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize("100"),
-            Ok(Token::Operand(Number::NaturalNumber(100)))
+            (Token::Operand(Number::NaturalNumber(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Ok(Token::Operand(Number::DecimalNumber(3.14)))
+            (Token::Operand(Number::DecimalNumber(3.14)))
         );
-        assert_eq!(Token::tokenize("("), Ok(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 
     #[test]
     fn test_tokenize_vec_valid() {
         let input = vec!["+", "100", "3.14", "("];
-        let expected = Ok(vec![
+        let expected = vec![
             Token::Operator(Operator::Add),
             Token::Operand(Number::NaturalNumber(100)),
             Token::Operand(Number::DecimalNumber(3.14)),
             Token::Bracket(Bracket::Open),
-        ]);
+        ];
         assert_eq!(Token::tokenize_vec(&input), expected);
     }
 }

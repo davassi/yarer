@@ -15,7 +15,8 @@ static EXPRESSION_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)").unwrap());
 
 impl Parser {
-    /// The Parser parses and splits a str into a vec of &str using
+    /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]
+    ///
     fn process(exp: &str) -> Vec<&str> {
         EXPRESSION_REGEX
             .find_iter(exp)
@@ -24,13 +25,14 @@ impl Parser {
     }
 
     /// tokenise a processed str expression
-    pub fn parse(exp: &str) -> Result<Vec<Token>, &str> {
-        Ok(Self::process(exp))
-            .and_then(|v: Vec<&str>| Token::tokenize_vec(&v))
-            .and_then(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
+    pub fn parse(expr: &str) -> Result<Vec<Token>, &str> {
+        Ok(expr)
+            .map(|a| Self::process(a))
+            .map(|v: Vec<&str>| Token::tokenize_vec(&v))
+            .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
     }
 
-    fn mod_unary_operators<'a>(v: &[Token<'a>]) -> Result<Vec<Token<'a>>, &'a str> {
+    fn mod_unary_operators<'a>(v: &[Token<'a>]) -> Vec<Token<'a>> {
         let mut mod_vec: Vec<Token> = Vec::new();
         let mut expect_operand_next = true;
 
@@ -63,7 +65,7 @@ impl Parser {
             }
             mod_vec.push(token);
         }
-        Ok(mod_vec)
+        mod_vec
     }
 }
 
@@ -143,7 +145,7 @@ mod tests {
             Token::Bracket(Bracket::Close),
         ];
 
-        let result = Parser::mod_unary_operators(&input).unwrap();
+        let result = Parser::mod_unary_operators(&input);
         assert_eq!(result, expected);
     }
 }
