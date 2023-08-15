@@ -36,6 +36,7 @@ impl Session {
         RpnResolver::parse_with_borrowed_heap(line, &mut self.variable_heap)
     }
 
+    /// Creates a Variables heap (name-value)
     fn init_local_heap() -> HashMap<String, Number> {
         static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
         static E: Number = Number::DecimalNumber(std::f64::consts::E);
