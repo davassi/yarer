@@ -1,6 +1,7 @@
 
 YARER - Rpn Resolver
 ===========================
+
 [<img alt="github" src="https://img.shields.io/badge/github-davassi/davassi?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/davassi/yarer)
 [<img alt="build status" src="https://github.com/davassi/yarer/actions/workflows/rust.yml/badge.svg" height="20">](https://github.com/davassi/yarer/actions?query=branch%3Amaster)
 [<img alt="crates.io" src="https://img.shields.io/crates/v/yarer.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/yarer)
@@ -8,11 +9,10 @@ YARER - Rpn Resolver
 [![Downloads](https://img.shields.io/crates/d/yarer.svg)](https://crates.io/crates/yarer)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-
 Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
 
-Example of usage of the library: 
-      
+Example of usage of the library:
+
 ```rust
       let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
       let mut session = Session::init();
@@ -124,8 +124,6 @@ cargo build --release
 
 ## Contribution
 
-Besides being stable, Yarer is a work in progress. If you have suggestions for features, or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues). 
+Besides being stable, Yarer is a work in progress. If you have suggestions for features, or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues).
 
 I appreciate very much your feedback!
-
-
