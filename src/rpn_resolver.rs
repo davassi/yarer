@@ -9,7 +9,12 @@ use crate::{
 use anyhow::anyhow;
 use log::debug;
 
-/// The main RpnResolver: here relies the core logic of Yarer for parsing and evaluating a math expression.
+/// The main [RpnResolver]: contains the core logic of Yarer 
+/// for parsing and evaluating a math expression.
+/// 
+/// It holds the tokenised expression (by the [Parser]) and 
+/// a heap of local variables borrowed from a [yarer::Session]
+/// 
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: &'a mut HashMap<String, Number>,
@@ -17,6 +22,8 @@ pub struct RpnResolver<'a> {
 
 impl RpnResolver<'_> {
 
+    /// Generates a new [RpnResolver] instance with borrowed heap
+    /// 
     pub fn parse_with_borrowed_heap<'a>(exp: &'a str, borrowed_heap: &'a mut HashMap<String, Number>) -> RpnResolver<'a> {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
         let (rpn_expr, local_heap) 
@@ -28,7 +35,8 @@ impl RpnResolver<'_> {
         }
     }
 
-    /// This method evaluates the stack 
+    /// This method evaluates the rpn expression stack
+    /// 
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
@@ -125,7 +133,12 @@ impl RpnResolver<'_> {
             .ok_or(anyhow!("Something went terribly wrong here."))
     }
 
-    /* Transforming an infix notation to Reverse Polish Notation (RPN) */
+    /// Transforming an infix notation to Reverse Polish Notation (RPN)
+    /// 
+    /// Example
+    /// ```
+    ///     "3 * 4 + 5 * 6" becomes "3 4 * 5 6 * +"
+    /// ```
     fn reverse_polish_notation<'a>(infix_stack: &[Token<'a>], local_heap: &'a mut HashMap<String, Number>) 
         -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
@@ -211,11 +224,26 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    pub fn setf(&mut self, key: String, value: f64) {
-        self.local_heap.insert(key, Number::DecimalNumber(value));
-    }
+    /// Declares and saves a new integer variable ([Number::NaturalNumber])
+    /// 
+    /// Example
+    /// ```
+    ///     resolver.set("foo", 42);
+    /// ```
+    /// 
     pub fn set(&mut self, key: String, value: i32) {
         self.local_heap.insert(key, Number::NaturalNumber(value));
+    }
+
+    /// Declares and saves a new float variable ([Number::DecimalNumber])
+    /// 
+    /// Example
+    /// ```
+    ///     resolver.setf("x", 1.5);
+    /// ```
+    /// 
+    pub fn setf(&mut self, key: String, value: f64) {
+        self.local_heap.insert(key, Number::DecimalNumber(value));
     }
 }
 

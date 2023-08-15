@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 
 /// The Parser has 2 primary functions:
 /// to parse the math expression with a Regex and to tokenise the math &str expression
+///
 #[derive(Debug)]
 pub struct Parser;
 
@@ -24,7 +25,8 @@ impl Parser {
             .collect()
     }
 
-    /// tokenise a processed str expression
+    /// Tokenises a processed str expression
+    ///
     pub fn parse(expr: &str) -> Result<Vec<Token>, &str> {
         Ok(expr)
             .map(|a| Self::process(a))
@@ -32,6 +34,8 @@ impl Parser {
             .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
     }
 
+    /// Finds out all the unary operators that are present in the expression
+    ///
     fn mod_unary_operators<'a>(v: &[Token<'a>]) -> Vec<Token<'a>> {
         let mut mod_vec: Vec<Token> = Vec::new();
         let mut expect_operand_next = true;
