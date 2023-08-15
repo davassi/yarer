@@ -134,9 +134,9 @@ impl RpnResolver<'_> {
     /// Transforming an infix notation to Reverse Polish Notation (RPN)
     /// 
     /// Example
-    /// ```
+    /// ``
     ///     "3 * 4 + 5 * 6" becomes "3 4 * 5 6 * +"
-    /// ```
+    /// ``
     fn reverse_polish_notation<'a>(infix_stack: &[Token<'a>], local_heap: &'a mut HashMap<String, Number>) 
         -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
@@ -225,9 +225,9 @@ impl RpnResolver<'_> {
     /// Declares and saves a new integer variable ([Number::NaturalNumber])
     /// 
     /// Example
-    /// ```
+    /// ``
     ///     resolver.set("foo", 42);
-    /// ```
+    /// ``
     /// 
     pub fn set(&mut self, key: String, value: i32) {
         self.local_heap.insert(key, Number::NaturalNumber(value));
@@ -236,9 +236,9 @@ impl RpnResolver<'_> {
     /// Declares and saves a new float variable ([Number::DecimalNumber])
     /// 
     /// Example
-    /// ```
+    /// ``
     ///     resolver.setf("x", 1.5);
-    /// ```
+    /// ``
     /// 
     pub fn setf(&mut self, key: String, value: f64) {
         self.local_heap.insert(key, Number::DecimalNumber(value));

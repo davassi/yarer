@@ -14,9 +14,12 @@ pub struct Session {
 impl Session {
     /// Default builder constructor without any arguments
     ///
-    /// # Example
+    /// # Examples
     ///   
     /// ```
+    ///      use yarer::session::Session;
+    ///      use yarer::rpn_resolver::RpnResolver;
+    ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
     ///      let mut session = Session::init();
     ///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
