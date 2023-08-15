@@ -1,6 +1,5 @@
 use std::{
-    error,
-    fmt::{self, Display},
+    fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
 };
 
@@ -35,6 +34,15 @@ pub enum Bracket {
     Close,
 }
 
+/// The [Token] enum. It represents the smallest chunk of a math expression
+///
+/// It can be a
+/// [Token::Operand] as 1,2,3,-4,-5,6.66 ...
+/// [Token::Operator] as +,-,*,/ ...
+/// [Token::Bracket] as [] or ()
+/// [Token::Function] as sin,cos,tan,ln ...
+/// [Token::Variable] as any variable name such as x,y,ab,foo,... whatever
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {
     Operand(Number),
@@ -61,42 +69,10 @@ pub enum MathFunction {
     None,
 }
 
-#[derive(Debug, Clone)]
-struct ParseError;
-
-impl error::Error for ParseError {}
-
-impl fmt::Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error while parsing!")
-    }
-}
-
 pub static ZERO: crate::token::Number = Number::NaturalNumber(0);
 pub static MINUS_ONE: crate::token::Number = Number::NaturalNumber(-1);
 
 impl Token<'_> {
-    fn operator_priority(o: Token) -> (u8, Associate) {
-        match o {
-            Token::Operator(Operator::Add) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Sub) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Mul) => (2, Associate::LeftAssociative),
-            Token::Operator(Operator::Div) => (2, Associate::LeftAssociative),
-            Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
-            Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
-            Token::Operator(Operator::Eql) => (0, Associate::LeftAssociative),
-            _ => panic!("Operator '{}' not recognised. This must not happen!", o),
-        }
-    }
-
-    pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
-        let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
-        let v_op2: (u8, Associate) = self::Token::operator_priority(op2);
-
-        v_op1.1 == Associate::LeftAssociative && v_op1.0 <= v_op2.0
-            || v_op1.1 == Associate::RightAssociative && v_op1.0 < v_op2.0
-    }
-
     /// Converts a char to a [Token::Operator]
     /// or just returns [None] if nothing matches.
     ///
@@ -124,7 +100,7 @@ impl Token<'_> {
         }
     }
 
-    /// Converts a &str to a [MathFunction]
+    /// Converts a &str to a [Token::Function(MathFunction)]
     /// or just returns [None] if nothing matches.
     ///
     fn get_some(fun: &str) -> Option<MathFunction> {
@@ -181,8 +157,39 @@ impl Token<'_> {
     }
 
     /// Mapping a vec of str in a vec of Tokens
+    ///
     pub fn tokenize_vec<'a>(v: &[&'a str]) -> Vec<Token<'a>> {
         v.iter().map(|t| Token::tokenize(t)).collect::<Vec<Token>>()
+    }
+
+    /// Founding out the priority and the associative precedence of an operator
+    ///
+    fn operator_priority(o: Token) -> (u8, Associate) {
+        match o {
+            Token::Operator(Operator::Add) => (1, Associate::LeftAssociative),
+            Token::Operator(Operator::Sub) => (1, Associate::LeftAssociative),
+            Token::Operator(Operator::Mul) => (2, Associate::LeftAssociative),
+            Token::Operator(Operator::Div) => (2, Associate::LeftAssociative),
+            Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
+            Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
+            Token::Operator(Operator::Eql) => (0, Associate::LeftAssociative),
+            _ => panic!("Operator '{}' not recognised. This must not happen!", o),
+        }
+    }
+
+    /// Checks if an operator has priority over another one
+    ///
+    /// i.e.
+    /// * has priority over +
+    /// ^ has priority over *
+    /// unary - has priority over ^
+    ///
+    pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
+        let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
+        let v_op2: (u8, Associate) = self::Token::operator_priority(op2);
+
+        v_op1.1 == Associate::LeftAssociative && v_op1.0 <= v_op2.0
+            || v_op1.1 == Associate::RightAssociative && v_op1.0 < v_op2.0
     }
 }
 
@@ -328,20 +335,6 @@ impl Display for Token<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /*  #[test]
-    fn test_operator_priority() {
-        assert_eq!(Token::compare_operator_priority(Operator::Add, Operator::Sub), false);
-        assert_eq!(Token::compare_operator_priority(Operator::Add, Operator::Mul), false);
-        assert_eq!(Token::compare_operator_priority(Operator::Add, Operator::Pow), false);
-        assert_eq!(Token::compare_operator_priority(Operator::Mul, Operator::Pow), false);
-        assert_eq!(Token::compare_operator_priority(Operator::Pow, Operator::Pow), false);
-
-        assert_eq!(Token::compare_operator_priority(Operator::Pow, Operator::Mul), true);
-        assert_eq!(Token::compare_operator_priority(Operator::Pow, Operator::Add), true);
-        assert_eq!(Token::compare_operator_priority(Operator::Mul, Operator::Add), true);
-        assert_eq!(Token::compare_operator_priority(Operator::Div, Operator::Sub), true);
-    } */
 
     #[test]
     fn test_tokenise_operators() {
