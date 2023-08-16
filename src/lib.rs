@@ -13,7 +13,7 @@ Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, wr
     use yarer::rpn_resolver::RpnResolver;
     use yarer::token::Number;
 
-    let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
+    let exp = "((10 + 5) - 3 * ( 9 / 3 )) + 2";
     let mut session = Session::init();
     let mut resolver: RpnResolver = session.build_resolver_for(&exp);
 

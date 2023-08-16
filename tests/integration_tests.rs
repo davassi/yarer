@@ -76,12 +76,13 @@ fn test_expressions() {
                 * (std::f64::consts::PI - std::f64::consts::E)
         )
     );
+    resolve!("((10 + 5) - 3 * ( 9 / 3 )) + 2", Number::DecimalNumber(8.0));
 }
 
 #[test]
 fn test_programmatic() {
     let mut session: Session = Session::init();
-    let mut resolver: RpnResolver = session.build_resolver_for("x^2");
+    let mut resolver: RpnResolver = session.build_resolver_for("x ^ 2");
 
     for i in 1..=64 {
         resolver.set("x", i);

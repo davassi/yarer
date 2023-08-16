@@ -5,32 +5,59 @@ use std::{
 
 use log::debug;
 
+/// Enum Type [Number]. Either an i32 integer [Number::NaturalNumber]
+/// or a f64 float [Number::DecimalNumber]
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
+    /// an Integer [i32]
     NaturalNumber(i32),
+    /// a Float [f64]
     DecimalNumber(f64),
 }
 
+/// A binary or unary Math [Operator]
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
+    /// Binary Add ('1+1')
     Add,
+    /// Binary Sub ('2-1')
     Sub,
+    /// Binary Mul ('2*2')
     Mul,
+    /// Binary Div ('3/3')
     Div,
+    /// Binary Pow ('base^exponent')
     Pow,
-    Une, // unary neg ('-1')
+    /// Unary Neg ('-1')
+    Une,
+    /// Binary Assignment ('A=1')
     Eql,
 }
 
+/// The "associativity" of an operator dictates the direction
+/// in which operations of equal precedence are evaluated when they appear
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Associate {
+    /// If an operator is left-associative, then operations are evaluated from left to right.
+    /// Example: -a^b, -1, -(-3)
+    ///
     LeftAssociative,
+    /// If an operator is right-associative, then operations are evaluated from right to left.
+    /// Example: A=1
+    ///
     RightAssociative,
 }
 
+/// Just [Token::Bracket]s. They change the order of evaluation of an expression.
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Bracket {
+    /// either '(' or '['
     Open,
+    /// either ')' or ']'
     Close,
 }
 
@@ -133,13 +160,13 @@ impl Token<'_> {
     /// "x"   -> [Token::Variable]
     ///
     fn tokenize(t: &str) -> Token {
-        match t {
-            c @ ("+" | "-" | "*" | "/" | "^" | "=") => {
-                return Token::from_operator(c.chars().next().unwrap()).unwrap()
-            }
-            b @ ("(" | ")" | "[" | "]") => {
-                return Token::from_bracket(b.chars().next().unwrap()).unwrap()
-            }
+        match t
+            .chars()
+            .next()
+            .expect("Cannot extract char. Wrong encoding")
+        {
+            c @ ('+' | '-' | '*' | '/' | '^' | '=') => return Token::from_operator(c).unwrap(),
+            b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
             _ => (),
         }
 
@@ -222,7 +249,7 @@ impl Add for Number {
     type Output = Number;
 
     fn add(self, rhs: Self) -> Self::Output {
-        apply_functional_token_operation(self, rhs, |a: i32, b: i32| a + b, |a: f64, b: f64| a + b)
+        apply_functional_token_operation(self, rhs, |a, b| a + b, |a, b| a + b)
     }
 }
 
@@ -230,7 +257,7 @@ impl Sub for Number {
     type Output = Number;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        apply_functional_token_operation(self, rhs, |a: i32, b: i32| a - b, |a: f64, b: f64| a - b)
+        apply_functional_token_operation(self, rhs, |a, b| a - b, |a, b| a - b)
     }
 }
 
@@ -238,7 +265,7 @@ impl Mul for Number {
     type Output = Number;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        apply_functional_token_operation(self, rhs, |a: i32, b: i32| a * b, |a: f64, b: f64| a * b)
+        apply_functional_token_operation(self, rhs, |a, b| a * b, |a, b| a * b)
     }
 }
 
@@ -246,7 +273,7 @@ impl Div for Number {
     type Output = Number;
 
     fn div(self, rhs: Self) -> Self::Output {
-        apply_functional_token_operation(self, rhs, |a: i32, b: i32| a / b, |a: f64, b: f64| a / b)
+        apply_functional_token_operation(self, rhs, |a, b| a / b, |a, b| a / b)
     }
 }
 
@@ -258,7 +285,7 @@ impl BitXor for Number {
         apply_functional_token_operation(
             self,
             rhs,
-            |a: i32, b: i32| i32::pow(a, b.try_into().unwrap()),
+            |a, b| i32::pow(a, b.try_into().unwrap()),
             f64::powf,
         )
     }
