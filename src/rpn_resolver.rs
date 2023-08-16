@@ -232,8 +232,8 @@ impl RpnResolver<'_> {
     ///     resolver.set("foo", 42);
     /// ``
     /// 
-    pub fn set(&mut self, key: String, value: i32) {
-        self.local_heap.insert(key, Number::NaturalNumber(value));
+    pub fn set(&mut self, key: &str, value: i32) {
+        self.local_heap.insert(key.to_string(), Number::NaturalNumber(value));
     }
 
     /// Declares and saves a new float variable ([Number::DecimalNumber])
@@ -243,8 +243,8 @@ impl RpnResolver<'_> {
     ///     resolver.setf("x", 1.5);
     /// ``
     /// 
-    pub fn setf(&mut self, key: String, value: f64) {
-        self.local_heap.insert(key, Number::DecimalNumber(value));
+    pub fn setf(&mut self, key: &str, value: f64) {
+        self.local_heap.insert(key.to_string(), Number::DecimalNumber(value));
     }
 }
 

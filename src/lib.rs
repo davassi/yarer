@@ -33,7 +33,7 @@ use yarer::session::Session;
 
 let mut session: Session = Session::init();
 let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
-resolver.set("x".to_string(),1);
+resolver.set("x",1);
 
 println!("The result is {}", resolver.resolve().unwrap());
 ```

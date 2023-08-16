@@ -84,7 +84,7 @@ fn test_programmatic() {
     let mut resolver: RpnResolver = session.build_resolver_for("x^2");
 
     for i in 1..=64 {
-        resolver.set(String::from("x"), i);
+        resolver.set("x", i);
 
         let result: Number = resolver.resolve().unwrap();
 

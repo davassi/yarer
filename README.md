@@ -29,7 +29,7 @@ Yarer can handle also variables and functions. Here an example:
       let mut session: Session = Session::init();
       let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
 
-      session.set("x",1);
+      resolver.set("x",1);
       println!("The result is {}", resolver.resolve());
 ```
 
@@ -37,10 +37,10 @@ and of course, the expression can be re-evaluated if the variable changes.
 
 ```rust
       //...
-      session.set("x",-1);
+      resolver.set("x",-1);
       println!("The result is {}", resolver.resolve());
 
-      session.set("x",0.001); 
+      resolver.set("x",0.001); 
       println!("The result is {}", resolver.resolve());
       //...
 ```
