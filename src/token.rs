@@ -72,27 +72,45 @@ pub enum Bracket {
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {
+    /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
+    /// Operators +,-,/,*,^...
     Operator(Operator),
+    /// ( ) [ ]
     Bracket(Bracket),
+    /// sin cos tan ln log...
     Function(MathFunction),
+    /// a b c x y ...
     Variable(&'a str),
 }
 
+/// The [MathFunction] enum. It represents a common math function.
+///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MathFunction {
+    /// Trigonometric Sine : sin(0)
     Sin,
+    /// Trigonometric Cosine : cos(0)
     Cos,
+    /// tan(0)
     Tan,
+    /// asin(0)
     ASin,
+    /// acos(0)
     ACos,
+    /// atan
     ATan,
+    /// logaritm base 2
     Ln,
+    /// logaritm base 10
     Log,
+    /// absolute value
     Abs,
+    /// square root
     Sqrt,
     Max,
     Min,
+    /// Nope!
     None,
 }
 

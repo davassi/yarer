@@ -1,6 +1,5 @@
 //#![warn(missing_docs)]
-//#![warn(clippy::all)]
-//#![warn(clippy::nursery)]
+#![warn(clippy::pedantic)]
 #![warn(clippy::cargo)]
 /*!
 
@@ -21,7 +20,6 @@ Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, wr
     println!("The result of {} is {}", exp, result);
  ```
 
-
 All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
 The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
 
@@ -40,7 +38,7 @@ println!("The result is {}", resolver.resolve().unwrap());
 
 and of course, the expression can be re-evaluated if the variable changes.
 
-```bash
+```ignore
 //...
 session.set("x",-1);
 println!("The result is {}", resolver.resolve());
@@ -52,7 +50,7 @@ println!("The result is {}", resolver.resolve());
 
 The result can be simply converted into a i32 or a f64 (if decimal) simply with
 
-```bash
+```ignore
 let result: Number = resolver.resolve().unwrap();
 
 let int : i32 = i32::from(result);
@@ -62,7 +60,7 @@ let float : f64 = f64::from(result);
 
 Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 
-```bash
+```ignore
 $ yarer
 Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
 License MIT OR Apache-2.0
@@ -93,7 +91,7 @@ License MIT OR Apache-2.0
 There are several math functions defined that you can use in your expression. More to come!
 There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs)
 
-```bash
+```ignore
 Sin
 Cos
 Tan
@@ -105,11 +103,12 @@ Log
 Abs
 Sqrt
 ```
-
-
-
 */
+/// Parser
 pub mod parser;
+/// RpnResolver
 pub mod rpn_resolver;
+/// Session
 pub mod session;
+/// Token
 pub mod token;
