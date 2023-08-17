@@ -16,15 +16,6 @@ static EXPRESSION_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)").unwrap());
 
 impl Parser {
-    /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]
-    ///
-    fn process(exp: &str) -> Vec<&str> {
-        EXPRESSION_REGEX
-            .find_iter(exp)
-            .map(|m| m.as_str())
-            .collect()
-    }
-
     /// Tokenises a processed str expression
     ///
     pub fn parse(expr: &str) -> Result<Vec<Token>, &str> {
@@ -32,6 +23,15 @@ impl Parser {
             .map(Self::process)
             .map(|v: Vec<&str>| Token::tokenize_vec(&v))
             .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
+    }
+
+    /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]
+    ///
+    fn process(exp: &str) -> Vec<&str> {
+        EXPRESSION_REGEX
+            .find_iter(exp)
+            .map(|m| m.as_str())
+            .collect()
     }
 
     /// Finds out all the unary operators that are present in the expression

@@ -5,8 +5,8 @@ use std::{
 
 use log::debug;
 
-/// Enum Type [Number]. Either an i32 integer [Number::NaturalNumber]
-/// or a f64 float [Number::DecimalNumber]
+/// Enum Type [Number]. Either an i32 integer [`Number::NaturalNumber`]
+/// or a f64 float [`Number::DecimalNumber`]
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
@@ -16,7 +16,7 @@ pub enum Number {
     DecimalNumber(f64),
 }
 
-/// A binary or unary Math [Operator]
+/// A binary or unary Math [`Operator`]
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
@@ -51,7 +51,7 @@ pub enum Associate {
     RightAssociative,
 }
 
-/// Just [Token::Bracket]s. They change the order of evaluation of an expression.
+/// Just [`Token::Bracket`]s. They change the order of evaluation of an expression.
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Bracket {
@@ -64,11 +64,11 @@ pub enum Bracket {
 /// The [Token] enum. It represents the smallest chunk of a math expression
 ///
 /// It can be a
-/// [Token::Operand] as 1,2,3,-4,-5,6.66 ...
-/// [Token::Operator] as +,-,*,/ ...
-/// [Token::Bracket] as [] or ()
-/// [Token::Function] as sin,cos,tan,ln ...
-/// [Token::Variable] as any variable name such as x,y,ab,foo,... whatever
+/// [`Token::Operand`] as 1,2,3,-4,-5,6.66 ...
+/// [`Token::Operator`] as +,-,*,/ ...
+/// [`Token::Bracket`] as [] or ()
+/// [`Token::Function`] as sin,cos,tan,ln ...
+/// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {
@@ -84,7 +84,7 @@ pub enum Token<'a> {
     Variable(&'a str),
 }
 
-/// The [MathFunction] enum. It represents a common math function.
+/// The [`MathFunction`] enum. It represents a common math function.
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MathFunction {
@@ -114,14 +114,14 @@ pub enum MathFunction {
     None,
 }
 
-/// The [ZERO] static constant. It represents the '0' Natural Number
+/// The [`ZERO`] static constant. It represents the '0' Natural Number
 pub static ZERO: crate::token::Number = Number::NaturalNumber(0);
-/// The [MINUS_ONE] static constant. It represents the '-1' Natural Number
+/// The [`MINUS_ONE`] static constant. It represents the '-1' Natural Number
 pub static MINUS_ONE: crate::token::Number = Number::NaturalNumber(-1);
 
 impl Token<'_> {
-    /// Converts a char to a [Token::Operator]
-    /// or just returns [None] if nothing matches.
+    /// Converts a char to a [`Token::Operator`]
+    /// or just returns [`None`] if nothing matches.
     ///
     const fn from_operator(c: char) -> Option<Token<'static>> {
         match c {
@@ -136,8 +136,8 @@ impl Token<'_> {
         }
     }
 
-    /// Converts a char to a [Token::Bracket]
-    /// or just returns [None] if nothing matches.
+    /// Converts a char to a [`Token::Bracket`]
+    /// or just returns [`None`] if nothing matches.
     ///
     const fn from_bracket(c: char) -> Option<Token<'static>> {
         match c {
@@ -147,17 +147,17 @@ impl Token<'_> {
         }
     }
 
-    /// Converts a &str to a [Token::Function(MathFunction)]
-    /// or just returns [None] if nothing matches.
+    /// Converts a &str to a [`Token::Function(MathFunction)`]
+    /// or just returns [`None`] if nothing matches.
     ///
     fn get_some(fun: &str) -> Option<MathFunction> {
         match fun.to_lowercase().as_str() {
             "sin" => Some(MathFunction::Sin),
             "cos" => Some(MathFunction::Cos),
             "tan" => Some(MathFunction::Tan),
-            "asin" => Some(MathFunction::Sin),
-            "acos" => Some(MathFunction::Cos),
-            "atan" => Some(MathFunction::Tan),
+            "asin" => Some(MathFunction::ASin),
+            "acos" => Some(MathFunction::ACos),
+            "atan" => Some(MathFunction::ATan),
             "ln" => Some(MathFunction::Ln),
             "log" => Some(MathFunction::Log),
             "abs" => Some(MathFunction::Abs),
@@ -170,12 +170,12 @@ impl Token<'_> {
 
     /// Transforms a specific chunk of chars into a specific [Token]. i.e.
     ///
-    /// "+"   -> [Token::Operator]
-    /// "("   -> [Token::Bracket]
-    /// "42"  -> [Token::Operand(Token::NaturalNumber)]
-    /// "6.6" -> [Token::Operand(Token::DecimalNumber)]
-    /// "sin" -> [Token::Function]
-    /// "x"   -> [Token::Variable]
+    /// "+"   -> [`Token::Operator`]
+    /// "("   -> [`Token::Bracket`]
+    /// "42"  -> [`Token::Operand(Token::NaturalNumber)`]
+    /// "6.6" -> [`Token::Operand(Token::DecimalNumber)`]
+    /// "sin" -> [`Token::Function`]
+    /// "x"   -> [`Token::Variable`]
     ///
     fn tokenize(t: &str) -> Token {
         match t
@@ -213,14 +213,12 @@ impl Token<'_> {
     ///
     fn operator_priority(o: Token) -> (u8, Associate) {
         match o {
-            Token::Operator(Operator::Add) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Sub) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Mul) => (2, Associate::LeftAssociative),
-            Token::Operator(Operator::Div) => (2, Associate::LeftAssociative),
+            Token::Operator(Operator::Add | Operator::Sub) => (1, Associate::LeftAssociative),
+            Token::Operator(Operator::Mul | Operator::Div) => (2, Associate::LeftAssociative),
             Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
             Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
             Token::Operator(Operator::Eql) => (0, Associate::LeftAssociative),
-            _ => panic!("Operator '{}' not recognised. This must not happen!", o),
+            _ => panic!("Operator '{o}' not recognised. This must not happen!"),
         }
     }
 
@@ -243,8 +241,8 @@ impl Token<'_> {
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Number::NaturalNumber(v) => write!(f, "{}", v),
-            Number::DecimalNumber(v) => write!(f, "{}", v),
+            Number::NaturalNumber(v) => write!(f, "{v}"),
+            Number::DecimalNumber(v) => write!(f, "{v}"),
         }
     }
 }
@@ -257,7 +255,7 @@ where
     match (ln, rn) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(v1 as f64, v2))
+            Number::DecimalNumber(df(f64::from(v1), v2))
         }
         (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
     }
@@ -313,8 +311,12 @@ impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (*self, *other) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&v2),
-            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => (v1 as f64).partial_cmp(&v2),
-            (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&(v2 as f64)),
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
+                f64::from(v1).partial_cmp(&v2)
+            }
+            (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
+                v1.partial_cmp(&(f64::from(v2)))
+            }
             (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => v1.partial_cmp(&v2),
         }
     }
@@ -323,7 +325,7 @@ impl PartialOrd for Number {
 impl From<Number> for f64 {
     fn from(n: Number) -> f64 {
         match n {
-            Number::NaturalNumber(v) => v as f64,
+            Number::NaturalNumber(v) => f64::from(v),
             Number::DecimalNumber(v) => v,
         }
     }
@@ -370,11 +372,11 @@ impl Display for MathFunction {
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
-            Token::Operand(v) => write!(f, "({})", v),
-            Token::Operator(v) => write!(f, "({})", v),
-            Token::Bracket(v) => write!(f, "({})", v),
-            Token::Function(v) => write!(f, "({})", v),
-            Token::Variable(s) => write!(f, "({})", s),
+            Token::Operand(v) => write!(f, "({v})"),
+            Token::Operator(v) => write!(f, "({v})"),
+            Token::Bracket(v) => write!(f, "({v})"),
+            Token::Function(v) => write!(f, "({v})"),
+            Token::Variable(v) => write!(f, "({v})"),
         }
     }
 }

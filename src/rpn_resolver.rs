@@ -1,42 +1,44 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    panic,
-};
 use crate::{
-    parser::*,
+    parser::Parser,
     token::{self, MathFunction, Number, Operator, Token, ZERO},
 };
 use anyhow::anyhow;
 use log::debug;
+use std::{
+    collections::{HashMap, VecDeque},
+    panic,
+};
 
-/// The main [RpnResolver]: contains the core logic of Yarer 
+/// The main [`RpnResolver`]: contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
-/// 
-/// It holds the tokenised expression (by the [Parser]) and 
-/// a heap of local variables borrowed from a [yarer::Session]
-/// 
+///
+/// It holds the tokenised expression (by the [`Parser`]) and
+/// a heap of local variables borrowed from a [`Session`]
+///
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: &'a mut HashMap<String, Number>,
 }
 
 impl RpnResolver<'_> {
-
-    /// Generates a new [RpnResolver] instance with borrowed heap
-    /// 
-    pub fn parse_with_borrowed_heap<'a>(exp: &'a str, borrowed_heap: &'a mut HashMap<String, Number>) -> RpnResolver<'a> {
+    /// Generates a new [`RpnResolver`] instance with borrowed heap
+    ///
+    pub fn parse_with_borrowed_heap<'a>(
+        exp: &'a str,
+        borrowed_heap: &'a mut HashMap<String, Number>,
+    ) -> RpnResolver<'a> {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
-        let (rpn_expr, local_heap) 
-            = RpnResolver::reverse_polish_notation(&tokenised_expr, borrowed_heap);
+        let (rpn_expr, local_heap) =
+            RpnResolver::reverse_polish_notation(&tokenised_expr, borrowed_heap);
 
         RpnResolver {
             rpn_expr,
-            local_heap 
+            local_heap,
         }
     }
 
     /// This method evaluates the rpn expression stack
-    /// 
+    ///
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
@@ -54,9 +56,11 @@ impl RpnResolver<'_> {
 
                     let mut left_value = if op != &Operator::Une {
                         result_stack
-                        .pop_back()
-                        .ok_or_else(|| anyhow!("Operator {} is invalid", op))?
-                    } else { ZERO };
+                            .pop_back()
+                            .ok_or_else(|| anyhow!("Operator {} is invalid", op))?
+                    } else {
+                        ZERO
+                    };
 
                     match op {
                         Operator::Add => result_stack.push_back(left_value + right_value),
@@ -67,7 +71,7 @@ impl RpnResolver<'_> {
                                 return Err(anyhow!("Runtime error - Divide by zero."));
                             }
                             left_value = Number::DecimalNumber(left_value.into());
-                            result_stack.push_back(left_value / right_value)
+                            result_stack.push_back(left_value / right_value);
                         }
                         Operator::Pow => {
                             if right_value < ZERO {
@@ -75,15 +79,15 @@ impl RpnResolver<'_> {
                                     return Err(anyhow!("Runtime error - Divide by zero."));
                                 }
                                 left_value = Number::DecimalNumber(left_value.into());
-                            } 
-                            result_stack.push_back(left_value ^ right_value)
+                            }
+                            result_stack.push_back(left_value ^ right_value);
                         }
                         Operator::Eql => {
                             self.local_heap
                                 .insert(last_var_ref.to_string(), right_value);
 
                             debug!("Heap {:?}", self.local_heap);
-                            result_stack.push_back(right_value)
+                            result_stack.push_back(right_value);
                         }
                         Operator::Une => {
                             //# unary neg
@@ -94,11 +98,15 @@ impl RpnResolver<'_> {
                 Token::Variable(v) => {
                     last_var_ref = v;
                     debug!("Heap {:?}", self.local_heap);
-                    let n = self.local_heap.get(*v).unwrap_or(&Number::DecimalNumber(0.));
+                    let n = self
+                        .local_heap
+                        .get(*v)
+                        .unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(*n);
                 }
                 Token::Function(fun) => {
-                    let value: Number = result_stack.pop_back()
+                    let value: Number = result_stack
+                        .pop_back()
                         .ok_or(anyhow!("Wrong use of function"))?;
 
                     let res = match fun {
@@ -133,17 +141,19 @@ impl RpnResolver<'_> {
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)
-    /// 
+    ///
     /// Example
     /// ``
     ///     "3 * 4 + 5 * 6" becomes "3 4 * 5 6 * +"
     /// ``
-    fn reverse_polish_notation<'a>(infix_stack: &[Token<'a>], local_heap: &'a mut HashMap<String, Number>) 
-        -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
+    fn reverse_polish_notation<'a>(
+        infix_stack: &[Token<'a>],
+        local_heap: &'a mut HashMap<String, Number>,
+    ) -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
-       
+
         /* Scan the infix expression from left to right. */
         infix_stack.iter().for_each(|t: &Token| {
 
@@ -204,11 +214,11 @@ impl RpnResolver<'_> {
                     postfix_stack.push_back(*t);
                     let s = s.to_lowercase();
                     local_heap.entry(s) // let's not override consts
-                        .or_insert(token::ZERO); 
+                        .or_insert(token::ZERO);
                 },
             }
             debug!("Inspecting... {} - OUT {} - OP - {}", *t, 
-                postfix_stack.iter().map(ToString::to_string).collect::<String>(), 
+                postfix_stack.iter().map(ToString::to_string).collect::<String>(),
                 operators_stack.iter().map(ToString::to_string).collect::<String>());
         });
 
@@ -218,33 +228,41 @@ impl RpnResolver<'_> {
 
         debug!(
             "Inspecting... EOF - OUT {} - OP - {}",
-            postfix_stack.iter().map(ToString::to_string).collect::<String>(), 
-            operators_stack.iter().map(ToString::to_string).collect::<String>()
+            postfix_stack
+                .iter()
+                .map(ToString::to_string)
+                .collect::<String>(),
+            operators_stack
+                .iter()
+                .map(ToString::to_string)
+                .collect::<String>()
         );
 
         (postfix_stack, local_heap)
     }
 
-    /// Declares and saves a new integer variable ([Number::NaturalNumber])
-    /// 
+    /// Declares and saves a new integer variable ([`Number::NaturalNumber`])
+    ///
     /// Example
     /// ``
     ///     resolver.set("foo", 42);
     /// ``
-    /// 
+    ///
     pub fn set(&mut self, key: &str, value: i32) {
-        self.local_heap.insert(key.to_string(), Number::NaturalNumber(value));
+        self.local_heap
+            .insert(key.to_string(), Number::NaturalNumber(value));
     }
 
-    /// Declares and saves a new float variable ([Number::DecimalNumber])
-    /// 
+    /// Declares and saves a new float variable ([`Number::DecimalNumber`])
+    ///
     /// Example
     /// ``
     ///     resolver.setf("x", 1.5);
     /// ``
-    /// 
+    ///
     pub fn setf(&mut self, key: &str, value: f64) {
-        self.local_heap.insert(key.to_string(), Number::DecimalNumber(value));
+        self.local_heap
+            .insert(key.to_string(), Number::DecimalNumber(value));
     }
 }
 
@@ -265,6 +283,9 @@ mod tests {
             Token::Operand(Number::NaturalNumber(2)),
             Token::Operator(Operator::Add),
         ];
-        assert_eq!(RpnResolver::reverse_polish_notation(&a, &mut HashMap::new()).0, b);
+        assert_eq!(
+            RpnResolver::reverse_polish_notation(&a, &mut HashMap::new()).0,
+            b
+        );
     }
 }

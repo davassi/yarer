@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
-/// A [Session] is an object that holds a variable heap in the form of a [HashMap]
-/// that is borrowed to all the [RpnResolver] that are built from the builder [build_resolver_for()]
+/// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
+/// that is borrowed to all the [`RpnResolver`] that are built from the builder [`build_resolver_for`()]
 ///
 /// Example
 ///
@@ -17,8 +17,7 @@ impl Session {
     /// # Examples
     ///   
     /// ```
-    /// #     use yarer::session::Session;
-    /// #     use yarer::rpn_resolver::RpnResolver;
+    /// #    use yarer::{rpn_resolver::RpnResolver, session::Session};
     ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
     ///      let mut session = Session::init();
@@ -30,13 +29,14 @@ impl Session {
         Session { variable_heap }
     }
 
-    /// The [RpnResolver] single line builder. Needs the math expression to process
+    /// The [`RpnResolver`] single line builder. Needs the math expression to process
     ///
     pub fn build_resolver_for<'a>(&'a mut self, line: &'a str) -> RpnResolver<'_> {
         RpnResolver::parse_with_borrowed_heap(line, &mut self.variable_heap)
     }
 
     /// Creates a Variables heap (name-value)
+    ///
     fn init_local_heap() -> HashMap<String, Number> {
         static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
         static E: Number = Number::DecimalNumber(std::f64::consts::E);
