@@ -16,24 +16,17 @@ static EXPRESSION_REGEX: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)").unwrap());
 
 impl Parser {
-    /// Tokenises a processed str expression
+    /// Parses and splits a &str into a vec of &str with
+    /// the help of [`EXPRESSION_REGEX`] and then wraps in tokens the &str chunks
     ///
     pub fn parse(expr: &str) -> Vec<Token> {
-        let vex: Vec<Token<'_>> = Self::process(expr)
-            .into_iter()
-            .map(|f| Token::tokenize(f))
+        let vex: Vec<Token<'_>> = EXPRESSION_REGEX
+            .find_iter(expr)
+            .map(|m| m.as_str())
+            .map(Token::tokenize)
             .collect();
 
         Self::mod_unary_operators(&vex)
-    }
-
-    /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]
-    ///
-    fn process(exp: &str) -> Vec<&str> {
-        EXPRESSION_REGEX
-            .find_iter(exp)
-            .map(|m| m.as_str())
-            .collect()
     }
 
     /// Finds out all the unary operators that are present in the expression
@@ -79,26 +72,6 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::token::{Bracket, Number, Operator};
-
-    #[test]
-    fn test_process_valid() {
-        assert_eq!(
-            Parser::process("1+2*3/(4-5)"),
-            vec!["1", "+", "2", "*", "3", "/", "(", "4", "-", "5", ")"]
-        );
-        assert_eq!(Parser::process("100*3.14"), (vec!["100", "*", "3.14"]));
-        assert_eq!(Parser::process("x-y"), (vec!["x", "-", "y"]));
-        assert_eq!(Parser::process("cos(10)"), (vec!["cos", "(", "10", ")"]));
-        assert_eq!(
-            Parser::process("cos(-10)"),
-            vec!["cos", "(", "-", "10", ")"]
-        );
-        assert_eq!(Parser::process("3+5*x"), (vec!["3", "+", "5", "*", "x"]));
-        assert_eq!(
-            Parser::process("-3.14*variableName123/alpha_beta"),
-            (vec!["-", "3.14", "*", "variableName123", "/", "alpha_beta"])
-        );
-    }
 
     #[test]
     fn test_parse_valid() {
