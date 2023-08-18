@@ -18,11 +18,12 @@ static EXPRESSION_REGEX: Lazy<Regex> =
 impl Parser {
     /// Tokenises a processed str expression
     ///
-    pub fn parse(expr: &str) -> Result<Vec<Token>, &str> {
-        Ok(expr)
+    pub fn parse(expr: &str) -> Vec<Token> {
+        Some(expr)
             .map(Self::process)
             .map(|v: Vec<&str>| Token::tokenize_vec(&v))
             .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
+            .unwrap()
     }
 
     /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]
@@ -102,7 +103,7 @@ mod tests {
     fn test_parse_valid() {
         assert_eq!(
             Parser::parse("1+2*3/(4-5)"),
-            Ok(vec![
+            (vec![
                 Token::Operand(Number::NaturalNumber(1)),
                 Token::Operator(Operator::Add),
                 Token::Operand(Number::NaturalNumber(2)),

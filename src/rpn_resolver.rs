@@ -27,7 +27,7 @@ impl RpnResolver<'_> {
         exp: &'a str,
         borrowed_heap: &'a mut HashMap<String, Number>,
     ) -> RpnResolver<'a> {
-        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp).unwrap();
+        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp);
         let (rpn_expr, local_heap) =
             RpnResolver::reverse_polish_notation(&tokenised_expr, borrowed_heap);
 
