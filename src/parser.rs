@@ -19,11 +19,12 @@ impl Parser {
     /// Tokenises a processed str expression
     ///
     pub fn parse(expr: &str) -> Vec<Token> {
-        Some(expr)
-            .map(Self::process)
-            .map(|v: Vec<&str>| Token::tokenize_vec(&v))
-            .map(|v: Vec<Token<'_>>| Self::mod_unary_operators(&v))
-            .unwrap()
+        let vex: Vec<Token<'_>> = Self::process(expr)
+            .into_iter()
+            .map(|f| Token::tokenize(f))
+            .collect();
+
+        Self::mod_unary_operators(&vex)
     }
 
     /// Parses and splits a str into a vec of &str with the help of [`EXPRESSION_REGEX`]

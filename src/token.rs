@@ -177,7 +177,7 @@ impl Token<'_> {
     /// "sin" -> [`Token::Function`]
     /// "x"   -> [`Token::Variable`]
     ///
-    fn tokenize(t: &str) -> Token {
+    pub fn tokenize(t: &str) -> Token {
         match t
             .chars()
             .next()
@@ -205,9 +205,6 @@ impl Token<'_> {
 
     /// Mapping a vec of str in a vec of Tokens
     ///
-    pub fn tokenize_vec<'a>(v: &[&'a str]) -> Vec<Token<'a>> {
-        v.iter().map(|t| Token::tokenize(t)).collect::<Vec<Token>>()
-    }
 
     /// Founding out the priority and the associative precedence of an operator
     ///
@@ -442,13 +439,15 @@ mod tests {
 
     #[test]
     fn test_tokenize_vec_valid() {
-        let input = vec!["+", "100", "3.14", "("];
-        let expected = vec![
-            Token::Operator(Operator::Add),
-            Token::Operand(Number::NaturalNumber(100)),
-            Token::Operand(Number::DecimalNumber(3.14)),
-            Token::Bracket(Bracket::Open),
-        ];
-        assert_eq!(Token::tokenize_vec(&input), expected);
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
+        assert_eq!(
+            Token::tokenize("100"),
+            Token::Operand(Number::NaturalNumber(100))
+        );
+        assert_eq!(
+            Token::tokenize("3.14"),
+            Token::Operand(Number::DecimalNumber(3.14))
+        );
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 }
