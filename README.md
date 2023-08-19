@@ -48,11 +48,11 @@ and of course, the expression can be re-evaluated if the variable changes.
 The result can be simply casted into a i32 or a f64 (if decimal) simply with
 
 ```rust
-let result: Number = resolver.resolve().unwrap();
+      let result: Number = resolver.resolve().unwrap();
 
-let int : i32 = i32::from(result);
-// or
-let float : f64 = f64::from(result);
+      let int : i32 = i32::from(result);
+      // or
+      let float : f64 = f64::from(result);
 ```
 
 Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
