@@ -181,7 +181,7 @@ impl Token<'_> {
         match t
             .chars()
             .next()
-            .expect("Cannot extract char. Wrong encoding")
+            .expect("Cannot extract char. Wrong encoding.")
         {
             c @ ('+' | '-' | '*' | '/' | '^' | '=') => return Token::from_operator(c).unwrap(),
             b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),

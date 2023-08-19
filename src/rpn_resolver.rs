@@ -4,10 +4,11 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
-use std::{
-    collections::{HashMap, VecDeque},
-    panic,
-};
+use std::collections::{HashMap, VecDeque};
+
+static MALFORMED_ERR: &'static str = "Runtime Error: The mathematical expression is malformed";
+static DIVISION_ZERO_ERR: &'static str = "Runtime error: Divide by zero.";
+static NO_VARIABLE_ERR: &'static str = "Runtime error: No variable has been defined for assignent.";
 
 /// The main [`RpnResolver`]: contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -42,7 +43,7 @@ impl RpnResolver<'_> {
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
-        let mut last_var_ref: &str = "";
+        let mut last_var_ref: Option<&str> = None;
 
         for t in &self.rpn_expr {
             match t {
@@ -52,12 +53,12 @@ impl RpnResolver<'_> {
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
                         .pop_back()
-                        .ok_or_else(|| anyhow!("Operator {} is invalid", op))?;
+                        .ok_or_else(|| anyhow!(MALFORMED_ERR))?;
 
                     let mut left_value = if op != &Operator::Une {
                         result_stack
                             .pop_back()
-                            .ok_or_else(|| anyhow!("Operator {} is invalid", op))?
+                            .ok_or_else(|| anyhow!(MALFORMED_ERR))?
                     } else {
                         ZERO
                     };
@@ -68,7 +69,7 @@ impl RpnResolver<'_> {
                         Operator::Mul => result_stack.push_back(left_value * right_value),
                         Operator::Div => {
                             if right_value == ZERO {
-                                return Err(anyhow!("Runtime error - Divide by zero."));
+                                return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
                             left_value = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value);
@@ -76,16 +77,18 @@ impl RpnResolver<'_> {
                         Operator::Pow => {
                             if right_value < ZERO {
                                 if left_value == ZERO {
-                                    return Err(anyhow!("Runtime error - Divide by zero."));
+                                    return Err(anyhow!(DIVISION_ZERO_ERR));
                                 }
                                 left_value = Number::DecimalNumber(left_value.into());
                             }
                             result_stack.push_back(left_value ^ right_value);
                         }
                         Operator::Eql => {
+                            if last_var_ref == None {
+                                return Err(anyhow!(NO_VARIABLE_ERR));
+                            }
                             self.local_heap
-                                .insert(last_var_ref.to_string(), right_value);
-
+                                .insert(last_var_ref.unwrap().to_string(), right_value);
                             debug!("Heap {:?}", self.local_heap);
                             result_stack.push_back(right_value);
                         }
@@ -96,7 +99,7 @@ impl RpnResolver<'_> {
                     }
                 }
                 Token::Variable(v) => {
-                    last_var_ref = v;
+                    let _ = last_var_ref.insert(*v);
                     debug!("Heap {:?}", self.local_heap);
                     let n = self
                         .local_heap
@@ -128,16 +131,14 @@ impl RpnResolver<'_> {
                             f64::min(value.into(), value2.into())
                         }
                         MathFunction::Sqrt => f64::sqrt(value.into()),
-                        MathFunction::None => panic!("This should not happen!"),
+                        MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
                 }
-                _ => return Err(anyhow!("This {} cannot be yet recognised!", t)),
+                _ => return Err(anyhow!(MALFORMED_ERR)),
             }
         }
-        result_stack
-            .pop_front()
-            .ok_or(anyhow!("Something went terribly wrong here."))
+        result_stack.pop_front().ok_or(anyhow!(MALFORMED_ERR))
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)
