@@ -7,7 +7,7 @@ homepage = "https://github.com/davassi/yarer"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 authors = ["Davassi <gianluigi.davassi@gmail.com>"]
-categories = ["command-line-interface"]
+categories = ["command-line-interface","Algorithms","Mathematics","Parsing tools"]
 readme = "README.md"
 keywords = [
   "rpn",

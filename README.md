@@ -14,7 +14,7 @@ Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, wr
 Example of usage of the library:
 
 ```rust
-      let exp = "((10 + 5) – 3 * (9 / 3)) + 2";
+      let exp = "atan(cos(10 + e) + 3 * sin(9 / 3))^2";
       let mut session = Session::init();
       let mut resolver: RpnResolver = session.build_resolver_for(&exp);
       println!("The result of {} is {}", exp, resolver.resolve());
@@ -23,7 +23,7 @@ Example of usage of the library:
 All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
 The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
 
-Yarer can handle also variables and functions. Here an example:
+Yarer handles variables and functions. Here an example:
 
 ```rust
       let mut session: Session = Session::init();
@@ -45,7 +45,7 @@ and of course, the expression can be re-evaluated if the variable changes.
       //...
 ```
 
-The result can be simply converted into a i32 or a f64 (if decimal) simply with
+The result can be simply casted into a i32 or a f64 (if decimal) simply with
 
 ```rust
 let result: Number = resolver.resolve().unwrap();
@@ -83,10 +83,10 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       
 ```
 
-## Built-in Defined Functions
+## Built-in Defined Functions 
 
 There are several math functions defined that you can use in your expression. More to come!
-There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs)
+There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs).
 
 ```rust
     Sin
@@ -99,6 +99,15 @@ There are many examples of processed expressions in the [integration test file](
     Log
     Abs
     Sqrt
+```
+
+## Built-in Defined Constants
+
+There are 2 predefined math constants at the moment:
+
+```rust
+    PI -> 3.14159265...
+    e -> 2.7182818...
 ```
 
 ## Execute
@@ -122,8 +131,20 @@ cargo build --release
 ./target/release/yarer
 ```
 
+## Internal Implementation
+
+Each expression is the result of an evaluation by the following actors
+
+Step1 - Parser: A string is "regexed" and converted into a token array.
+
+Step 2 - RpnResolver: Using the Shunting Yard algorithm the token array is converted from infix to postfix notation.
+
+Step 3 - RpnResolver: The resulting RPN (Reverse Polish Notation) expression is evaluated.
+
+Worth to mention that the Session is responsible to store all variables (and constants) that are borrowed by all the RpnResolvers.
+
 ## Contribution
 
-Besides being stable, Yarer is a work in progress. If you have suggestions for features, or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues).
+Besides being stable, Yarer is a work in progress. If you have suggestions for features (i.e. more math functions to implement), or if you find any issues in the code, design, interface, etc, please feel free to share them on our [GitHub](https://github.com/davassi/yarer/issues).
 
 I appreciate very much your feedback!
