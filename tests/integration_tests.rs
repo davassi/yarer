@@ -59,7 +59,7 @@ fn test_expressions() {
     );
     resolve!("2^2^2 - 3^3", Number::NaturalNumber(-11));
     resolve!("(2 + 3 * 4 + 5) * 2", Number::NaturalNumber(38));
-    //resolve!("4! - 3!", Number::NaturalNumber(18));
+    resolve!("4! - 3!", Number::NaturalNumber(18));
     resolve!("(2^3 + 3^2) * 4", Number::NaturalNumber(68));
     resolve!("e * pi - pi * e", Number::DecimalNumber(0.0));
     resolve!(
@@ -100,12 +100,13 @@ fn test_sharing_session() {
     let session = Session::init();
     
     let mut res = session.build_resolver_for("x ^ 2");
-    let mut res2 = session.build_resolver_for("x + 2");
+    let mut res2 = session.build_resolver_for("x! - (x-1)!");
 
     session.set("x",10);
    
     if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
-        println!("{} {}", a, b);    
+        assert!(i32::from(a) == 100);
+        assert!(i32::from(b) == 3265920); 
     }
     
 }

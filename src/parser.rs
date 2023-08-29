@@ -1,4 +1,4 @@
-use crate::token::{self, Token};
+use crate::token::{self, Token, Operator};
 use clap::__derive_refs::once_cell;
 
 use log::debug;
@@ -39,7 +39,7 @@ impl Parser {
             debug!("{}", token);
 
             match token {
-                Token::Operand(_) | Token::Variable(_) => {
+                Token::Operand(_) | Token::Variable(_) | Token::Operator(Operator::Fac) => {
                     expect_operand_next = false;
                 }
                 Token::Operator(o) => {
@@ -51,7 +51,7 @@ impl Parser {
                                 continue;
                             }
                             token::Operator::Sub => {
-                                // an unary - is a special op
+                                // an unary - is a special right-associative op with high precedence
                                 mod_vec.push(token::Token::Operator(token::Operator::Une));
                                 continue;
                             }

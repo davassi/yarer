@@ -32,6 +32,8 @@ pub enum Operator {
     Pow,
     /// Unary Neg ('-1')
     Une,
+    /// Factorial ('0!')
+    Fac,
     /// Binary Assignment ('A=1')
     Eql,
 }
@@ -131,6 +133,7 @@ impl Token<'_> {
             '/' => Some(Token::Operator(Operator::Div)),
             '^' => Some(Token::Operator(Operator::Pow)),
             '#' => Some(Token::Operator(Operator::Une)),
+            '!' => Some(Token::Operator(Operator::Fac)),
             '=' => Some(Token::Operator(Operator::Eql)),
             _ => None,
         }
@@ -183,7 +186,7 @@ impl Token<'_> {
             .next()
             .expect("Cannot extract char. Wrong encoding.")
         {
-            c @ ('+' | '-' | '*' | '/' | '^' | '=') => return Token::from_operator(c).unwrap(),
+            c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => return Token::from_operator(c).unwrap(),
             b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
             _ => (),
         }
@@ -214,6 +217,7 @@ impl Token<'_> {
             Token::Operator(Operator::Mul | Operator::Div) => (2, Associate::LeftAssociative),
             Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
             Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
+            Token::Operator(Operator::Fac) => (5, Associate::LeftAssociative),
             Token::Operator(Operator::Eql) => (0, Associate::LeftAssociative),
             _ => panic!("Operator '{o}' not recognised. This must not happen!"),
         }
@@ -346,6 +350,7 @@ impl Display for Operator {
             Operator::Div => write!(f, "/"),
             Operator::Pow => write!(f, "^"),
             Operator::Une => write!(f, "#"),
+            Operator::Fac => write!(f, "!"),
             Operator::Eql => write!(f, "="),
         }
     }
@@ -414,13 +419,17 @@ mod tests {
             Token::from_operator('/'),
             Some(Token::Operator(Operator::Div))
         );
+        assert_eq!(
+            Token::from_operator('!'),
+            Some(Token::Operator(Operator::Fac))
+        );
     }
 
     #[test]
     fn test_from_operator_invalid() {
         assert_eq!(Token::from_operator('a'), None);
         assert_eq!(Token::from_operator('1'), None);
-        assert_eq!(Token::from_operator('!'), None);
+        assert_eq!(Token::from_operator('~'), None);
     }
 
     #[test]

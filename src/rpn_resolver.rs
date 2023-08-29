@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use log::debug;
 use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell};
 
-static MALFORMED_ERR: &'static str = "Runtime Error: The mathematical expression is malformed";
+static MALFORMED_ERR: &'static str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &'static str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &'static str = "Runtime error: No variable has been defined for assignent.";
 
@@ -53,12 +53,12 @@ impl RpnResolver<'_> {
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
                         .pop_back()
-                        .ok_or_else(|| anyhow!(MALFORMED_ERR))?;
+                        .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Right Operand."))?;
 
-                    let mut left_value = if op != &Operator::Une {
+                    let mut left_value = if op != &Operator::Une && op != &Operator::Fac {
                         result_stack
                             .pop_back()
-                            .ok_or_else(|| anyhow!(MALFORMED_ERR))?
+                            .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand."))?
                     } else {
                         ZERO
                     };
@@ -92,6 +92,14 @@ impl RpnResolver<'_> {
                             debug!("Heap {:?}", self.local_heap);
                             result_stack.push_back(right_value);
                         }
+                        Operator::Fac => {
+                            // factorial. Only for natural numbers
+                            let v = i32::from(right_value);
+                            if v<0 {
+                                println!("Warning: Factorial of a Negative or Decimal number has not been yet implemented.");
+                            }
+                            result_stack.push_back(Number::NaturalNumber((1..=v).product()));
+                        }
                         Operator::Une => {
                             //# unary neg
                             result_stack.push_back(right_value * token::MINUS_ONE);
@@ -110,7 +118,7 @@ impl RpnResolver<'_> {
                 Token::Function(fun) => {
                     let value: Number = result_stack
                         .pop_back()
-                        .ok_or(anyhow!("Wrong use of function"))?;
+                        .ok_or(anyhow!("{} {}", MALFORMED_ERR, "Wrong use of function"))?;
 
                     let res = match fun {
                         MathFunction::Sin => f64::sin(value.into()),
@@ -135,10 +143,10 @@ impl RpnResolver<'_> {
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
                 }
-                _ => return Err(anyhow!(MALFORMED_ERR)),
+                _ => return Err(anyhow!("{} Internal Error at line: {}.", MALFORMED_ERR, line!())),
             }
         }
-        result_stack.pop_front().ok_or(anyhow!(MALFORMED_ERR))
+        result_stack.pop_front().ok_or(anyhow!("{} Internal error at line: {}.", MALFORMED_ERR, line!()))
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)

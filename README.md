@@ -89,12 +89,12 @@ From Yarer version 0.1.5 it's possible to share a single session, and therefore 
     let session = Session::init();
     
     let mut res = session.build_resolver_for("x ^ 2");
-    let mut res2 = session.build_resolver_for("x + 2");
+    let mut res2 = session.build_resolver_for("x! - (x-1)!");
 
-    session.set("x",10);
+    session.set("x", 10);
    
     if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
-        println!("{} {}", a, b); // 100 12
+        println!("{} {}", a, b); // 100 3265920
     }
 ```
     
