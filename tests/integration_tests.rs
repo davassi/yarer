@@ -4,7 +4,7 @@ use yarer::token::*;
 
 macro_rules! resolve {
     ($expr:expr, $expected:expr) => {{
-        let mut session = Session::init();
+        let session = Session::init();
         let mut resolver = session.build_resolver_for($expr);
         assert_eq!(resolver.resolve().unwrap(), $expected);
     }};
@@ -81,11 +81,11 @@ fn test_expressions() {
 
 #[test]
 fn test_programmatic() {
-    let mut session: Session = Session::init();
+    let session: Session = Session::init();
     let mut resolver: RpnResolver = session.build_resolver_for("x ^ 2");
 
     for i in 1..=64 {
-        resolver.set("x", i);
+        session.set("x", i);
 
         let result: Number = resolver.resolve().unwrap();
 
@@ -93,3 +93,22 @@ fn test_programmatic() {
         assert!(i32::from(result) == (i * i));
     }
 }
+
+#[test]
+fn test_sharing_session() {
+
+    let session = Session::init();
+    
+    let mut res = session.build_resolver_for("x ^ 2");
+    let mut res2 = session.build_resolver_for("x + 2");
+
+    session.set("x",10);
+   
+    if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
+        println!("{} {}", a, b);    
+    }
+    
+}
+
+
+

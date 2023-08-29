@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
-use std::collections::{HashMap, VecDeque};
+use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell};
 
 static MALFORMED_ERR: &'static str = "Runtime Error: The mathematical expression is malformed";
 static DIVISION_ZERO_ERR: &'static str = "Runtime error: Divide by zero.";
@@ -18,7 +18,7 @@ static NO_VARIABLE_ERR: &'static str = "Runtime error: No variable has been defi
 ///
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
-    local_heap: &'a mut HashMap<String, Number>,
+    local_heap: Rc<RefCell<HashMap<String, Number>>>,
 }
 
 impl RpnResolver<'_> {
@@ -26,7 +26,7 @@ impl RpnResolver<'_> {
     ///
     pub fn parse_with_borrowed_heap<'a>(
         exp: &'a str,
-        borrowed_heap: &'a mut HashMap<String, Number>,
+        borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
     ) -> RpnResolver<'a> {
         let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp);
         let (rpn_expr, local_heap) =
@@ -87,7 +87,7 @@ impl RpnResolver<'_> {
                             if last_var_ref == None {
                                 return Err(anyhow!(NO_VARIABLE_ERR));
                             }
-                            self.local_heap
+                            self.local_heap.borrow_mut()
                                 .insert(last_var_ref.unwrap().to_string(), right_value);
                             debug!("Heap {:?}", self.local_heap);
                             result_stack.push_back(right_value);
@@ -101,8 +101,8 @@ impl RpnResolver<'_> {
                 Token::Variable(v) => {
                     let _ = last_var_ref.insert(*v);
                     debug!("Heap {:?}", self.local_heap);
-                    let n = self
-                        .local_heap
+                    let heap = self.local_heap.borrow_mut();
+                    let n = heap
                         .get(*v)
                         .unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(*n);
@@ -149,8 +149,8 @@ impl RpnResolver<'_> {
     /// ``
     fn reverse_polish_notation<'a>(
         infix_stack: &[Token<'a>],
-        local_heap: &'a mut HashMap<String, Number>,
-    ) -> (VecDeque<Token<'a>>, &'a mut HashMap<String, Number>) {
+        local_heap: Rc<RefCell<HashMap<String, Number>>>,
+    ) -> (VecDeque<Token<'a>>, Rc<RefCell<HashMap<String, Number>>>) {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
@@ -214,7 +214,7 @@ impl RpnResolver<'_> {
                 Token::Variable(s) => {
                     postfix_stack.push_back(*t);
                     let s = s.to_lowercase();
-                    local_heap.entry(s) // let's not override consts
+                    local_heap.borrow_mut().entry(s) // let's not override consts
                         .or_insert(token::ZERO);
                 },
             }
@@ -242,29 +242,6 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    /// Declares and saves a new integer variable ([`Number::NaturalNumber`])
-    ///
-    /// Example
-    /// ``
-    ///     resolver.set("foo", 42);
-    /// ``
-    ///
-    pub fn set(&mut self, key: &str, value: i32) {
-        self.local_heap
-            .insert(key.to_string(), Number::NaturalNumber(value));
-    }
-
-    /// Declares and saves a new float variable ([`Number::DecimalNumber`])
-    ///
-    /// Example
-    /// ``
-    ///     resolver.setf("x", 1.5);
-    /// ``
-    ///
-    pub fn setf(&mut self, key: &str, value: f64) {
-        self.local_heap
-            .insert(key.to_string(), Number::DecimalNumber(value));
-    }
 }
 
 #[cfg(test)]
@@ -285,7 +262,7 @@ mod tests {
             Token::Operator(Operator::Add),
         ];
         assert_eq!(
-            RpnResolver::reverse_polish_notation(&a, &mut HashMap::new()).0,
+            RpnResolver::reverse_polish_notation(&a, Rc::new(RefCell::new(HashMap::new()))).0,
             b
         );
     }

@@ -14,9 +14,9 @@ Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, wr
 Example of usage of the library:
 
 ```rust
+      let session = Session::init();
       let exp = "atan(cos(10 + e) + 3 * sin(9 / 3))^2";
-      let mut session = Session::init();
-      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+      let mut resolver = session.build_resolver_for(&exp);
       println!("The result of {} is {}", exp, resolver.resolve());
 ```
 
@@ -26,10 +26,10 @@ The library just returns a variant natural number, or a decimal number if one ex
 Yarer handles variables and functions. Here an example:
 
 ```rust
-      let mut session: Session = Session::init();
+      let session: Session = Session::init();
       let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
 
-      resolver.set("x",1);
+      session.set("x",1);
       println!("The result is {}", resolver.resolve());
 ```
 
@@ -37,10 +37,10 @@ and of course, the expression can be re-evaluated if the variable changes.
 
 ```rust
       //...
-      resolver.set("x",-1);
+      session.set("x",-1);
       println!("The result is {}", resolver.resolve());
 
-      resolver.set("x",0.001); 
+      session.set("x",0.001); 
       println!("The result is {}", resolver.resolve());
       //...
 ```
@@ -83,7 +83,23 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       
 ```
 
-## Built-in Defined Functions 
+From Yarer version 0.1.5 it's possible to share a single session, and therefore a single heap of variables, for multiple resolvers. The library is not intended to be thread-safe.
+
+```rust
+    let session = Session::init();
+    
+    let mut res = session.build_resolver_for("x ^ 2");
+    let mut res2 = session.build_resolver_for("x + 2");
+
+    session.set("x",10);
+   
+    if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
+        println!("{} {}", a, b); // 100 12
+    }
+```
+    
+
+## Built-in Defined Functions
 
 There are several math functions defined that you can use in your expression. More to come!
 There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs).

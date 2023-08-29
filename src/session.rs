@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc, cell::RefCell};
 
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
@@ -8,7 +8,7 @@ use crate::{rpn_resolver::RpnResolver, token::Number};
 /// Example
 ///
 pub struct Session {
-    variable_heap: HashMap<String, Number>,
+    variable_heap: Rc<RefCell<HashMap<String, Number>>>,
 }
 
 impl Session {
@@ -25,14 +25,15 @@ impl Session {
     ///  ```
     ///
     pub fn init() -> Session {
-        let variable_heap: HashMap<String, Number> = Session::init_local_heap();
-        Session { variable_heap }
+       // let variable_heap: HashMap<String, Number> = ;
+        Session { variable_heap: Rc::new(RefCell::new(Session::init_local_heap())) }
     }
 
     /// The [`RpnResolver`] single line builder. Needs the math expression to process
     ///
-    pub fn build_resolver_for<'a>(&'a mut self, line: &'a str) -> RpnResolver<'_> {
-        RpnResolver::parse_with_borrowed_heap(line, &mut self.variable_heap)
+    pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
+        let clone = self.variable_heap.clone();
+        RpnResolver::parse_with_borrowed_heap(line, clone)
     }
 
     /// Creates a Variables heap (name-value)
@@ -46,4 +47,29 @@ impl Session {
         local_heap.insert("e".to_string(), E);
         local_heap
     }
+
+    /// Declares and saves a new integer variable ([`Number::NaturalNumber`])
+    ///
+    /// Example
+    /// ``
+    ///     session.set("foo", 42);
+    /// ``
+    ///
+    pub fn set(&self, key: &str, value: i32) {
+        self.variable_heap.borrow_mut()
+            .insert(key.to_string(), Number::NaturalNumber(value));
+    }
+
+    /// Declares and saves a new float variable ([`Number::DecimalNumber`])
+    ///
+    /// Example
+    /// ``
+    ///     session.setf("x", 1.5);
+    /// ``
+    ///
+    pub fn setf(&self, key: &str, value: f64) {
+        self.variable_heap.borrow_mut()
+            .insert(key.to_string(), Number::DecimalNumber(value));
+    }
+
 }
