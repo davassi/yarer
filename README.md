@@ -97,7 +97,6 @@ From Yarer version 0.1.5 it's possible to share a single session, and therefore 
         println!("{} {}", a, b); // 100 3265920
     }
 ```
-    
 
 ## Built-in Defined Functions
 

@@ -106,7 +106,7 @@
 //! ```
 /// Parser
 pub mod parser;
-/// RpnResolver
+/// `RpnResolver`
 pub mod rpn_resolver;
 /// Session
 pub mod session;

@@ -24,14 +24,14 @@ impl Session {
     ///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
     ///  ```
     ///
-    pub fn init() -> Session {
+    #[must_use] pub fn init() -> Session {
        // let variable_heap: HashMap<String, Number> = ;
         Session { variable_heap: Rc::new(RefCell::new(Session::init_local_heap())) }
     }
 
     /// The [`RpnResolver`] single line builder. Needs the math expression to process
     ///
-    pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
+    #[must_use] pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
         let clone = self.variable_heap.clone();
         RpnResolver::parse_with_borrowed_heap(line, clone)
     }

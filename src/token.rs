@@ -180,7 +180,7 @@ impl Token<'_> {
     /// "sin" -> [`Token::Function`]
     /// "x"   -> [`Token::Variable`]
     ///
-    pub fn tokenize(t: &str) -> Token {
+    #[must_use] pub fn tokenize(t: &str) -> Token {
         match t
             .chars()
             .next()
@@ -230,7 +230,7 @@ impl Token<'_> {
     /// ^ has priority over *
     /// unary - has priority over ^
     ///
-    pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
+    #[must_use] pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
         let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
         let v_op2: (u8, Associate) = self::Token::operator_priority(op2);
 

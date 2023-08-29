@@ -35,7 +35,7 @@ impl Parser {
         let mut mod_vec: Vec<Token> = Vec::new();
         let mut expect_operand_next = true;
 
-        for &token in v.iter() {
+        for &token in v {
             debug!("{}", token);
 
             match token {
