@@ -6,9 +6,9 @@ use anyhow::anyhow;
 use log::debug;
 use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell};
 
-static MALFORMED_ERR: &'static str = "Runtime Error: The mathematical expression is malformed.";
-static DIVISION_ZERO_ERR: &'static str = "Runtime error: Divide by zero.";
-static NO_VARIABLE_ERR: &'static str = "Runtime error: No variable has been defined for assignent.";
+static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
+static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
+static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignent.";
 
 /// The main [`RpnResolver`]: contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -84,13 +84,14 @@ impl RpnResolver<'_> {
                             result_stack.push_back(left_value ^ right_value);
                         }
                         Operator::Eql => {
-                            if last_var_ref == None {
+                            if let Some(var) = last_var_ref {
+                                self.local_heap.borrow_mut()
+                                    .insert(var.to_string(), right_value);
+                                debug!("Heap {:?}", self.local_heap);
+                                result_stack.push_back(right_value);
+                            } else {
                                 return Err(anyhow!(NO_VARIABLE_ERR));
                             }
-                            self.local_heap.borrow_mut()
-                                .insert(last_var_ref.unwrap().to_string(), right_value);
-                            debug!("Heap {:?}", self.local_heap);
-                            result_stack.push_back(right_value);
                         }
                         Operator::Fac => {
                             // factorial. Only for natural numbers
@@ -164,8 +165,8 @@ impl RpnResolver<'_> {
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
 
         /* Scan the infix expression from left to right. */
-        infix_stack.iter().for_each(|t: &Token| {
-
+        //infix_stack.iter().for_each(|t: &Token| {
+        for t in infix_stack {
             match *t {
                 /* If the token is an operand, add it to the output list. */
                 Token::Operand(_) => postfix_stack.push_back(*t),
@@ -229,7 +230,7 @@ impl RpnResolver<'_> {
             debug!("Inspecting... {} - OUT {} - OP - {}", *t, 
                 postfix_stack.iter().map(ToString::to_string).collect::<String>(),
                 operators_stack.iter().map(ToString::to_string).collect::<String>());
-        });
+        };
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();

@@ -332,6 +332,7 @@ impl From<Number> for f64 {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 impl From<Number> for i32 {
     fn from(n: Number) -> i32 {
         match n {
