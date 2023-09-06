@@ -1,9 +1,8 @@
+
 use crate::token::{self, Token, Operator};
-use clap::__derive_refs::once_cell;
 
 use log::debug;
 use regex::Regex;
-
 use once_cell::sync::Lazy;
 
 /// The Parser has 2 primary functions:
