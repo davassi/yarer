@@ -139,10 +139,11 @@ For logging debug just run with:
 env RUST_LOG=yarer=debug cargo run -q -- 
 ```
 
-or to build a release from the code:
+or to build and install a release from the code:
 
 ```console
 cargo build --release
+cargo install --path .
 ./target/release/yarer
 ```
 
