@@ -32,11 +32,11 @@ impl Session {
         }
     }
 
-    /// The [`RpnResolver`] single line builder. Needs the math expression to process
+    /// The [`RpnResolver`] single line builder. It needs the math expression to process
     ///
     #[must_use]
     pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
-        let clone = self.variable_heap.clone();
+        let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
         RpnResolver::parse_with_borrowed_heap(line, clone)
     }
 
