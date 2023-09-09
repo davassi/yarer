@@ -147,7 +147,7 @@ impl RpnResolver<'_> {
                 _ => return Err(anyhow!("{} Internal Error at line: {}.", MALFORMED_ERR, line!())),
             }
         }
-        result_stack.pop_front().ok_or(anyhow!("{} Internal error at line: {}.", MALFORMED_ERR, line!()))
+        result_stack.pop_front().ok_or(anyhow!("{}", MALFORMED_ERR))
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)

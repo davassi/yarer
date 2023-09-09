@@ -181,32 +181,33 @@ impl Token<'_> {
     /// "x"   -> [`Token::Variable`]
     ///
     #[must_use]
-    pub fn tokenize(t: &str) -> Token {
-        match t
-            .chars()
-            .next()
-            .expect("Cannot extract char. Wrong encoding.")
-        {
-            c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => {
-                return Token::from_operator(c).unwrap()
-            }
-            b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
-            _ => (),
+    pub fn tokenize(t: &str) -> Option<Token> {
+
+        match t.chars().next() {
+            Some(s) => match s
+            {
+                c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => {
+                    return Some(Token::from_operator(c).unwrap())
+                }
+                b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
+                _ => (), // continue the flow
+            },
+            None => return None,
         }
 
         if let Ok(v) = t.parse::<i32>() {
-            return Token::Operand(Number::NaturalNumber(v));
+            return Some(Token::Operand(Number::NaturalNumber(v)));
         }
 
         if let Ok(v) = t.parse::<f64>() {
-            return Token::Operand(Number::DecimalNumber(v));
+            return Some(Token::Operand(Number::DecimalNumber(v)));
         }
 
         if let Some(fun) = Token::get_some(t) {
-            return Token::Function(fun);
+            return Some(Token::Function(fun));
         }
 
-        Token::Variable(t)
+        Some(Token::Variable(t))
     }
 
     /// Mapping a vec of str in a vec of Tokens
@@ -395,14 +396,14 @@ mod tests {
     #[test]
     fn test_tokenise_operators() {
         let v = vec!["1", "+", "2.1"];
-        assert_eq!(Token::tokenize(v[1]), Token::Operator(Operator::Add));
+        assert_eq!(Token::tokenize(v[1]), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize(v[0]),
-            Token::Operand(Number::NaturalNumber(1))
+            Some(Token::Operand(Number::NaturalNumber(1)))
         );
         assert_eq!(
             Token::tokenize(v[2]),
-            Token::Operand(Number::DecimalNumber(2.1))
+            Some(Token::Operand(Number::DecimalNumber(2.1)))
         );
     }
 
@@ -439,29 +440,29 @@ mod tests {
 
     #[test]
     fn test_tokenize_valid() {
-        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
+        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize("100"),
-            (Token::Operand(Number::NaturalNumber(100)))
+            Some(Token::Operand(Number::NaturalNumber(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            (Token::Operand(Number::DecimalNumber(3.14)))
+            Some(Token::Operand(Number::DecimalNumber(3.14)))
         );
-        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
+        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }
 
     #[test]
     fn test_tokenize_vec_valid() {
-        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
+        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize("100"),
-            Token::Operand(Number::NaturalNumber(100))
+            Some(Token::Operand(Number::NaturalNumber(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Token::Operand(Number::DecimalNumber(3.14))
+            Some(Token::Operand(Number::DecimalNumber(3.14)))
         );
-        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
+        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }
 }

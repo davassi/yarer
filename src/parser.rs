@@ -21,7 +21,7 @@ impl Parser {
         let vex: Vec<Token<'_>> = EXPRESSION_REGEX
             .find_iter(expr)
             .map(|m| m.as_str())
-            .map(Token::tokenize)
+            .filter_map(|s| Token::tokenize(s))
             .collect();
 
         Self::mod_unary_operators(&vex)
