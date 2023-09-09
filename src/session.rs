@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
@@ -24,14 +24,18 @@ impl Session {
     ///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
     ///  ```
     ///
-    #[must_use] pub fn init() -> Session {
-       // let variable_heap: HashMap<String, Number> = ;
-        Session { variable_heap: Rc::new(RefCell::new(Session::init_local_heap())) }
+    #[must_use]
+    pub fn init() -> Session {
+        // let variable_heap: HashMap<String, Number> = ;
+        Session {
+            variable_heap: Rc::new(RefCell::new(Session::init_local_heap())),
+        }
     }
 
     /// The [`RpnResolver`] single line builder. Needs the math expression to process
     ///
-    #[must_use] pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
+    #[must_use]
+    pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
         let clone = self.variable_heap.clone();
         RpnResolver::parse_with_borrowed_heap(line, clone)
     }
@@ -56,7 +60,8 @@ impl Session {
     /// ``
     ///
     pub fn set(&self, key: &str, value: i32) {
-        self.variable_heap.borrow_mut()
+        self.variable_heap
+            .borrow_mut()
             .insert(key.to_string(), Number::NaturalNumber(value));
     }
 
@@ -68,8 +73,8 @@ impl Session {
     /// ``
     ///
     pub fn setf(&self, key: &str, value: f64) {
-        self.variable_heap.borrow_mut()
+        self.variable_heap
+            .borrow_mut()
             .insert(key.to_string(), Number::DecimalNumber(value));
     }
-
 }

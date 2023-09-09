@@ -1,4 +1,3 @@
-
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
@@ -90,5 +89,3 @@ fn main() -> Result<()> {
     let _ = rl.save_history(HISTORY_FILE);
     Ok(())
 }
-
- 

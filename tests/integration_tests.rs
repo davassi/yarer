@@ -96,20 +96,15 @@ fn test_programmatic() {
 
 #[test]
 fn test_sharing_session() {
-
     let session = Session::init();
-    
+
     let mut res = session.build_resolver_for("x ^ 2");
     let mut res2 = session.build_resolver_for("x! - (x-1)!");
 
-    session.set("x",10);
-   
-    if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
+    session.set("x", 10);
+
+    if let (Ok(a), Ok(b)) = (res.resolve(), res2.resolve()) {
         assert!(i32::from(a) == 100);
-        assert!(i32::from(b) == 3265920); 
+        assert!(i32::from(b) == 3265920);
     }
-    
 }
-
-
-

@@ -1,9 +1,8 @@
-
-use crate::token::{self, Token, Operator};
+use crate::token::{self, Operator, Token};
 
 use log::debug;
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
 
 /// The Parser has 2 primary functions:
 /// to parse the math expression with a Regex and to tokenise the math &str expression

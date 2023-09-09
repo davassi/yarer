@@ -4,7 +4,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
-use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell};
+use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell, fmt::Display};
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
@@ -227,9 +227,7 @@ impl RpnResolver<'_> {
                         .or_insert(token::ZERO);
                 },
             }
-            debug!("Inspecting... {} - OUT {} - OP - {}", *t, 
-                postfix_stack.iter().map(ToString::to_string).collect::<String>(),
-                operators_stack.iter().map(ToString::to_string).collect::<String>());
+            debug!("Inspecting... {} - OUT {} - OP - {}", *t, DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack));
         };
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
@@ -237,20 +235,26 @@ impl RpnResolver<'_> {
         postfix_stack.extend(operators_stack.iter());
 
         debug!(
-            "Inspecting... EOF - OUT {} - OP - {}",
-            postfix_stack
-                .iter()
-                .map(ToString::to_string)
-                .collect::<String>(),
-            operators_stack
-                .iter()
-                .map(ToString::to_string)
-                .collect::<String>()
+            "Inspecting... EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
         );
 
         (postfix_stack, local_heap)
     }
+}
 
+struct DisplayThatVec<'a>(&'a Vec<Token<'a>>);
+struct DisplayThisDeque<'a>(&'a VecDeque<Token<'a>>);
+
+impl Display for DisplayThatVec<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
+    }
+}
+
+impl Display for DisplayThisDeque<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
+    }
 }
 
 #[cfg(test)]
