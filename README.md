@@ -17,8 +17,9 @@ Example of usage of the library:
 ```rust
       let session = Session::init();
       let exp = "atan(cos(10 + e) + 3 * sin(9 / 3))^2";
+
       let mut resolver = session.build_resolver_for(&exp);
-      println!("The result of {} is {}", exp, resolver.resolve());
+      println!("The result is {}", resolver.resolve());
 ```
 
 All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
@@ -27,8 +28,8 @@ The library just returns a variant natural number, or a decimal number if one ex
 Yarer handles variables and functions. Here an example:
 
 ```rust
-      let session: Session = Session::init();
-      let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
+      let session = Session::init();
+      let mut resolver = session.build_resolver_for("1/cos(x^2)");
 
       session.set("x",1);
       println!("The result is {}", resolver.resolve());
