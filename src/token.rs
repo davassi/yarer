@@ -1,19 +1,21 @@
 use std::{
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
+    str::FromStr,
 };
 
+use bigdecimal::BigDecimal;
 use log::debug;
 
 /// Enum Type [Number]. Either an i32 integer [`Number::NaturalNumber`]
 /// or a f64 float [`Number::DecimalNumber`]
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Number {
     /// an Integer [i32]
     NaturalNumber(i32),
     /// a Float [f64]
-    DecimalNumber(f64),
+    DecimalNumber(BigDecimal),
 }
 
 /// A binary or unary Math [`Operator`]
@@ -72,7 +74,7 @@ pub enum Bracket {
 /// [`Token::Function`] as sin,cos,tan,ln ...
 /// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token<'a> {
     /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
@@ -182,10 +184,8 @@ impl Token<'_> {
     ///
     #[must_use]
     pub fn tokenize(t: &str) -> Option<Token> {
-
         match t.chars().next() {
-            Some(s) => match s
-            {
+            Some(s) => match s {
                 c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => {
                     return Some(Token::from_operator(c).unwrap())
                 }
@@ -199,7 +199,7 @@ impl Token<'_> {
             return Some(Token::Operand(Number::NaturalNumber(v)));
         }
 
-        if let Ok(v) = t.parse::<f64>() {
+        if let Ok(v) = BigDecimal::from_str(&t) {
             return Some(Token::Operand(Number::DecimalNumber(v)));
         }
 
@@ -261,7 +261,7 @@ where
     match (ln, rn) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(f64::from(v1), v2))
+            Number::DecimalNumber(df(BigDecimal::from(v1), v2))
         }
         (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
     }

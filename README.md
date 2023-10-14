@@ -16,9 +16,8 @@ Example of usage of the library:
 
 ```rust
       let session = Session::init();
-      let exp = "atan(cos(10 + e) + 3 * sin(9 / 3))^2";
+      let mut resolver = session.process("atan(cos(10+e)+3*sin(9/3))^2");
 
-      let mut resolver = session.build_resolver_for(&exp);
       println!("The result is {}", resolver.resolve());
 ```
 
@@ -63,8 +62,8 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       $ yarer
       Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
       License MIT OR Apache-2.0
-      > (1+9)*(8+2)
-      100
+      > (1+9)*(8+2)+0!
+      101
       > (1./2)+atan(10)
       1.1483608274590869
       > x=10
@@ -90,8 +89,8 @@ From Yarer version 0.1.5 it's possible to share a single session, and therefore 
 ```rust
     let session = Session::init();
     
-    let mut res = session.build_resolver_for("x ^ 2");
-    let mut res2 = session.build_resolver_for("x! - (x-1)!");
+    let mut res = session.process("x ^ 2");
+    let mut res2 = session.process("x! - (x-1)!");
 
     session.set("x", 10);
    

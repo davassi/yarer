@@ -27,6 +27,7 @@ env_logger = "0.10.0"
 anyhow = "1.0.72"
 thiserror = "1.0.44"
 lazy_static = "1.4"
+bigdecimal = "0.4"
 
 [profile.release]
 opt-level = 3
