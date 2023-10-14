@@ -1,21 +1,19 @@
 use std::{
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
-    str::FromStr,
 };
 
-use bigdecimal::BigDecimal;
 use log::debug;
 
 /// Enum Type [Number]. Either an i32 integer [`Number::NaturalNumber`]
 /// or a f64 float [`Number::DecimalNumber`]
 ///
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Number {
     /// an Integer [i32]
     NaturalNumber(i32),
     /// a Float [f64]
-    DecimalNumber(BigDecimal),
+    DecimalNumber(f64),
 }
 
 /// A binary or unary Math [`Operator`]
@@ -74,7 +72,7 @@ pub enum Bracket {
 /// [`Token::Function`] as sin,cos,tan,ln ...
 /// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {
     /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
@@ -199,7 +197,7 @@ impl Token<'_> {
             return Some(Token::Operand(Number::NaturalNumber(v)));
         }
 
-        if let Ok(v) = BigDecimal::from_str(&t) {
+        if let Ok(v) = t.parse::<f64>() {
             return Some(Token::Operand(Number::DecimalNumber(v)));
         }
 
@@ -261,7 +259,7 @@ where
     match (ln, rn) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(BigDecimal::from(v1), v2))
+            Number::DecimalNumber(df(f64::from(v1), v2))
         }
         (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
     }
