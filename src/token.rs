@@ -182,10 +182,8 @@ impl Token<'_> {
     ///
     #[must_use]
     pub fn tokenize(t: &str) -> Option<Token> {
-
         match t.chars().next() {
-            Some(s) => match s
-            {
+            Some(s) => match s {
                 c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => {
                     return Some(Token::from_operator(c).unwrap())
                 }

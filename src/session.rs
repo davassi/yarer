@@ -21,7 +21,7 @@ impl Session {
     ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
     ///      let mut session = Session::init();
-    ///      let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+    ///      let mut resolver: RpnResolver = session.process(&exp);
     ///  ```
     ///
     #[must_use]
@@ -35,7 +35,7 @@ impl Session {
     /// The [`RpnResolver`] single line builder. It needs the math expression to process
     ///
     #[must_use]
-    pub fn build_resolver_for<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
+    pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
         let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
         RpnResolver::parse_with_borrowed_heap(line, clone)
     }

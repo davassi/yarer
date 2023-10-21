@@ -33,7 +33,7 @@ The internal flow is conceptually pretty simple:
  ```
      let exp = "4 + 4 * 2 / ( 1 - 5 )";
      let mut session = Session::init();
-     let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+     let mut resolver: RpnResolver = session.process(&exp);
 
      let result: token::Number = resolver.resolve().unwrap();
      println!("The result of {} is {}", exp, result);
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
 
                 let _ = rl.add_history_entry(line.as_str());
 
-                let mut resolver: RpnResolver = session.build_resolver_for(&line);
+                let mut resolver: RpnResolver = session.process(&line);
 
                 match resolver.resolve() {
                     Ok(value) => println!("{}", value),
