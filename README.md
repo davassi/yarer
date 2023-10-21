@@ -28,7 +28,7 @@ Yarer handles variables and functions. Here an example:
 
 ```rust
       let session = Session::init();
-      let mut resolver = session.build_resolver_for("1/cos(x^2)");
+      let mut resolver = session.process("1/cos(x^2)");
 
       session.set("x",1);
       println!("The result is {}", resolver.resolve());
