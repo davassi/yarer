@@ -10,7 +10,7 @@
 //!
 //!     let exp = "((10 + 5) - 3 * ( 9 / 3 )) + 2";
 //!     let session = Session::init();
-//!     let mut resolver: RpnResolver = session.build_resolver_for(&exp);
+//!     let mut resolver: RpnResolver = session.process(&exp);
 //!
 //!     let result: Number = resolver.resolve().unwrap();
 //!     println!("The result of {} is {}", exp, result);
@@ -25,7 +25,7 @@
 //! # use yarer::{rpn_resolver::RpnResolver, session::Session};
 //!
 //! let session: Session = Session::init();
-//! let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
+//! let mut resolver: RpnResolver = session.process("1/cos(x^2)");
 //! session.set("x",1);
 //!
 //! println!("The result is {}", resolver.resolve().unwrap());
@@ -36,7 +36,7 @@
 //! ```
 //! # use yarer::{rpn_resolver::RpnResolver, session::Session};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
+//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
 //!
 //! session.set("x",-1);
 //! println!("The result is {}", resolver.resolve().unwrap());
@@ -50,7 +50,7 @@
 //! ```
 //! # use yarer::{rpn_resolver::RpnResolver, session::Session, token::Number};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.build_resolver_for("1/cos(x^2)");
+//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
 //!
 //! let result: Number = resolver.resolve().unwrap();
 //!
