@@ -208,9 +208,6 @@ impl Token<'_> {
         Some(Token::Variable(t))
     }
 
-    /// Mapping a vec of str in a vec of Tokens
-    ///
-
     /// Founding out the priority and the associative precedence of an operator
     ///
     fn operator_priority(o: Token) -> (u8, Associate) {
@@ -242,6 +239,8 @@ impl Token<'_> {
     }
 }
 
+/// Let's diplay a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
+///
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match *self {
@@ -251,6 +250,17 @@ impl Display for Number {
     }
 }
 
+/// The main operational functional closure. It handles 4 different cases:
+///
+/// 1. Natural (op) Natural returns Natural
+/// 2. Natural (op) Decimal returns Decimal
+/// 3. Decimal (op) Decimal returns Decimal
+/// 4. Decimal (op) Natural returns Decimal
+///
+/// (op) can be [Add], [Mul], [Sub], [Div], [BitXor], ...
+///
+/// We define 2 closures: 1 specialised for Natural Numbers and the other one specialised for Decimals.
+///
 fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf: NF, df: DF) -> Number
 where
     NF: Fn(i32, i32) -> i32,
@@ -311,6 +321,8 @@ impl BitXor for Number {
     }
 }
 
+/// PartialOrd between [Number]s with the required conversions.
+///
 impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (*self, *other) {
@@ -340,7 +352,7 @@ impl From<Number> for i32 {
     fn from(n: Number) -> i32 {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => v as i32,
+            Number::DecimalNumber(v) => v as i32, // not good
         }
     }
 }
