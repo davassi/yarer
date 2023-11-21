@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 
     if !cli.quiet {
         println!(
-            "Yarer v.{} - Yet Another (Rusty||Rpn) Expression Resolver.",
+            "Yarer v.{} - Yet Another Rust Expression Resolver.",
             VERSION
         );
         println!("License MIT OR Apache-2.0");
