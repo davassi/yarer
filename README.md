@@ -1,5 +1,5 @@
 
-YARER - Rpn Resolver
+YARER - The math expression Resolver
 ===========================
 
 [<img alt="github" src="https://img.shields.io/badge/github-davassi/davassi?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/davassi/yarer)
@@ -10,19 +10,19 @@ YARER - Rpn Resolver
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
+Yarer (Yet Another Rust Expression Resolver) is a library for resolving mathematical expressions. Internally it uses the shunting yard algorithm.
 
 Example of usage of the library:
 
 ```rust
       let session = Session::init();
-      let mut resolver = session.process("atan(cos(10+e)+3*sin(9/3))^2");
+      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2" 
 
       println!("The result is {}", resolver.resolve());
 ```
 
-All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
-The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
+All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
+The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or is present a trigonometric function (i.e. 1/cos(x+1)).
 
 Yarer handles variables and functions. Here an example:
 
@@ -60,7 +60,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 
 ```rust
       $ yarer
-      Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
+      Yarer v.0.1.1 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
