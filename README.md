@@ -10,13 +10,13 @@ YARER - Rpn Resolver
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
+Yarer (Yet Another Rust Expression Resolver) is a library for resolving mathematical expressions. Internally it uses the shunting yard algorithm.
 
 Example of usage of the library:
 
 ```rust
       let session = Session::init();
-      let mut resolver = session.process("atan(cos(10+e)+3*sin(9/3))^2");
+      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2" 
 
       println!("The result is {}", resolver.resolve());
 ```
