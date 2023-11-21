@@ -21,8 +21,8 @@ Example of usage of the library:
       println!("The result is {}", resolver.resolve());
 ```
 
-All that's needed is to create a new instance of the RpnResolver and hand over the expression to be analysed.
-The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
+All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
+The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or is present a trigonometric function (i.e. 1/cos(x+1)).
 
 Yarer handles variables and functions. Here an example:
 
@@ -60,7 +60,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 
 ```rust
       $ yarer
-      Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
+      Yarer v.0.1.1 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
