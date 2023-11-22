@@ -27,6 +27,7 @@ env_logger = "0.10.0"
 anyhow = "1.0.72"
 thiserror = "1.0.44"
 lazy_static = "1.4"
+dirs = "5.0.1"
 
 [profile.release]
 opt-level = 3
