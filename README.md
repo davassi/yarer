@@ -51,9 +51,9 @@ The result can be simply casted into a i32 or a f64 (if decimal) simply with
 ```rust
       let result: Number = resolver.resolve().unwrap();
 
-      let int : i32 = i32::from(result);
+      let int : i32 = result.into();
       // or
-      let float : f64 = f64::from(result);
+      let float : f64 = result.into();
 ```
 
 Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
@@ -82,6 +82,19 @@ Yarer can be used also from command line, and behaves in a very similar manner t
       > 9801/(2206*sqrt(2)) // approx of PI
       3.1415927300133055
       
+```
+## News and Updates
+
+Starting with Yarer version 0.1.7, natural numbers are implemented internally using [BigInt](https://crates.io/crates/num-bigint) from the [num crate](https://crates.io/crates/num). Now it is possible to do calculations with arbitrarily large natural numbers.
+
+```rust
+    $ yarer
+      Yarer v.0.1.1 - Yet Another Rust Expression Resolver.
+      License MIT OR Apache-2.0
+      > 78!
+      1132428117820629783145752115873204622873174957948825.....
+      > 2^78
+      302231454903657293676544
 ```
 
 From Yarer version 0.1.5 it's possible to share a single session, and therefore a single heap of variables, for multiple resolvers. The library is not intended to be thread-safe.
