@@ -1,10 +1,11 @@
 use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell, fmt::Display};
 use crate::{
     parser::Parser,
-    token::{self, MathFunction, Number, Operator, Token, ZERO},
+    token::{self, MathFunction, Number, Operator, Token},
 };
 use anyhow::anyhow;
 use log::debug;
+use num::{BigInt, One, ToPrimitive, Zero};
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
@@ -22,6 +23,7 @@ pub struct RpnResolver<'a> {
 }
 
 impl RpnResolver<'_> {
+  
     /// Generates a new [`RpnResolver`] instance with borrowed heap
     ///
     pub fn parse_with_borrowed_heap<'a>(
@@ -41,6 +43,10 @@ impl RpnResolver<'_> {
     /// This method evaluates the rpn expression stack
     ///
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
+
+        let zero: Number = Number::NaturalNumber(Zero::zero());
+        let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
+      
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
         let mut last_var_ref: Option<&str> = None;
@@ -48,7 +54,7 @@ impl RpnResolver<'_> {
         for t in &self.rpn_expr {
             match t {
                 Token::Operand(n) => {
-                    result_stack.push_back(*n);
+                    result_stack.push_back(n.clone());
                 }
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
@@ -60,7 +66,7 @@ impl RpnResolver<'_> {
                             .pop_back()
                             .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand."))?
                     } else {
-                        ZERO
+                        zero.clone()
                     };
 
                     match op {
@@ -68,15 +74,15 @@ impl RpnResolver<'_> {
                         Operator::Sub => result_stack.push_back(left_value - right_value),
                         Operator::Mul => result_stack.push_back(left_value * right_value),
                         Operator::Div => {
-                            if right_value == ZERO {
+                            if right_value == zero {
                                 return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
                             left_value = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value);
                         }
                         Operator::Pow => {
-                            if right_value < ZERO {
-                                if left_value == ZERO {
+                            if right_value < zero {
+                                if left_value == zero {
                                     return Err(anyhow!(DIVISION_ZERO_ERR));
                                 }
                                 left_value = Number::DecimalNumber(left_value.into());
@@ -86,8 +92,8 @@ impl RpnResolver<'_> {
                         Operator::Eql => {
                             if let Some(var) = last_var_ref {
                                 self.local_heap.borrow_mut()
-                                    .insert(var.to_string(), right_value);
-                                debug!("Heap {:?}", self.local_heap);
+                                    .insert(var.to_string(), right_value.clone());
+                                
                                 result_stack.push_back(right_value);
                             } else {
                                 return Err(anyhow!(NO_VARIABLE_ERR));
@@ -95,15 +101,16 @@ impl RpnResolver<'_> {
                         }
                         Operator::Fac => {
                             // factorial. Only for natural numbers
-                            let v = i32::from(right_value);
-                            if v<0 {
-                                println!("Warning: Factorial of a Negative or Decimal number has not been yet implemented.");
+                            let v = BigInt::from(right_value);
+                            if v.partial_cmp(&Zero::zero()) == Some(std::cmp::Ordering::Less) {
+                                eprintln!("Warning: Factorial of a Negative or Decimal number has not been yet implemented.");
                             }
-                            result_stack.push_back(Number::NaturalNumber((1..=v).product()));
+                            let res = Self::factorial_helper(v);
+                            result_stack.push_back(Number::NaturalNumber(res));
                         }
                         Operator::Une => {
                             //# unary neg
-                            result_stack.push_back(right_value * token::MINUS_ONE);
+                            result_stack.push_back(right_value * minus_one.clone());
                         }
                     }
                 }
@@ -114,7 +121,7 @@ impl RpnResolver<'_> {
                     let n = heap
                         .get(*v)
                         .unwrap_or(&Number::DecimalNumber(0.));
-                    result_stack.push_back(*n);
+                    result_stack.push_back(n.clone());
                 }
                 Token::Function(fun) => {
                     let value: Number = result_stack
@@ -165,14 +172,13 @@ impl RpnResolver<'_> {
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
 
         /* Scan the infix expression from left to right. */
-        //infix_stack.iter().for_each(|t: &Token| {
         for t in infix_stack {
             match *t {
                 /* If the token is an operand, add it to the output list. */
-                Token::Operand(_) => postfix_stack.push_back(*t),
+                Token::Operand(_) => postfix_stack.push_back(t.clone()),
 
                 /* If the token is a left parenthesis, push it on the stack. */
-                Token::Bracket(token::Bracket::Open) => operators_stack.push(*t),
+                Token::Bracket(token::Bracket::Open) => operators_stack.push(t.clone()),
 
                 /* If the token is a right parenthesis:
                     Pop the stack and add operators to the output list until you encounter a left parenthesis.
@@ -194,37 +200,37 @@ impl RpnResolver<'_> {
                       pop op2 off the stack, onto the output list;
                     push op1 on the stack.*/
                 Token::Operator(_op) => {
-                    let op1: Token<'_> = *t;
+                    let op1: Token<'_> = t.clone();
 
                     while !operators_stack.is_empty() {
                         let op2: &Token = operators_stack.last().unwrap();
                         match op2 {
                             Token::Operator(_) => {
-                                if Token::compare_operator_priority(op1, *op2) {
-                                    postfix_stack.push_back(operators_stack.pop().unwrap());
+                                if Token::compare_operator_priority(op1.clone(), op2.clone()) {
+                                    postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
                                 } else {
                                     break;
                                 }
                             },
                             Token::Function(_) => {
-                                postfix_stack.push_back(operators_stack.pop().unwrap());
+                                postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
                             }
                             _ => break,
                         }
                     }
-                    operators_stack.push(op1);
+                    operators_stack.push(op1.clone());
                 },
 
                 Token::Function(_) => {
-                    operators_stack.push(*t);
+                    operators_stack.push(t.clone());
                 },
 
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => {
-                    postfix_stack.push_back(*t);
+                    postfix_stack.push_back(t.clone());
                     let s = s.to_lowercase();
                     local_heap.borrow_mut().entry(s) // let's not override consts
-                        .or_insert(token::ZERO);
+                        .or_insert(Number::NaturalNumber(Zero::zero()));
                 },
             }
             debug!("Inspecting... {} - OUT {} - OP - {}", *t, DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack));
@@ -232,13 +238,24 @@ impl RpnResolver<'_> {
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();
-        postfix_stack.extend(operators_stack.iter());
+        operators_stack.iter().for_each(|t| postfix_stack.push_back(t.clone()));
+        //postfix_stack.pop_front()
+        //postfix_stack.extend(operators_stack.iter());
 
         debug!(
             "Inspecting... EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
         );
 
         (postfix_stack, local_heap)
+    }
+
+    fn factorial_helper(n: BigInt) -> BigInt {
+        if n == Zero::zero(){
+            One::one()
+        } else {
+            n.checked_mul(&RpnResolver::factorial_helper(n.checked_sub(&One::one()).expect("It should not happen")))
+                .expect("It should not happen.")
+        }
     }
 }
 
@@ -259,19 +276,20 @@ impl Display for DisplayThisDeque<'_> {
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigInt;
     use super::*;
     use crate::token::{Number, Operator};
 
     #[test]
     fn test_reverse_polish_notation() {
         let a: Vec<Token> = vec![
-            Token::Operand(Number::NaturalNumber(1)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
             Token::Operator(Operator::Add),
-            Token::Operand(Number::NaturalNumber(2)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
         ];
         let b: Vec<Token> = vec![
-            Token::Operand(Number::NaturalNumber(1)),
-            Token::Operand(Number::NaturalNumber(2)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
+            Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
             Token::Operator(Operator::Add),
         ];
         assert_eq!(

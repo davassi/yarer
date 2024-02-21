@@ -2,16 +2,18 @@ use std::{
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
 };
-
+use num_bigint::BigInt;
+use num_traits::{Zero, FromPrimitive};
 use log::debug;
+use bigdecimal::ToPrimitive;
 
-/// Enum Type [Number]. Either an i32 integer [`Number::NaturalNumber`]
+/// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
 /// or a f64 float [`Number::DecimalNumber`]
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Number {
-    /// an Integer [i32]
-    NaturalNumber(i32),
+    /// an Integer [BigInt]
+    NaturalNumber(BigInt),
     /// a Float [f64]
     DecimalNumber(f64),
 }
@@ -72,7 +74,7 @@ pub enum Bracket {
 /// [`Token::Function`] as sin,cos,tan,ln ...
 /// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Token<'a> {
     /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
@@ -115,11 +117,6 @@ pub enum MathFunction {
     /// Nope!
     None,
 }
-
-/// The [`ZERO`] static constant. It represents the '0' Natural Number
-pub static ZERO: crate::token::Number = Number::NaturalNumber(0);
-/// The [`MINUS_ONE`] static constant. It represents the '-1' Natural Number
-pub static MINUS_ONE: crate::token::Number = Number::NaturalNumber(-1);
 
 impl Token<'_> {
     /// Converts a char to a [`Token::Operator`]
@@ -193,7 +190,7 @@ impl Token<'_> {
             None => return None,
         }
 
-        if let Ok(v) = t.parse::<i32>() {
+        if let Ok(v) = t.parse::<BigInt>() {
             return Some(Token::Operand(Number::NaturalNumber(v)));
         }
 
@@ -239,11 +236,11 @@ impl Token<'_> {
     }
 }
 
-/// Let's diplay a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
+/// Let's display a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
 ///
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match self {
             Number::NaturalNumber(v) => write!(f, "{v}"),
             Number::DecimalNumber(v) => write!(f, "{v}"),
         }
@@ -263,13 +260,13 @@ impl Display for Number {
 ///
 fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf: NF, df: DF) -> Number
 where
-    NF: Fn(i32, i32) -> i32,
+    NF: Fn(BigInt, BigInt) -> BigInt,
     DF: Fn(f64, f64) -> f64,
 {
-    match (ln, rn) {
+    match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(f64::from(v1), v2))
+            Number::DecimalNumber(df(ToPrimitive::to_f64(&v1).expect("Should not happen"), v2))
         }
         (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
     }
@@ -315,7 +312,7 @@ impl BitXor for Number {
         apply_functional_token_operation(
             self,
             rhs,
-            |a, b| i32::pow(a, b.try_into().unwrap()),
+            |a, b| BigInt::pow(&a, b.try_into().unwrap()),
             f64::powf,
         )
     }
@@ -325,13 +322,13 @@ impl BitXor for Number {
 ///
 impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (*self, *other) {
+        match (self, other) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&v2),
             (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-                f64::from(v1).partial_cmp(&v2)
+                ToPrimitive::to_f64(v1).expect("Should not happen").partial_cmp(v2)
             }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-                v1.partial_cmp(&(f64::from(v2)))
+                v1.partial_cmp(&(ToPrimitive::to_f64(v2).expect("Should not happen")))
             }
             (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => v1.partial_cmp(&v2),
         }
@@ -341,18 +338,18 @@ impl PartialOrd for Number {
 impl From<Number> for f64 {
     fn from(n: Number) -> f64 {
         match n {
-            Number::NaturalNumber(v) => f64::from(v),
+            Number::NaturalNumber(v) => ToPrimitive::to_f64(&v).expect("Should not happen"),
             Number::DecimalNumber(v) => v,
         }
     }
 }
 
 #[allow(clippy::cast_possible_truncation)]
-impl From<Number> for i32 {
-    fn from(n: Number) -> i32 {
+impl From<Number> for BigInt {
+    fn from(n: Number) -> BigInt {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => v as i32, // not good
+            Number::DecimalNumber(v) => BigInt::from_f64(v).unwrap(), // not good
         }
     }
 }
@@ -389,7 +386,7 @@ impl Display for MathFunction {
 
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {
+        match self {
             Token::Operand(v) => write!(f, "({v})"),
             Token::Operator(v) => write!(f, "({v})"),
             Token::Bracket(v) => write!(f, "({v})"),
@@ -401,6 +398,8 @@ impl Display for Token<'_> {
 
 #[cfg(test)]
 mod tests {
+    use num::One;
+
     use super::*;
 
     #[test]
@@ -409,7 +408,7 @@ mod tests {
         assert_eq!(Token::tokenize(v[1]), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize(v[0]),
-            Some(Token::Operand(Number::NaturalNumber(1)))
+            Some(Token::Operand(Number::NaturalNumber(One::one())))
         );
         assert_eq!(
             Token::tokenize(v[2]),
@@ -453,7 +452,7 @@ mod tests {
         assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(100)))
+            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
         );
         assert_eq!(
             Token::tokenize("3.14"),
@@ -467,7 +466,7 @@ mod tests {
         assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(100)))
+            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
         );
         assert_eq!(
             Token::tokenize("3.14"),

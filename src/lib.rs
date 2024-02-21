@@ -54,7 +54,7 @@
 //!
 //! let result: Number = resolver.resolve().unwrap();
 //!
-//! let int : i32 = i32::from(result);
+//! let int : i32 = i32::from(&result);
 //! // or
 //! let float : f64 = f64::from(result);
 //! ```

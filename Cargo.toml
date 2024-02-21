@@ -27,6 +27,10 @@ env_logger = "0.11.2"
 anyhow = "1.0.72"
 thiserror = "1.0.44"
 lazy_static = "1.4"
+num = "0.4.1"
+num-bigint = "0.4.4"
+num-traits = "0.2.18"
+bigdecimal = "0.4.2"
 
 [profile.release]
 opt-level = 3

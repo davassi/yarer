@@ -5,13 +5,14 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 /// The Parser has 2 primary functions:
-/// to parse the math expression with a Regex and to tokenise the math &str expression
+/// to parse the math expression with a Regex and to tokenise the math &[str] expression
 ///
 #[derive(Debug)]
 pub struct Parser;
 
 static EXPRESSION_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)").unwrap());
+    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)")
+    .expect("Should compile regex"));
 
 impl Parser {
     /// Parses and splits a &str into a vec of &str with
@@ -33,10 +34,10 @@ impl Parser {
         let mut mod_vec: Vec<Token> = Vec::new();
         let mut expect_operand_next = true;
 
-        for &token in v {
+        for token in v {
             debug!("{}", token);
 
-            match token {
+            match &token {
                 Token::Operand(_) | Token::Variable(_) | Token::Operator(Operator::Fac) => {
                     expect_operand_next = false;
                 }
@@ -45,11 +46,11 @@ impl Parser {
                         debug!("-> Unary operator detected");
                         match o {
                             token::Operator::Add => {
-                                // an unary + is simply ignored.
+                                // an unary + can be simply ignored.
                                 continue;
                             }
                             token::Operator::Sub => {
-                                // an unary - is a special right-associative op with high precedence
+                                // an unary - is a special right-associative op with the highest precedence
                                 mod_vec.push(token::Token::Operator(token::Operator::Une));
                                 continue;
                             }
@@ -60,7 +61,7 @@ impl Parser {
                 }
                 _ => (),
             }
-            mod_vec.push(token);
+            mod_vec.push(token.clone());
         }
         mod_vec
     }
@@ -68,6 +69,7 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    use num_bigint::BigInt;
     use super::*;
     use crate::token::{Bracket, Number, Operator};
 
@@ -76,16 +78,16 @@ mod tests {
         assert_eq!(
             Parser::parse("1+2*3/(4-5)"),
             (vec![
-                Token::Operand(Number::NaturalNumber(1)),
+                Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
                 Token::Operator(Operator::Add),
-                Token::Operand(Number::NaturalNumber(2)),
+                Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
                 Token::Operator(Operator::Mul),
-                Token::Operand(Number::NaturalNumber(3)),
+                Token::Operand(Number::NaturalNumber(BigInt::from(3u8))),
                 Token::Operator(Operator::Div),
                 Token::Bracket(Bracket::Open),
-                Token::Operand(Number::NaturalNumber(4)),
+                Token::Operand(Number::NaturalNumber(BigInt::from(4u8))),
                 Token::Operator(Operator::Sub),
-                Token::Operand(Number::NaturalNumber(5)),
+                Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
                 Token::Bracket(Bracket::Close),
             ])
         );
@@ -101,10 +103,10 @@ mod tests {
             Token::Operator(Operator::Add),
             Token::Bracket(Bracket::Open),
             Token::Operator(Operator::Sub),
-            Token::Operand(Number::NaturalNumber(5)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
             Token::Operator(Operator::Mul),
             Token::Operator(Operator::Sub),
-            Token::Operand(Number::NaturalNumber(5)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
             Token::Bracket(Bracket::Close),
             Token::Bracket(Bracket::Close),
         ];
@@ -114,10 +116,10 @@ mod tests {
             Token::Bracket(Bracket::Open),
             Token::Bracket(Bracket::Open),
             Token::Operator(Operator::Une),
-            Token::Operand(Number::NaturalNumber(5)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
             Token::Operator(Operator::Mul),
             Token::Operator(Operator::Une),
-            Token::Operand(Number::NaturalNumber(5)),
+            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
             Token::Bracket(Bracket::Close),
             Token::Bracket(Bracket::Close),
         ];

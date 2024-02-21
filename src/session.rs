@@ -1,5 +1,6 @@
 
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use num_bigint::BigInt;
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
@@ -43,12 +44,10 @@ impl Session {
     /// Creates a Variables heap (name-value)
     ///
     fn init_local_heap() -> HashMap<String, Number> {
-        static PI: Number = Number::DecimalNumber(std::f64::consts::PI);
-        static E: Number = Number::DecimalNumber(std::f64::consts::E);
 
         let mut local_heap: HashMap<String, Number> = HashMap::new();
-        local_heap.insert("pi".to_string(), PI);
-        local_heap.insert("e".to_string(), E);
+        local_heap.insert("pi".to_string(), Number::DecimalNumber(std::f64::consts::PI));
+        local_heap.insert("e".to_string(), Number::DecimalNumber(std::f64::consts::E));
         local_heap
     }
 
@@ -59,10 +58,10 @@ impl Session {
     ///     session.set("foo", 42);
     /// ``
     ///
-    pub fn set(&self, key: &str, value: i32) {
+    pub fn set(&self, key: &str, value: i64) {
         self.variable_heap
             .borrow_mut()
-            .insert(key.to_string(), Number::NaturalNumber(value));
+            .insert(key.to_string(), Number::NaturalNumber(BigInt::from(value)));
     }
 
     /// Declares and saves a new float variable ([`Number::DecimalNumber`])
