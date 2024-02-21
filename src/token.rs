@@ -3,7 +3,7 @@ use std::{
     ops::{Add, BitXor, Div, Mul, Sub},
 };
 use num_bigint::BigInt;
-use num_traits::{Zero, FromPrimitive};
+use num_traits::FromPrimitive;
 use log::debug;
 use bigdecimal::ToPrimitive;
 
@@ -349,10 +349,38 @@ impl From<Number> for BigInt {
     fn from(n: Number) -> BigInt {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => BigInt::from_f64(v).unwrap(), // not good
+            Number::DecimalNumber(v) => BigInt::from_f64(v).expect("Should not happen"),
         }
     }
 }
+
+impl From<Number> for i32 {
+    fn from(n: Number) -> i32 {
+        match n {
+            Number::NaturalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"), // not good
+        }
+    }
+}
+
+impl From<Number> for i64 {
+    fn from(n: Number) -> i64 {
+        match n {
+            Number::NaturalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"), // not good
+        }
+    }
+}
+
+impl From<Number> for i128 {
+    fn from(n: Number) -> i128 {
+        match n {
+            Number::NaturalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"), // not good
+        }
+    }
+}
+
 
 impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
