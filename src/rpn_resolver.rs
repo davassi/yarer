@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
-use num::{BigInt, One, ToPrimitive, Zero};
+use num::{BigInt, One, Zero};
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
