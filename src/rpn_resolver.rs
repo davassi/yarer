@@ -1,16 +1,16 @@
+use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell, fmt::Display};
 use crate::{
     parser::Parser,
     token::{self, MathFunction, Number, Operator, Token, ZERO},
 };
 use anyhow::anyhow;
 use log::debug;
-use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell, fmt::Display};
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignent.";
 
-/// The main [`RpnResolver`]: contains the core logic of Yarer
+/// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
 ///
 /// It holds the tokenised expression (by the [`Parser`]) and

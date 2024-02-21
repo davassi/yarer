@@ -1,5 +1,5 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]

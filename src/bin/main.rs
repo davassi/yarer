@@ -22,7 +22,7 @@ The internal flow is conceptually straightforward:
 
  1 Yarer parses and converts a [str] into a vec of borrowed &[str]
  2 Then it maps a vec of &[str] into a vec of tokens
- 3 Then it converts the infix expression to postfix 
+ 3 Then it converts the infix expression to postfix
  4 Finally it resolves the expression.
 
  Point 1 and 2 are executed by the Parser, 3 and 4 by the RpnResolver
