@@ -1,9 +1,13 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
 use yarer::rpn_resolver::*;
 use yarer::session::*;
+
+use log::debug;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static HISTORY_FILE: &str = ".yarer_history";
@@ -52,7 +56,11 @@ fn main() -> Result<()> {
     }
 
     let mut rl = DefaultEditor::new()?;
-    let _ = rl.load_history(HISTORY_FILE);
+    let local_history = dirs::config_dir().unwrap_or(PathBuf::default()).join(HISTORY_FILE);
+    let local_history = local_history.as_os_str().to_str().unwrap_or(HISTORY_FILE);
+    debug!("Local history file: '{}'", local_history);
+
+    let _ = rl.load_history(local_history);
 
     let session = Session::init();
     loop {
@@ -86,6 +94,6 @@ fn main() -> Result<()> {
             }
         }
     }
-    let _ = rl.save_history(HISTORY_FILE);
+    let _ = rl.save_history(local_history);
     Ok(())
 }
