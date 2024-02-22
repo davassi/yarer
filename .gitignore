@@ -3,3 +3,4 @@ Cargo.lock
 /.vscode
 .yarer_history
 /vendor
+.idea

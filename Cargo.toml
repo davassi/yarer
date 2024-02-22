@@ -1,6 +1,6 @@
 [package]
 name = "yarer"
-version = "0.1.7"
+version = "0.1.8"
 description = "Yarer (Yet Another Rust Expression Resolver) is a library for resolving mathematical expressions. Internally it uses the shunting yard algorithm."
 repository = "https://github.com/davassi/yarer"
 homepage = "https://github.com/davassi/yarer"
@@ -21,13 +21,17 @@ keywords = [
 clap = { version = "4.4.2", features = ["derive"] }
 once_cell = "1.18.0"
 regex = "1.9.3"
-rustyline = "12.0.0"
+rustyline = "13.0.0"
 log = "0.4"
-env_logger = "0.10.0"
+env_logger = "0.11.2"
 anyhow = "1.0.72"
 thiserror = "1.0.44"
 lazy_static = "1.4"
 dirs = "5.0.1"
+num = "0.4.1"
+num-bigint = "0.4.4"
+num-traits = "0.2.18"
+bigdecimal = "0.4.2"
 
 [profile.release]
 opt-level = 3

@@ -1,3 +1,4 @@
+use num::BigInt;
 use yarer::rpn_resolver::*;
 use yarer::session::Session;
 use yarer::token::*;
@@ -14,7 +15,7 @@ macro_rules! resolve {
 fn test_expressions() {
     resolve!(
         "(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4",
-        Number::NaturalNumber(-122)
+        Number::NaturalNumber(BigInt::from(-122))
     );
     resolve!("3 * 2^3 + 6 / (2 + 1)", Number::DecimalNumber(26.0));
     resolve!(
@@ -41,7 +42,7 @@ fn test_expressions() {
             8.0 * std::f64::consts::PI + std::f64::consts::PI / 2.0 - std::f64::consts::E
         )
     );
-    resolve!("2 ^ 3 ^ 2", Number::NaturalNumber(512));
+    resolve!("2 ^ 3 ^ 2", Number::NaturalNumber(BigInt::from(512)));
     resolve!("ln(e^2) - log10(1000)", Number::DecimalNumber(2.));
     resolve!(
         "pi^2 - e^2",
@@ -51,23 +52,23 @@ fn test_expressions() {
     );
     resolve!(
         "(2 + 3) * (3 + 4) - (4 + 5) * (5 + 6)",
-        Number::NaturalNumber(-64)
+        Number::NaturalNumber(BigInt::from(-64))
     );
     resolve!(
         "tan(0) * sin(pi) + cos(pi / 2)",
         Number::DecimalNumber(6.123233995736766e-17)
     );
-    resolve!("2^2^2 - 3^3", Number::NaturalNumber(-11));
-    resolve!("(2 + 3 * 4 + 5) * 2", Number::NaturalNumber(38));
-    resolve!("4! - 3!", Number::NaturalNumber(18));
-    resolve!("(2^3 + 3^2) * 4", Number::NaturalNumber(68));
+    resolve!("2^2^2 - 3^3", Number::NaturalNumber(BigInt::from(-11)));
+    resolve!("(2 + 3 * 4 + 5) * 2", Number::NaturalNumber(BigInt::from(38)));
+    resolve!("4! - 3!", Number::NaturalNumber(BigInt::from(18)));
+    resolve!("(2^3 + 3^2) * 4", Number::NaturalNumber(BigInt::from(68)));
     resolve!("e * pi - pi * e", Number::DecimalNumber(0.0));
     resolve!(
         "(2 + 3) * (4 - 5) + (6 - 7) * (8 + 9)",
-        Number::NaturalNumber(-22)
+        Number::NaturalNumber(BigInt::from(-22))
     );
     resolve!("ln(e^3) / log10(1000)", Number::DecimalNumber(3.));
-    resolve!("(2^2 + 3^2) * (4^2 + 5^2)", Number::NaturalNumber(533));
+    resolve!("(2^2 + 3^2) * (4^2 + 5^2)", Number::NaturalNumber(BigInt::from(533)));
     resolve!(
         "pi*e*(pi-e)",
         Number::DecimalNumber(
@@ -90,7 +91,7 @@ fn test_programmatic() {
         let result: Number = resolver.resolve().unwrap();
 
         println!("{}^2={}", i, result);
-        assert!(i32::from(result) == (i * i));
+        assert!(result == Number::NaturalNumber(BigInt::from(i * i)));
     }
 }
 
@@ -104,7 +105,9 @@ fn test_sharing_session() {
     session.set("x", 10);
 
     if let (Ok(a), Ok(b)) = (res.resolve(), res2.resolve()) {
-        assert!(i32::from(a) == 100);
-        assert!(i32::from(b) == 3265920);
+        assert!(a == Number::NaturalNumber(BigInt::from(100)));
+
+        let b : i64 = b.into(); 
+        assert!(b == 3265920i64);
     }
 }
