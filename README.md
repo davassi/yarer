@@ -60,7 +60,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 
 ```rust
       $ yarer
-      Yarer v.0.1.1 - Yet Another Rust Expression Resolver.
+      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
@@ -89,7 +89,7 @@ Starting with Yarer version 0.1.7, natural numbers are implemented internally us
 
 ```rust
     $ yarer
-      Yarer v.0.1.1 - Yet Another Rust Expression Resolver.
+      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > 78!
       1132428117820629783145752115873204622873174957948825.....
