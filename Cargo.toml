@@ -10,11 +10,11 @@ authors = ["Davassi <gianluigi.davassi@gmail.com>"]
 categories = ["command-line-interface","algorithms","mathematics","parsing"]
 readme = "README.md"
 keywords = [
-  "rpn",
+  "evaluator",
   "math",
   "parser",
   "expression",
-  "calculator",
+  "resolver",
 ]
 
 [dependencies]
