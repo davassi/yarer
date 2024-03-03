@@ -10,7 +10,7 @@ YARER - The math expression Evaluator
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 [![Project Status: Active – The project has reached a stable, usable state and is being actively developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-Yarer (Yet Another Rust Expression Resolver) is a library for resolving mathematical expressions. Internally it uses the shunting yard algorithm.
+Yarer (Yet Another Rust Expression Resolver) is a library for evaluating mathematical expressions. Internally it uses the shunting yard algorithm.
 
 ## Usage
 
