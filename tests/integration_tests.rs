@@ -23,6 +23,10 @@ fn test_expressions() {
         Number::DecimalNumber(std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI))
     );
     resolve!(
+        "2^3 * 4 + 5^2",
+        Number::NaturalNumber(BigInt::from(8 * 4 + 25))
+    );
+    resolve!(
         "sin(pi / 4) + cos(pi / 4)",
         Number::DecimalNumber(1.414213562373095)
     ); // Approximately sqrt(2)
@@ -78,6 +82,10 @@ fn test_expressions() {
         )
     );
     resolve!("((10 + 5) - 3 * ( 9 / 3 )) + 2", Number::DecimalNumber(8.0));
+    resolve!(
+        "2^3^2 - 3^3",
+        Number::NaturalNumber(BigInt::from(512 - 27))
+    );
 }
 
 #[test]
@@ -110,4 +118,12 @@ fn test_sharing_session() {
         let b : i64 = b.into(); 
         assert!(b == 3265920i64);
     }
+}
+
+#[test]
+fn test_session_set() {
+    let session = Session::init();
+    session.set("x", 4);
+    let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
+    assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
 }

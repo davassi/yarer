@@ -502,4 +502,36 @@ mod tests {
         );
         assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }
+
+    #[test]
+    fn test_operator_priority() {
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Add)),
+            (1, Associate::LeftAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Sub)),
+            (1, Associate::LeftAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Mul)),
+            (2, Associate::LeftAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Div)),
+            (2, Associate::LeftAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Pow)),
+            (3, Associate::RightAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Une)),
+            (4, Associate::RightAssociative)
+        );
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Fac)),
+            (5, Associate::LeftAssociative)
+        );
+    }
 }

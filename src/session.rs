@@ -77,3 +77,25 @@ impl Session {
             .insert(key.to_string(), Number::DecimalNumber(value));
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::token::Number;
+
+    #[test]
+    fn test_session() {
+        let session = Session::init();
+        let mut resolver: RpnResolver = session.process("1+2*3/(4-5)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-5.0));
+    }
+
+    #[test]
+    fn test_session_set() {
+        let session = Session::init();
+        session.set("x", 4);
+        let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
+    }
+}
