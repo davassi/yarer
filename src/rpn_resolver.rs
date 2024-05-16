@@ -193,12 +193,6 @@ impl RpnResolver<'_> {
                     }
                 },
 
-                /* If the token is an operator, op1, then:
-                   while there is an operator, op2, at the top of the stack, and op1 is left-associative 
-                   and its precedence is less than or equal to that of op2, 
-                   or op1 is right-associative and its precedence is less than that of op2:
-                      pop op2 off the stack, onto the output list;
-                    push op1 on the stack.*/
                 Token::Operator(_op) => {
                     let op1: Token<'_> = t.clone();
 
@@ -239,23 +233,22 @@ impl RpnResolver<'_> {
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();
         operators_stack.iter().for_each(|t| postfix_stack.push_back(t.clone()));
-        //postfix_stack.pop_front()
-        //postfix_stack.extend(operators_stack.iter());
-
+        
         debug!(
-            "Inspecting... EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
+            "DEBUG: EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
         );
 
         (postfix_stack, local_heap)
     }
 
     fn factorial_helper(n: BigInt) -> BigInt {
-        if n == Zero::zero(){
-            One::one()
-        } else {
-            n.checked_mul(&RpnResolver::factorial_helper(n.checked_sub(&One::one()).expect("It should not happen")))
-                .expect("It should not happen.")
+        if n == BigInt::zero() {
+            return BigInt::one();
         }
+    
+        let previous = n.checked_sub(&BigInt::one()).expect("Subtraction underflow");
+        let sub_result = RpnResolver::factorial_helper(previous);
+        n.checked_mul(&sub_result).expect("Multiplication overflow")
     }
 }
 
@@ -297,4 +290,23 @@ mod tests {
             b
         );
     }
+
+    #[test]
+    fn test_factorial() {
+        assert_eq!(RpnResolver::factorial_helper(BigInt::from(5)), BigInt::from(120));
+    }
+
+    #[test]
+    fn test_resolve() {
+        let mut resolver = RpnResolver {
+            rpn_expr: VecDeque::from(vec![
+                Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
+                Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
+                Token::Operator(Operator::Add),
+            ]),
+            local_heap: Rc::new(RefCell::new(HashMap::new())),
+        };
+        assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(3u8)));
+    }
+
 }
