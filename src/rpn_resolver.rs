@@ -7,25 +7,26 @@ use anyhow::anyhow;
 use log::debug;
 use num::{BigInt, One, Zero};
 
-static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
-static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
-static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignent.";
+static ERR_MALFORMED_EXPR: &str = "Runtime Error: The mathematical expression is malformed.";
+static ERR_DIVISION_ZERO_ERR: &str = "Runtime error: Division by zero.";
+static ERR_NO_VARIABLE_DEFINED: &str = "Runtime error: No variable has been defined for assignent.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
 ///
 /// It holds the tokenised expression (by the [`Parser`]) and
 /// a heap of local variables borrowed from a [`Session`]
-///
 pub struct RpnResolver<'a> {
+    /// The final RPN expression ready for evaluation.
     rpn_expr: VecDeque<Token<'a>>,
+
+    /// Shared variable map (borrowed from a [`Session`]).
     local_heap: Rc<RefCell<HashMap<String, Number>>>,
 }
 
 impl RpnResolver<'_> {
   
-    /// Generates a new [`RpnResolver`] instance with borrowed heap
-    ///
+    /// Creates a new [`RpnResolver`] with the given expression and shared variable heap.
     pub fn parse_with_borrowed_heap<'a>(
         exp: &'a str,
         borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
@@ -40,9 +41,8 @@ impl RpnResolver<'_> {
         }
     }
 
-    /// This method evaluates the rpn expression stack
-    ///
-    pub fn resolve(&mut self) -> anyhow::Result<Number> {
+     /// Evaluates the stored RPN expression and returns the result as a [`Number`].
+     pub fn resolve(&mut self) -> anyhow::Result<Number> {
 
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
@@ -51,20 +51,20 @@ impl RpnResolver<'_> {
 
         let mut last_var_ref: Option<&str> = None;
 
-        for t in &self.rpn_expr {
-            match t {
+        for token in &self.rpn_expr {
+            match token {
                 Token::Operand(n) => {
                     result_stack.push_back(n.clone());
                 }
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
                         .pop_back()
-                        .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Right Operand."))?;
+                        .ok_or_else(|| anyhow!("{} {}", ERR_MALFORMED_EXPR, "Invalid Right Operand."))?;
 
                     let mut left_value = if op != &Operator::Une && op != &Operator::Fac {
                         result_stack
                             .pop_back()
-                            .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand."))?
+                            .ok_or_else(|| anyhow!("{} {}", ERR_MALFORMED_EXPR, "Invalid Left Operand."))?
                     } else {
                         zero.clone()
                     };
@@ -75,7 +75,7 @@ impl RpnResolver<'_> {
                         Operator::Mul => result_stack.push_back(left_value * right_value),
                         Operator::Div => {
                             if right_value == zero {
-                                return Err(anyhow!(DIVISION_ZERO_ERR));
+                                return Err(anyhow!(ERR_DIVISION_ZERO_ERR));
                             }
                             left_value = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value);
@@ -83,7 +83,7 @@ impl RpnResolver<'_> {
                         Operator::Pow => {
                             if right_value < zero {
                                 if left_value == zero {
-                                    return Err(anyhow!(DIVISION_ZERO_ERR));
+                                    return Err(anyhow!(ERR_DIVISION_ZERO_ERR));
                                 }
                                 left_value = Number::DecimalNumber(left_value.into());
                             }
@@ -96,14 +96,14 @@ impl RpnResolver<'_> {
                                 
                                 result_stack.push_back(right_value);
                             } else {
-                                return Err(anyhow!(NO_VARIABLE_ERR));
+                                return Err(anyhow!(ERR_NO_VARIABLE_DEFINED));
                             }
                         }
                         Operator::Fac => {
                             // factorial. Only for natural numbers
                             let v = BigInt::from(right_value);
                             if v.partial_cmp(&Zero::zero()) == Some(std::cmp::Ordering::Less) {
-                                eprintln!("Warning: Factorial of a Negative or Decimal number has not been yet implemented.");
+                                eprintln!("Warning: Factorial of a Negative or Decimal number is not supported.");
                             }
                             let res = Self::factorial_helper(v);
                             result_stack.push_back(Number::NaturalNumber(res));
@@ -126,7 +126,7 @@ impl RpnResolver<'_> {
                 Token::Function(fun) => {
                     let value: Number = result_stack
                         .pop_back()
-                        .ok_or(anyhow!("{} {}", MALFORMED_ERR, "Wrong use of function"))?;
+                        .ok_or_else(|| anyhow!("{} (Missing operand for function)", ERR_MALFORMED_EXPR))?;
 
                     let res = match fun {
                         MathFunction::Sin => f64::sin(value.into()),
@@ -139,22 +139,34 @@ impl RpnResolver<'_> {
                         MathFunction::Log => f64::log10(value.into()),
                         MathFunction::Abs => f64::abs(value.into()),
                         MathFunction::Max => {
-                            let value2: Number = result_stack.pop_back().unwrap();
+                            let value2 = result_stack.pop_back().ok_or_else(|| {
+                                anyhow!("{} (Missing second operand for max)", ERR_MALFORMED_EXPR)
+                            })?;
                             f64::max(value.into(), value2.into())
                         }
                         MathFunction::Min => {
-                            let value2: Number = result_stack.pop_back().unwrap();
+                            let value2 = result_stack.pop_back().ok_or_else(|| {
+                                anyhow!("{} (Missing second operand for min)", ERR_MALFORMED_EXPR)
+                            })?;
                             f64::min(value.into(), value2.into())
                         }
                         MathFunction::Sqrt => f64::sqrt(value.into()),
-                        MathFunction::None => return Err(anyhow!("This should never happen!")),
+                        MathFunction::None => {
+                            return Err(anyhow!("{} (Unknown function)", ERR_MALFORMED_EXPR));
+                        }
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
                 }
-                _ => return Err(anyhow!("{} Internal Error at line: {}.", MALFORMED_ERR, line!())),
+                // Brackets shouldn't appear in RPN if tokenization is correct
+                _ => {
+                    return Err(anyhow!(
+                        "{} (Unexpected bracket in RPN)",
+                        ERR_MALFORMED_EXPR
+                    ))
+                }
             }
         }
-        result_stack.pop_front().ok_or(anyhow!("{}", MALFORMED_ERR))
+        result_stack.pop_front().ok_or(anyhow!("{}", ERR_MALFORMED_EXPR))
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)
@@ -227,7 +239,7 @@ impl RpnResolver<'_> {
                         .or_insert(Number::NaturalNumber(Zero::zero()));
                 },
             }
-            debug!("Inspecting... {} - OUT {} - OP - {}", *t, DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack));
+            debug!("Inspecting... {} - OUT {} - OP - {}", *t, DisplayDeque(&postfix_stack), DisplayVec(&operators_stack));
         };
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
@@ -235,7 +247,7 @@ impl RpnResolver<'_> {
         operators_stack.iter().for_each(|t| postfix_stack.push_back(t.clone()));
         
         debug!(
-            "DEBUG: EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
+            "DEBUG: EOF - OUT {} - OP - {}", DisplayDeque(&postfix_stack), DisplayVec(&operators_stack)
         );
 
         (postfix_stack, local_heap)
@@ -252,16 +264,20 @@ impl RpnResolver<'_> {
     }
 }
 
-struct DisplayThatVec<'a>(&'a Vec<Token<'a>>);
-struct DisplayThisDeque<'a>(&'a VecDeque<Token<'a>>);
 
-impl Display for DisplayThatVec<'_> {
+/// A helper for displaying a vector of tokens (operator stack).
+struct DisplayVec<'a>(&'a [Token<'a>]);
+
+/// A helper for displaying a deque of tokens (RPN output).
+struct DisplayDeque<'a>(&'a VecDeque<Token<'a>>);
+
+impl Display for DisplayVec<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
     }
 }
 
-impl Display for DisplayThisDeque<'_> {
+impl Display for DisplayDeque<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
     }
