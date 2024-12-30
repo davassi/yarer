@@ -7,9 +7,12 @@ use num_traits::FromPrimitive;
 use log::debug;
 use bigdecimal::ToPrimitive;
 
-/// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
+/// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`] 
 /// or a f64 float [`Number::DecimalNumber`]
-///
+/// 
+/// Represents numeric values used within expressions:
+/// - A big integer (`BigInt`)
+/// - A floating-point number (`f64`)
 #[derive(Debug, PartialEq, Clone)]
 pub enum Number {
     /// an Integer [BigInt]
@@ -18,45 +21,40 @@ pub enum Number {
     DecimalNumber(f64),
 }
 
-/// A binary or unary Math [`Operator`]
-///
+/// Represents a binary or unary Math [`Operator`]s used within expressions.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Operator {
-    /// Binary Add ('1+1')
+    /// Binary + (e.g., `1 + 1`)
     Add,
-    /// Binary Sub ('2-1')
+    /// Binary - (e.g., `2 - 1`)
     Sub,
-    /// Binary Mul ('2*2')
+    /// Binary * (e.g., `2 * 2`)
     Mul,
-    /// Binary Div ('3/3')
+    /// Binary / (e.g., `3 / 3`)
     Div,
-    /// Binary Pow ('base^exponent')
+    /// Binary ^ (e.g., `base ^ exponent`)
     Pow,
-    /// Unary Neg ('-1')
+    /// Unary negation (e.g., `-1`)
     Une,
-    /// Factorial ('0!')
+    /// Factorial (e.g., `4!`)
     Fac,
-    /// Binary Assignment ('A=1')
+    /// Binary assignment (e.g., `A = 1`)
     Eql,
 }
 
-/// The "associativity" of an operator dictates the direction
-/// in which operations of equal precedence are evaluated when they appear
-///
+/// The associativity of an operator defines how consecutive operations
+/// of the same precedence are evaluated.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Associate {
     /// If an operator is left-associative, then operations are evaluated from left to right.
     /// Example: -a^b, -1, -(-3)
-    ///
     LeftAssociative,
     /// If an operator is right-associative, then operations are evaluated from right to left.
     /// Example: A=1
-    ///
     RightAssociative,
 }
 
-/// Just [`Token::Bracket`]s. They change the order of evaluation of an expression.
-///
+/// Just [`Token::Bracket`] types, round or square. They change the order of evaluation of an expression.
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Bracket {
     /// either '(' or '['
@@ -65,31 +63,7 @@ pub enum Bracket {
     Close,
 }
 
-/// The [Token] enum. It represents the smallest chunk of a math expression
-///
-/// It can be a
-/// [`Token::Operand`] as 1,2,3,-4,-5,6.66 ...
-/// [`Token::Operator`] as +,-,*,/ ...
-/// [`Token::Bracket`] as [] or ()
-/// [`Token::Function`] as sin,cos,tan,ln ...
-/// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
-///
-#[derive(Debug, PartialEq, Clone)]
-pub enum Token<'a> {
-    /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
-    Operand(Number),
-    /// Operators +,-,/,*,^...
-    Operator(Operator),
-    /// ( ) [ ]
-    Bracket(Bracket),
-    /// sin cos tan ln log...
-    Function(MathFunction),
-    /// a b c x y ...
-    Variable(&'a str),
-}
-
 /// The [`MathFunction`] enum. It represents a common math function.
-///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MathFunction {
     /// Trigonometric Sine : sin(0)
@@ -112,10 +86,34 @@ pub enum MathFunction {
     Abs,
     /// square root
     Sqrt,
+    /// not implemented yet
     Max,
+    /// not implemented yet
     Min,
     /// Nope!
     None,
+}
+
+/// The [Token] enum. It represents the smallest chunk of a math expression
+///
+/// It can be a
+/// [`Token::Operand`] as 1,2,3,-4,-5,6.66 ...
+/// [`Token::Operator`] as +,-,*,/ ...
+/// [`Token::Bracket`] as [] or ()
+/// [`Token::Function`] as sin,cos,tan,ln ...
+/// [`Token::Variable`] as any variable name such as x,y,ab,foo
+#[derive(Debug, PartialEq, Clone)]
+pub enum Token<'a> {
+    /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
+    Operand(Number),
+    /// Operators +,-,/,*,^...
+    Operator(Operator),
+    /// ( ) [ ]
+    Bracket(Bracket),
+    /// sin cos tan ln log...
+    Function(MathFunction),
+    /// a b c x y ...
+    Variable(&'a str),
 }
 
 impl Token<'_> {
@@ -206,7 +204,6 @@ impl Token<'_> {
     }
 
     /// Founding out the priority and the associative precedence of an operator
-    ///
     fn operator_priority(o: Token) -> (u8, Associate) {
         match o {
             Token::Operator(Operator::Add | Operator::Sub) => (1, Associate::LeftAssociative),
@@ -219,13 +216,12 @@ impl Token<'_> {
         }
     }
 
-    /// Checks if an operator has priority over another one
+    /// Returns (precedence, associativity) for an operator token.
     ///
     /// i.e.
     /// * has priority over +
     /// ^ has priority over *
     /// unary - has priority over ^
-    ///
     #[must_use]
     pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
         let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
@@ -237,7 +233,6 @@ impl Token<'_> {
 }
 
 /// Let's display a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
-///
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -257,7 +252,6 @@ impl Display for Number {
 /// (op) can be [Add], [Mul], [Sub], [Div], [BitXor], ...
 ///
 /// We define 2 closures: 1 specialised for Natural Numbers and the other one specialised for Decimals.
-///
 fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf: NF, df: DF) -> Number
 where
     NF: Fn(BigInt, BigInt) -> BigInt,
@@ -266,7 +260,7 @@ where
     match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(ToPrimitive::to_f64(&v1).expect("Should not happen"), v2))
+            Number::DecimalNumber(df(ToPrimitive::to_f64(&v1).expect("BigInt to f64 conversion failed."), v2))
         }
         (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
     }
@@ -312,7 +306,7 @@ impl BitXor for Number {
         apply_functional_token_operation(
             self,
             rhs,
-            |a, b| BigInt::pow(&a, b.try_into().unwrap()),
+            |a, b| BigInt::pow(&a, b.try_into().expect("Exponent must fit in usize")),
             f64::powf,
         )
     }
@@ -338,7 +332,7 @@ impl PartialOrd for Number {
 impl From<Number> for f64 {
     fn from(n: Number) -> f64 {
         match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_f64(&v).expect("Should not happen"),
+            Number::NaturalNumber(v) => v.to_f64().expect("BigInt to f64 conversion failed."),
             Number::DecimalNumber(v) => v,
         }
     }
@@ -349,7 +343,7 @@ impl From<Number> for BigInt {
     fn from(n: Number) -> BigInt {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => BigInt::from_f64(v).expect("Should not happen"),
+            Number::DecimalNumber(v) => BigInt::from_f64(v).expect("f64 to BigInt conversion failed."),
         }
     }
 }
@@ -357,30 +351,31 @@ impl From<Number> for BigInt {
 impl From<Number> for i32 {
     fn from(n: Number) -> i32 {
         match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"), // not good
+            Number::NaturalNumber(a) => a.to_i32().expect("BigInt to i32 conversion failed."),
+            Number::DecimalNumber(a) => a.to_i32().expect("f64 to i32 conversion failed."),
         }
     }
 }
 
+/// Converts `Number` to `i64`, truncating if decimal.
 impl From<Number> for i64 {
-    fn from(n: Number) -> i64 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"), // not good
+    fn from(num: Number) -> Self {
+        match num {
+            Number::NaturalNumber(a) => a.to_i64().expect("BigInt to i64 conversion failed."),
+            Number::DecimalNumber(a) => a.to_i64().expect("f64 to i64 conversion failed."),
         }
     }
 }
 
+/// Converts `Number` to `i128`, truncating if decimal.
 impl From<Number> for i128 {
-    fn from(n: Number) -> i128 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"), // not good
+    fn from(num: Number) -> Self {
+        match num {
+            Number::NaturalNumber(a) => a.to_i128().expect("BigInt to i128 conversion failed."),
+            Number::DecimalNumber(a) => a.to_i128().expect("f64 to i128 conversion failed."),
         }
     }
 }
-
 
 impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
