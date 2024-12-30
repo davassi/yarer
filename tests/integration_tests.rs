@@ -1,14 +1,41 @@
+//! This test suite exercises the `RpnResolver` by evaluating various expressions
+//! and comparing them against expected results. It uses a [`Session`] to manage
+//! variables (`x`, etc.) and relies on `BigInt` for exact integer operations.
+
 use num::BigInt;
 use yarer::rpn_resolver::*;
 use yarer::session::Session;
 use yarer::token::*;
 
+
+/// A macro to parse and evaluate a math expression, then assert the result
+/// matches an expected [`Number`].  
+///
+/// # Examples
+///
+/// ```
+/// resolve!("2+2", Number::NaturalNumber(BigInt::from(4)));
+/// resolve!("pi*2", Number::DecimalNumber(std::f64::consts::PI*2.0));
+/// ```
 macro_rules! resolve {
     ($expr:expr, $expected:expr) => {{
         let session = Session::init();
         let mut resolver = session.process($expr);
-        assert_eq!(resolver.resolve().unwrap(), $expected);
+        let result = resolver.resolve().expect("Failed to resolve expression");
+        assert_eq!(result, $expected, "Expression: `{}`", $expr);
     }};
+}
+
+/// (Optional) Helper function for comparing floating-point [`Number::DecimalNumber`]
+/// results with a tolerance, to avoid test failures due to small floating inaccuracies.
+#[allow(dead_code)]
+fn assert_decimal_approx_eq(actual: f64, expected: f64, tol: f64, context: &str) {
+    let diff = (actual - expected).abs();
+    assert!(
+        diff < tol,
+        "Float mismatch in `{}`: expected ~{expected}, got {actual}, diff = {diff}",
+        context
+    );
 }
 
 #[test]
@@ -86,6 +113,7 @@ fn test_expressions() {
         "2^3^2 - 3^3",
         Number::NaturalNumber(BigInt::from(512 - 27))
     );
+
 }
 
 #[test]
@@ -100,6 +128,21 @@ fn test_programmatic() {
 
         println!("{}^2={}", i, result);
         assert!(result == Number::NaturalNumber(BigInt::from(i * i)));
+    }
+}
+
+#[test]
+fn test_log10_0_01() {
+    let session = Session::init();
+    let mut resolver = session.process("log(0.01)");
+    let result = resolver.resolve().unwrap();
+
+    // Extract float:
+    if let Number::DecimalNumber(actual) = result {
+        // Compare with a tolerance of 1e-10, for example:
+        assert_decimal_approx_eq(actual, -2.0, 1e-10, "log(0.01)");
+    } else {
+        panic!("Result was not a DecimalNumber!");
     }
 }
 
