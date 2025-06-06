@@ -48,6 +48,15 @@ impl Session {
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert("pi".to_string(), Number::DecimalNumber(std::f64::consts::PI));
         local_heap.insert("e".to_string(), Number::DecimalNumber(std::f64::consts::E));
+        local_heap.insert("tau".to_string(), Number::DecimalNumber(std::f64::consts::TAU));
+        local_heap.insert(
+            "phi".to_string(),
+            Number::DecimalNumber((1.0 + 5.0f64.sqrt()) / 2.0),
+        );
+        local_heap.insert(
+            "gamma".to_string(),
+            Number::DecimalNumber(0.577_215_664_901_532_9_f64),
+        );
         local_heap
     }
 
