@@ -10,6 +10,7 @@ use num::{BigInt, One, Zero};
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
+static FACTORIAL_NATURAL_ERR: &str = "Runtime error: Factorial is only defined for non-negative integers.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -102,13 +103,16 @@ impl RpnResolver<'_> {
                             }
                         }
                         Operator::Fac => {
-                            // factorial. Only for natural numbers
-                            let v = BigInt::from(right_value);
-                            if v.partial_cmp(&Zero::zero()) == Some(std::cmp::Ordering::Less) {
-                                eprintln!("Warning: Factorial of a Negative or Decimal number has not been yet implemented.");
+                            // factorial only for non-negative natural numbers
+                            match right_value {
+                                Number::NaturalNumber(ref v) if v >= &Zero::zero() => {
+                                    let res = Self::factorial_helper(v.clone());
+                                    result_stack.push_back(Number::NaturalNumber(res));
+                                }
+                                _ => {
+                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
+                                }
                             }
-                            let res = Self::factorial_helper(v);
-                            result_stack.push_back(Number::NaturalNumber(res));
                         }
                         Operator::Une => {
                             //# unary neg
@@ -274,7 +278,7 @@ impl Display for DisplayThisDeque<'_> {
 mod tests {
     use num_bigint::BigInt;
     use super::*;
-    use crate::token::{Number, Operator};
+    use crate::{token::{Number, Operator}, session::Session};
 
     #[test]
     fn test_reverse_polish_notation() {
@@ -310,6 +314,15 @@ mod tests {
             local_heap: Rc::new(RefCell::new(HashMap::new())),
         };
         assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(3u8)));
+    }
+
+    #[test]
+    fn test_invalid_factorial() {
+        let session = Session::init();
+        let mut resolver = session.process("(-1)!");
+        assert!(resolver.resolve().is_err());
+        let mut resolver2 = session.process("1.5!");
+        assert!(resolver2.resolve().is_err());
     }
 
 }
