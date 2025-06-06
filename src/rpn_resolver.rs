@@ -9,7 +9,7 @@ use num::{BigInt, One, Zero};
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
-static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignent.";
+static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
