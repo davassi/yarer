@@ -5,7 +5,9 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
+
 use num::{BigInt, One, Zero};
+use num_traits::ToPrimitive;
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
@@ -103,14 +105,26 @@ impl RpnResolver<'_> {
                             }
                         }
                         Operator::Fac => {
-                            // factorial only for non-negative natural numbers
+                            // factorial. Only for non-negative integers
                             match right_value {
-                                Number::NaturalNumber(ref v) if v >= &Zero::zero() => {
-                                    let res = Self::factorial_helper(v.clone());
+                                Number::NaturalNumber(v) => {
+                                    if v < Zero::zero() {
+                                        return Err(anyhow!(
+                                            "Runtime Error: Factorial is only defined for non-negative integers"
+                                        ));
+                                    }
+                                    let n = v
+                                        .to_u64()
+                                        .ok_or_else(|| anyhow!(
+                                            "Runtime Error: Factorial operand is too large"
+                                        ))?;
+                                    let res = Self::factorial_helper(n);
                                     result_stack.push_back(Number::NaturalNumber(res));
                                 }
-                                _ => {
-                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
+                                Number::DecimalNumber(_) => {
+                                    return Err(anyhow!(
+                                        "Runtime Error: Factorial is only defined for non-negative integers"
+                                    ));
                                 }
                             }
                         }
@@ -248,14 +262,14 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    fn factorial_helper(n: BigInt) -> BigInt {
-        if n == BigInt::zero() {
-            return BigInt::one();
+    fn factorial_helper(n: BigUint) -> BigUint {
+        if n == BigUint::zero() {
+            return BigUint::one();
         }
-    
-        let previous = n.checked_sub(&BigInt::one()).expect("Subtraction underflow");
+
+        let previous = n.clone() - BigUint::one();
         let sub_result = RpnResolver::factorial_helper(previous);
-        n.checked_mul(&sub_result).expect("Multiplication overflow")
+        n * sub_result
     }
 }
 
@@ -276,7 +290,7 @@ impl Display for DisplayThisDeque<'_> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
+    use num_bigint::{BigInt, BigUint};
     use super::*;
     use crate::{token::{Number, Operator}, session::Session};
 
@@ -300,7 +314,10 @@ mod tests {
 
     #[test]
     fn test_factorial() {
-        assert_eq!(RpnResolver::factorial_helper(BigInt::from(5)), BigInt::from(120));
+        assert_eq!(
+            RpnResolver::factorial_helper(BigUint::from(5u8)),
+            BigUint::from(120u16)
+        );
     }
 
     #[test]
