@@ -5,8 +5,9 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
-use num_traits::{One, Zero};
-use num_bigint::{BigInt, BigUint};
+
+use num::{BigInt, One, Zero};
+use num_traits::ToPrimitive;
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
@@ -103,20 +104,28 @@ impl RpnResolver<'_> {
                             }
                         }
                         Operator::Fac => {
-                            // factorial: allowed only for non-negative integers
-                            let v: BigInt = match right_value {
-                                Number::NaturalNumber(ref n) if n >= &Zero::zero() => n.clone(),
-                                _ => {
+                            // factorial. Only for non-negative integers
+                            match right_value {
+                                Number::NaturalNumber(v) => {
+                                    if v < Zero::zero() {
+                                        return Err(anyhow!(
+                                            "Runtime Error: Factorial is only defined for non-negative integers"
+                                        ));
+                                    }
+                                    let n = v
+                                        .to_u64()
+                                        .ok_or_else(|| anyhow!(
+                                            "Runtime Error: Factorial operand is too large"
+                                        ))?;
+                                    let res = Self::factorial_helper(n);
+                                    result_stack.push_back(Number::NaturalNumber(res));
+                                }
+                                Number::DecimalNumber(_) => {
                                     return Err(anyhow!(
-                                        "Runtime error: Factorial operand must be a non-negative integer."
+                                        "Runtime Error: Factorial is only defined for non-negative integers"
                                     ));
                                 }
-                            };
-
-                            let res = Self::factorial_helper(
-                                v.to_biguint().expect("Checked non-negative above"),
-                            );
-                            result_stack.push_back(Number::NaturalNumber(BigInt::from(res)));
+                            }
                         }
                         Operator::Une => {
                             //# unary neg
