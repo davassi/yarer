@@ -5,6 +5,7 @@ use crate::{
 };
 use anyhow::anyhow;
 use log::debug;
+
 use num::{BigInt, One, Zero};
 use num_traits::ToPrimitive;
 
@@ -260,13 +261,14 @@ impl RpnResolver<'_> {
         (postfix_stack, local_heap)
     }
 
-    fn factorial_helper(n: u64) -> BigInt {
-        if n == 0 {
-            return BigInt::one();
+    fn factorial_helper(n: BigUint) -> BigUint {
+        if n == BigUint::zero() {
+            return BigUint::one();
         }
 
-        let sub_result = RpnResolver::factorial_helper(n - 1);
-        BigInt::from(n) * sub_result
+        let previous = n.clone() - BigUint::one();
+        let sub_result = RpnResolver::factorial_helper(previous);
+        n * sub_result
     }
 }
 
@@ -287,7 +289,7 @@ impl Display for DisplayThisDeque<'_> {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
+    use num_bigint::{BigInt, BigUint};
     use super::*;
     use crate::token::{Number, Operator};
 
@@ -311,7 +313,10 @@ mod tests {
 
     #[test]
     fn test_factorial() {
-        assert_eq!(RpnResolver::factorial_helper(5), BigInt::from(120u64));
+        assert_eq!(
+            RpnResolver::factorial_helper(BigUint::from(5u8)),
+            BigUint::from(120u16)
+        );
     }
 
     #[test]
