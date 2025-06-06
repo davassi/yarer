@@ -17,6 +17,15 @@ fn test_expressions() {
         "(3 + 4 * (2 - (3 + 1) * 5 + 3) - 6) * 2 + 4",
         Number::NaturalNumber(BigInt::from(-122))
     );
+    resolve!("tau", Number::DecimalNumber(std::f64::consts::TAU));
+    resolve!(
+        "phi",
+        Number::DecimalNumber((1.0 + 5.0f64.sqrt()) / 2.0)
+    );
+    resolve!(
+        "gamma",
+        Number::DecimalNumber(0.577_215_664_901_532_9_f64)
+    );
     resolve!("3 * 2^3 + 6 / (2 + 1)", Number::DecimalNumber(26.0));
     resolve!(
         "pi * 4. + 2^pi",
