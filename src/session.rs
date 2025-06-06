@@ -4,7 +4,7 @@ use num_bigint::BigInt;
 use crate::{rpn_resolver::RpnResolver, token::Number};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
-/// that is borrowed to all the [`RpnResolver`] that are built from the builder [`build_resolver_for`()]
+/// that is borrowed to all the [`RpnResolver`] instances built using [`process()`]
 ///
 /// Example
 ///
