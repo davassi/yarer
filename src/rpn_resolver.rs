@@ -6,7 +6,7 @@ use crate::{
 use anyhow::anyhow;
 use log::debug;
 
-use num::{BigInt, One, Zero};
+use num::{BigInt, BigUint, One, Zero};
 use num_traits::ToPrimitive;
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
@@ -118,8 +118,8 @@ impl RpnResolver<'_> {
                                         .ok_or_else(|| anyhow!(
                                             "Runtime Error: Factorial operand is too large"
                                         ))?;
-                                    let res = Self::factorial_helper(n);
-                                    result_stack.push_back(Number::NaturalNumber(res));
+                                    let res = Self::factorial_helper(n.into());
+                                    result_stack.push_back(Number::NaturalNumber(res.into()));
                                 }
                                 Number::DecimalNumber(_) => {
                                     return Err(anyhow!(
