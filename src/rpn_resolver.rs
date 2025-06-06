@@ -49,7 +49,7 @@ impl RpnResolver<'_> {
       
         let mut result_stack: VecDeque<Number> = VecDeque::new();
 
-        let mut last_var_ref: Option<&str> = None;
+        let mut last_var_ref: Option<String> = None;
 
         for t in &self.rpn_expr {
             match t {
@@ -90,10 +90,12 @@ impl RpnResolver<'_> {
                             result_stack.push_back(left_value ^ right_value);
                         }
                         Operator::Eql => {
-                            if let Some(var) = last_var_ref {
-                                self.local_heap.borrow_mut()
-                                    .insert(var.to_string(), right_value.clone());
-                                
+                            if let Some(var) = last_var_ref.clone() {
+                                self
+                                    .local_heap
+                                    .borrow_mut()
+                                    .insert(var, right_value.clone());
+
                                 result_stack.push_back(right_value);
                             } else {
                                 return Err(anyhow!(NO_VARIABLE_ERR));
@@ -115,11 +117,12 @@ impl RpnResolver<'_> {
                     }
                 }
                 Token::Variable(v) => {
-                    let _ = last_var_ref.insert(*v);
+                    let var_name = v.to_lowercase();
+                    last_var_ref = Some(var_name.clone());
                     debug!("Heap {:?}", self.local_heap);
-                    let heap = self.local_heap.borrow_mut();
+                    let heap = self.local_heap.borrow();
                     let n = heap
-                        .get(*v)
+                        .get(&var_name)
                         .unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(n.clone());
                 }
