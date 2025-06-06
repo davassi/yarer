@@ -127,3 +127,13 @@ fn test_session_set() {
     let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
     assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
 }
+
+#[test]
+fn test_factorial_invalid_operand() {
+    let session = Session::init();
+    let mut resolver = session.process("(-1)!");
+    assert!(resolver.resolve().is_err());
+
+    let mut resolver = session.process("2.5!");
+    assert!(resolver.resolve().is_err());
+}
