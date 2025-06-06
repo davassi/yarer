@@ -61,7 +61,7 @@ impl Session {
     pub fn set(&self, key: &str, value: i64) {
         self.variable_heap
             .borrow_mut()
-            .insert(key.to_string(), Number::NaturalNumber(BigInt::from(value)));
+            .insert(key.to_lowercase(), Number::NaturalNumber(BigInt::from(value)));
     }
 
     /// Declares and saves a new float variable ([`Number::DecimalNumber`])
@@ -74,7 +74,7 @@ impl Session {
     pub fn setf(&self, key: &str, value: f64) {
         self.variable_heap
             .borrow_mut()
-            .insert(key.to_string(), Number::DecimalNumber(value));
+            .insert(key.to_lowercase(), Number::DecimalNumber(value));
     }
 }
 
