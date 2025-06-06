@@ -12,6 +12,7 @@ use num_traits::ToPrimitive;
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
+static FACTORIAL_NATURAL_ERR: &str = "Runtime error: Factorial is only defined for non-negative integers.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -291,7 +292,7 @@ impl Display for DisplayThisDeque<'_> {
 mod tests {
     use num_bigint::{BigInt, BigUint};
     use super::*;
-    use crate::token::{Number, Operator};
+    use crate::{token::{Number, Operator}, session::Session};
 
     #[test]
     fn test_reverse_polish_notation() {
@@ -330,6 +331,15 @@ mod tests {
             local_heap: Rc::new(RefCell::new(HashMap::new())),
         };
         assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(3u8)));
+    }
+
+    #[test]
+    fn test_invalid_factorial() {
+        let session = Session::init();
+        let mut resolver = session.process("(-1)!");
+        assert!(resolver.resolve().is_err());
+        let mut resolver2 = session.process("1.5!");
+        assert!(resolver2.resolve().is_err());
     }
 
 }
