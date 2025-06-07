@@ -14,8 +14,6 @@ macro_rules! resolve {
     };
 }
 
-/// resolve decimal
-
 macro_rules! resolve_decimal {
     ($expr:expr, $expected:expr) => {{
         resolve!($expr, Number::DecimalNumber($expected));
@@ -40,7 +38,7 @@ macro_rules! resolve_err {
         let mut resolver = session.process($expr);
         assert!(resolver.resolve().is_err());
     }};
-    () => { 
+    () => {
         panic!("Expected an error, but got a valid result.")
     };
 }
@@ -49,60 +47,45 @@ macro_rules! resolve_err {
 fn test_expressions() {
     resolve_natural!("(3+4*(2-(3+1)*5+3)-6)*2+4", -122);
     resolve_decimal!("tau", std::f64::consts::TAU);
-    resolve_decimal!("phi",(1.0 + 5.0f64.sqrt()) / 2.0);
-    resolve_decimal!("gamma",0.577_215_664_901_532_9_f64);
+    resolve_decimal!("phi", (1.0 + 5.0f64.sqrt()) / 2.0);
+    resolve_decimal!("gamma", 0.577_215_664_901_532_9_f64);
     resolve_decimal!("3*2^3+6/(2+1)", 26.0);
-    resolve_decimal!("pi * 4. + 2^pi",std::f64::consts::PI*4.0+2.0f64.powf(std::f64::consts::PI));
+    resolve_decimal!(
+        "pi*4.+2^pi",
+        std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI)
+    );
     resolve_natural!("2^3 * 4 + 5^2", 8 * 4 + 25);
-    resolve_decimal!("sin(pi/4) + cos(pi/4)",1.414213562373095); // Approximately sqrt(2)
-    resolve_decimal!("tan(pi/4) * cos(pi/6)",0.8660254037844386); // Approximately sqrt(3)/2
+    resolve_decimal!("sin(pi/4) + cos(pi/4)", 1.414213562373095); // Approximately sqrt(2)
+    resolve_decimal!("tan(pi/4) * cos(pi/6)", 0.8660254037844386); // Approximately sqrt(3)/2
     resolve_decimal!("ln(e) + log10(100)", 1.0);
     //resolve_natural!("3 * 2^3! - 2 * 3 + 6 / (2 + 1)", 188);
-    resolve_decimal!("cos(sin(0.5) * pi / 2)",0.7295860397469262); // Approximately cos(PI/4)
-    resolve!(
+    resolve_decimal!("cos(sin(0.5) * pi / 2)", 0.7295860397469262); // Approximately cos(PI/4)
+    resolve_decimal!(
         "pi * 2^3 + pi / 2 - e",
-        Number::DecimalNumber(
-            8.0 * std::f64::consts::PI + std::f64::consts::PI / 2.0 - std::f64::consts::E
-        )
+        8.0 * std::f64::consts::PI + std::f64::consts::PI / 2.0 - std::f64::consts::E
     );
-    resolve!("2 ^ 3 ^ 2", Number::NaturalNumber(BigInt::from(512)));
-    resolve!("ln(e^2) - log10(1000)", Number::DecimalNumber(2.));
-    resolve!(
+    resolve_natural!("2 ^ 3 ^ 2", 512);
+    resolve_decimal!("ln(e^2) - log10(1000)", 2.);
+    resolve_decimal!(
         "pi^2 - e^2",
-        Number::DecimalNumber(
-            std::f64::consts::PI * std::f64::consts::PI - std::f64::consts::E * std::f64::consts::E
-        )
+        std::f64::consts::PI * std::f64::consts::PI - std::f64::consts::E * std::f64::consts::E
     );
-    resolve!(
-        "(2 + 3) * (3 + 4) - (4 + 5) * (5 + 6)",
-        Number::NaturalNumber(BigInt::from(-64))
-    );
-    resolve!(
-        "tan(0) * sin(pi) + cos(pi / 2)",
-        Number::DecimalNumber(6.123233995736766e-17)
-    );
-    resolve!("2^2^2 - 3^3", Number::NaturalNumber(BigInt::from(-11)));
-    resolve!("(2 + 3 * 4 + 5) * 2", Number::NaturalNumber(BigInt::from(38)));
+    resolve_natural!("(2 + 3) * (3 + 4) - (4 + 5) * (5 + 6)", -64);
+    resolve_decimal!("tan(0) * sin(pi) + cos(pi / 2)", 6.123233995736766e-17);
+    resolve_natural!("2^2^2 - 3^3", -11);
+    resolve_natural!("(2 + 3 * 4 + 5) * 2", 38);
     resolve!("4! - 3!", Number::NaturalNumber(BigInt::from(18)));
     resolve!("(2^3 + 3^2) * 4", Number::NaturalNumber(BigInt::from(68)));
-    resolve!("e * pi - pi * e", Number::DecimalNumber(0.0));
-    resolve!(
-        "(2 + 3) * (4 - 5) + (6 - 7) * (8 + 9)",
-        Number::NaturalNumber(BigInt::from(-22))
-    );
+    resolve_decimal!("e * pi - pi * e", 0.0);
+    resolve_natural!("(2 + 3) * (4 - 5) + (6 - 7) * (8 + 9)", -22);
     resolve_decimal!("ln(e^3) / log10(1000)", 3.);
-    resolve!("(2^2 + 3^2) * (4^2 + 5^2)", Number::NaturalNumber(BigInt::from(533)));
+    resolve_natural!("(2^2 + 3^2) * (4^2 + 5^2)", 533);
     resolve_decimal!(
         "pi*e*(pi-e)",
-            std::f64::consts::PI
-                * std::f64::consts::E
-                * (std::f64::consts::PI - std::f64::consts::E)
+        std::f64::consts::PI * std::f64::consts::E * (std::f64::consts::PI - std::f64::consts::E)
     );
     resolve_decimal!("((10 + 5) - 3 * ( 9 / 3 )) + 2", 8.0);
-    resolve!(
-        "2^3^2 - 3^3",
-        Number::NaturalNumber(BigInt::from(512 - 27))
-    );
+    resolve_natural!("2^3^2 - 3^3", 512 - 27);
 
     resolve_decimal!("min(1,2)", 1.0);
     resolve_decimal!("max(1,2)", 2.0);
@@ -139,7 +122,7 @@ fn test_sharing_session() {
     if let (Ok(a), Ok(b)) = (res.resolve(), res2.resolve()) {
         assert!(a == Number::NaturalNumber(BigInt::from(100)));
 
-        let b : i64 = b.into(); 
+        let b: i64 = b.into();
         assert!(b == 3265920i64);
     }
 }

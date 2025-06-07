@@ -1,7 +1,6 @@
-
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use num_bigint::BigInt;
 use crate::{rpn_resolver::RpnResolver, token::Number};
+use num_bigint::BigInt;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
 /// that is borrowed to all the [`RpnResolver`] instances built using [`process()`]
@@ -44,11 +43,16 @@ impl Session {
     /// Creates a Variables heap (name-value)
     ///
     fn init_local_heap() -> HashMap<String, Number> {
-
         let mut local_heap: HashMap<String, Number> = HashMap::new();
-        local_heap.insert("pi".to_string(), Number::DecimalNumber(std::f64::consts::PI));
+        local_heap.insert(
+            "pi".to_string(),
+            Number::DecimalNumber(std::f64::consts::PI),
+        );
         local_heap.insert("e".to_string(), Number::DecimalNumber(std::f64::consts::E));
-        local_heap.insert("tau".to_string(), Number::DecimalNumber(std::f64::consts::TAU));
+        local_heap.insert(
+            "tau".to_string(),
+            Number::DecimalNumber(std::f64::consts::TAU),
+        );
         local_heap.insert(
             "phi".to_string(),
             Number::DecimalNumber((1.0 + 5.0f64.sqrt()) / 2.0),
@@ -68,9 +72,10 @@ impl Session {
     /// ``
     ///
     pub fn set(&self, key: &str, value: i64) {
-        self.variable_heap
-            .borrow_mut()
-            .insert(key.to_lowercase(), Number::NaturalNumber(BigInt::from(value)));
+        self.variable_heap.borrow_mut().insert(
+            key.to_lowercase(),
+            Number::NaturalNumber(BigInt::from(value)),
+        );
     }
 
     /// Declares and saves a new float variable ([`Number::DecimalNumber`])
@@ -86,7 +91,6 @@ impl Session {
             .insert(key.to_lowercase(), Number::DecimalNumber(value));
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -140,6 +144,4 @@ mod tests {
             Number::DecimalNumber(std::f64::consts::TAU / 2.0)
         );
     }
-
-
 }

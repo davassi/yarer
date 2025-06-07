@@ -1,10 +1,15 @@
-use std::{collections::{HashMap, VecDeque}, rc::Rc, cell::RefCell, fmt::Display};
 use crate::{
     parser::Parser,
     token::{self, MathFunction, Number, Operator, Token},
 };
 use anyhow::anyhow;
 use log::debug;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, VecDeque},
+    fmt::Display,
+    rc::Rc,
+};
 
 use num::{BigInt, BigUint, One, Zero};
 use num_traits::ToPrimitive;
@@ -12,7 +17,8 @@ use num_traits::ToPrimitive;
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
-static FACTORIAL_NATURAL_ERR: &str = "Runtime error: Factorial is only defined for non-negative integers.";
+static FACTORIAL_NATURAL_ERR: &str =
+    "Runtime error: Factorial is only defined for non-negative integers.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -26,7 +32,6 @@ pub struct RpnResolver<'a> {
 }
 
 impl RpnResolver<'_> {
-  
     /// Generates a new [`RpnResolver`] instance with borrowed heap
     ///
     pub fn parse_with_borrowed_heap<'a>(
@@ -46,10 +51,9 @@ impl RpnResolver<'_> {
     /// This method evaluates the rpn expression stack
     ///
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
-
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
-      
+
         let mut result_stack: VecDeque<Number> = VecDeque::new();
         let mut last_var_ref: Option<String> = None;
 
@@ -64,9 +68,9 @@ impl RpnResolver<'_> {
                         .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Right Operand."))?;
 
                     let mut left_value = if op != &Operator::Une && op != &Operator::Fac {
-                        result_stack
-                            .pop_back()
-                            .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand."))?
+                        result_stack.pop_back().ok_or_else(|| {
+                            anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand.")
+                        })?
                     } else {
                         zero.clone()
                     };
@@ -93,8 +97,7 @@ impl RpnResolver<'_> {
                         }
                         Operator::Eql => {
                             if let Some(var) = last_var_ref.clone() {
-                                self
-                                    .local_heap
+                                self.local_heap
                                     .borrow_mut()
                                     .insert(var, right_value.clone());
 
@@ -110,11 +113,9 @@ impl RpnResolver<'_> {
                                     if v < Zero::zero() {
                                         return Err(anyhow!(FACTORIAL_NATURAL_ERR));
                                     }
-                                    let n = v
-                                        .to_u64()
-                                        .ok_or_else(|| anyhow!(
-                                            "Runtime Error: Factorial operand is too large"
-                                        ))?;
+                                    let n = v.to_u64().ok_or_else(|| {
+                                        anyhow!("Runtime Error: Factorial operand is too large")
+                                    })?;
                                     let res = Self::factorial_helper(n.into());
                                     result_stack.push_back(Number::NaturalNumber(res.into()));
                                 }
@@ -134,15 +135,15 @@ impl RpnResolver<'_> {
                     last_var_ref = Some(var_name.clone());
                     debug!("Heap {:?}", self.local_heap);
                     let heap = self.local_heap.borrow();
-                    let n = heap
-                        .get(&var_name)
-                        .unwrap_or(&Number::DecimalNumber(0.));
+                    let n = heap.get(&var_name).unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(n.clone());
                 }
                 Token::Function(fun) => {
-                    let value: Number = result_stack
-                        .pop_back()
-                        .ok_or(anyhow!("{} {}", MALFORMED_ERR, "Wrong use of function"))?;
+                    let value: Number = result_stack.pop_back().ok_or(anyhow!(
+                        "{} {}",
+                        MALFORMED_ERR,
+                        "Wrong use of function"
+                    ))?;
 
                     let res = match fun {
                         MathFunction::Sin => f64::sin(value.into()),
@@ -167,7 +168,13 @@ impl RpnResolver<'_> {
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
                 }
-                _ => return Err(anyhow!("{} Internal Error at line: {}.", MALFORMED_ERR, line!())),
+                _ => {
+                    return Err(anyhow!(
+                        "{} Internal Error at line: {}.",
+                        MALFORMED_ERR,
+                        line!()
+                    ))
+                }
             }
         }
         result_stack.pop_front().ok_or(anyhow!("{}", MALFORMED_ERR))
@@ -197,23 +204,24 @@ impl RpnResolver<'_> {
                 Token::Bracket(token::Bracket::Open) => operators_stack.push(t.clone()),
 
                 /* If the token is a right parenthesis:
-                    Pop the stack and add operators to the output list until you encounter a left parenthesis.
-                    Pop the left parenthesis from the stack but do not add it to the output list.*/
+                Pop the stack and add operators to the output list until you encounter a left parenthesis.
+                Pop the left parenthesis from the stack but do not add it to the output list.*/
                 Token::Bracket(token::Bracket::Close) => {
-
                     while let Some(token) = operators_stack.pop() {
                         match token {
                             Token::Bracket(token::Bracket::Open) => {
                                 // If the token is a left parenthesis, pop it from the stack
                                 if let Some(Token::Function(_)) = operators_stack.last() {
-                                    postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                                    postfix_stack.push_back(
+                                        operators_stack.pop().expect("It should not happen."),
+                                    );
                                 }
                                 break;
-                            }, // discards left parenthesis
+                            } // discards left parenthesis
                             _ => postfix_stack.push_back(token),
                         }
                     }
-                },
+                }
 
                 Token::Operator(_op) => {
                     let op1: Token<'_> = t.clone();
@@ -223,41 +231,56 @@ impl RpnResolver<'_> {
                         match op2 {
                             Token::Operator(_) => {
                                 if Token::compare_operator_priority(op1.clone(), op2.clone()) {
-                                    postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                                    postfix_stack.push_back(
+                                        operators_stack.pop().expect("It should not happen."),
+                                    );
                                 } else {
                                     break;
                                 }
-                            },
+                            }
                             Token::Function(_) => {
-                                postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                                postfix_stack.push_back(
+                                    operators_stack.pop().expect("It should not happen."),
+                                );
                             }
                             _ => break,
                         }
                     }
                     operators_stack.push(op1.clone());
-                },
+                }
 
                 Token::Function(_) => {
                     operators_stack.push(t.clone());
-                },
+                }
 
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => {
                     postfix_stack.push_back(t.clone());
                     let s = s.to_lowercase();
-                    local_heap.borrow_mut().entry(s) // let's not override consts
+                    local_heap
+                        .borrow_mut()
+                        .entry(s) // let's not override consts
                         .or_insert(Number::NaturalNumber(Zero::zero()));
-                },
+                }
             }
-            debug!("Inspecting... {} - OUT {} - OP - {}", *t, DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack));
-        };
+            debug!(
+                "Inspecting... {} - OUT {} - OP - {}",
+                *t,
+                DisplayThisDeque(&postfix_stack),
+                DisplayThatVec(&operators_stack)
+            );
+        }
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();
-        operators_stack.iter().for_each(|t| postfix_stack.push_back(t.clone()));
-        
+        operators_stack
+            .iter()
+            .for_each(|t| postfix_stack.push_back(t.clone()));
+
         debug!(
-            "DEBUG: EOF - OUT {} - OP - {}", DisplayThisDeque(&postfix_stack), DisplayThatVec(&operators_stack)
+            "DEBUG: EOF - OUT {} - OP - {}",
+            DisplayThisDeque(&postfix_stack),
+            DisplayThatVec(&operators_stack)
         );
 
         (postfix_stack, local_heap)
@@ -279,21 +302,32 @@ struct DisplayThisDeque<'a>(&'a VecDeque<Token<'a>>);
 
 impl Display for DisplayThatVec<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
+        write!(
+            f,
+            "{}",
+            self.0.iter().map(ToString::to_string).collect::<String>()
+        )
     }
 }
 
 impl Display for DisplayThisDeque<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.iter().map(ToString::to_string).collect::<String>())
+        write!(
+            f,
+            "{}",
+            self.0.iter().map(ToString::to_string).collect::<String>()
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::{BigInt, BigUint};
     use super::*;
-    use crate::{token::{Number, Operator}, session::Session};
+    use crate::{
+        session::Session,
+        token::{Number, Operator},
+    };
+    use num_bigint::{BigInt, BigUint};
 
     #[test]
     fn test_reverse_polish_notation() {
@@ -331,7 +365,10 @@ mod tests {
             ]),
             local_heap: Rc::new(RefCell::new(HashMap::new())),
         };
-        assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(3u8)));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::NaturalNumber(BigInt::from(3u8))
+        );
     }
 
     #[test]
@@ -348,7 +385,7 @@ mod tests {
         let session = Session::init();
         let mut resolver = session.process("max(1,2)");
         assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
-        
+
         let mut resolver = session.process("min(1,2)");
         assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(1.0));
 
