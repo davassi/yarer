@@ -214,7 +214,7 @@ impl Token<'_> {
             Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
             Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
             Token::Operator(Operator::Fac) => (5, Associate::LeftAssociative),
-            Token::Operator(Operator::Eql) => (0, Associate::LeftAssociative),
+            Token::Operator(Operator::Eql) => (0, Associate::RightAssociative),
             _ => panic!("Operator '{o}' not recognised. This must not happen!"),
         }
     }
