@@ -36,7 +36,7 @@ impl Session {
     /// The [`RpnResolver`] single line builder. It needs the math expression to process
     ///
     #[must_use]
-    pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'_> {
+    pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'a> {
         let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
         RpnResolver::parse_with_borrowed_heap(line, clone)
     }
@@ -93,6 +93,7 @@ mod tests {
     use super::*;
     use crate::token::Number;
 
+    /// Test for the session initialization and basic expression processing
     #[test]
     fn test_session() {
         let session = Session::init();
@@ -100,6 +101,7 @@ mod tests {
         assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-5.0));
     }
 
+    /// Test for setting an integer variable
     #[test]
     fn test_session_set() {
         let session = Session::init();
@@ -107,4 +109,37 @@ mod tests {
         let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
         assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
     }
+
+    /// Test for setting a float variable
+    #[test]
+    fn test_session_setf() {
+        let session = Session::init();
+        session.setf("x", 4.5);
+        let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-1.5));
+    }
+
+    /// Test for the default variables initialization
+    #[test]
+    fn test_session_default_vars() {
+        let session = Session::init();
+        let mut resolver: RpnResolver = session.process("pi + e");
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(std::f64::consts::PI + std::f64::consts::E)
+        );
+    }
+
+    /// Test for the tau variable
+    #[test]
+    fn test_session_tau() {
+        let session = Session::init();
+        let mut resolver: RpnResolver = session.process("tau / 2");
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(std::f64::consts::TAU / 2.0)
+        );
+    }
+
+
 }

@@ -109,9 +109,7 @@ impl RpnResolver<'_> {
                             match right_value {
                                 Number::NaturalNumber(v) => {
                                     if v < Zero::zero() {
-                                        return Err(anyhow!(
-                                            "Runtime Error: Factorial is only defined for non-negative integers"
-                                        ));
+                                        return Err(anyhow!(FACTORIAL_NATURAL_ERR));
                                     }
                                     let n = v
                                         .to_u64()
@@ -122,9 +120,7 @@ impl RpnResolver<'_> {
                                     result_stack.push_back(Number::NaturalNumber(res.into()));
                                 }
                                 Number::DecimalNumber(_) => {
-                                    return Err(anyhow!(
-                                        "Runtime Error: Factorial is only defined for non-negative integers"
-                                    ));
+                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
                                 }
                             }
                         }
