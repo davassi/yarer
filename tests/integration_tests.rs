@@ -94,7 +94,7 @@ fn test_expressions() {
     resolve_decimal!("((2+3)!/5!)*(10-7)", 3.0);
     resolve_decimal!("log(1000)+ln(e^3)", 6.0);
     resolve_decimal!("sqrt(9)+abs(-2)-min(5,3)", 2.0);
-    resolve_decimal!("max(1+2,3*4)-min(10,5)", 9.0);
+    resolve_decimal!("max(1+2,3*4)-min(10,5)", 7.0);
     resolve_decimal!("sin(pi/2)+cos(0)", 2.0);
     resolve_decimal!("tan(pi/4)^2+1", 1.9999999999999998);
     resolve_natural!("(2^3+3^2)^(1+1)", 289);
@@ -121,10 +121,10 @@ fn test_expressions() {
     resolve_decimal!("e^(ln(5))", 4.999999999999999);
     resolve_natural!("(2+3)^2*(3!)", 150);
     resolve_decimal!("sqrt(abs(-16))", 4.0);
-    resolve_decimal!("max(1+2,2+2)", 6.0);
-    //resolve_decimal!("min(3!,10)", 9.0);
-    //resolve_decimal!("max(2^3,3^2)", 19683.0);
-    //resolve_decimal!("min(max(2^3,3^3),max(4^2,2^5))", 4294967296.0);
+    resolve_decimal!("max(1+2,2+2)", 4.0);
+    resolve_decimal!("min(3!,10)", 6.0);
+    resolve_decimal!("max(2^3,3^2)", 9.0);
+    resolve_decimal!("min(max(2^3,3^3),max(4^2,2^5))", 27.0);
     resolve_natural!("3!+4!+5!", 150);
     resolve_decimal!("sqrt(3^2+4^2)", 5.0);
     resolve_decimal!("sin(pi/6)+cos(pi/3)", 1.0);
