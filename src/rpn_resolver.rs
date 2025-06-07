@@ -231,6 +231,15 @@ impl RpnResolver<'_> {
                     }
                 }
 
+                Token::Comma => {
+                    while let Some(token) = operators_stack.last() {
+                        if matches!(token, Token::Bracket(token::Bracket::Open)) {
+                            break;
+                        }
+                        postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                    }
+                }
+
                 Token::Operator(_op) => {
                     let op1: Token<'_> = t.clone();
 
