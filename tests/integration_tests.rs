@@ -93,6 +93,12 @@ fn test_expressions() {
 
     resolve_err!("min()");
     resolve_err!("max()");
+
+    resolve_decimal!("sqrt(16)", 4.0);
+    resolve_decimal!("abs(-3)", 3.0);
+    resolve_decimal!("asin(1)", std::f64::consts::FRAC_PI_2);
+    resolve_decimal!("acos(1)", 0.0);
+    resolve_decimal!("atan(1)", std::f64::consts::FRAC_PI_4);
 }
 
 #[test]
