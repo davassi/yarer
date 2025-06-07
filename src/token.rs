@@ -92,31 +92,31 @@ pub enum Token<'a> {
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MathFunction {
-    /// Trigonometric Sine : sin(0)
+    /// Trigonometric Sine
     Sin,
-    /// Trigonometric Cosine : cos(0)
+    /// Trigonometric Cosine
     Cos,
-    /// tan(0)
+    /// Trigonometric Tangent
     Tan,
-    /// asin(0)
+    /// Arcsine
     ASin,
-    /// acos(0)
+    /// Arccosine
     ACos,
-    /// atan
+    /// Arctangent
     ATan,
-    /// logaritm base 2
+    /// Natural logarithm
     Ln,
-    /// logaritm base 10
+    /// Base 10 logarithm
     Log,
-    /// absolute value
+    /// Absolute value
     Abs,
-    /// square root
+    /// Square root
     Sqrt,
-    /// max value
+    /// Max value
     Max,
-    /// min value
+    /// Min value
     Min,
-    /// Nope!
+    /// No function expected 
     None,
 }
 
