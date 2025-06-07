@@ -11,6 +11,17 @@ macro_rules! resolve {
     }};
 }
 
+macro_rules! resolve_err {
+    ($expr:expr) => {{
+        let session = Session::init();
+        let mut resolver = session.process($expr);
+        assert!(resolver.resolve().is_err());
+    }};
+    () => { 
+        panic!("Expected an error, but got a valid result.")
+    };
+}
+
 #[test]
 fn test_expressions() {
     resolve!(
@@ -98,6 +109,9 @@ fn test_expressions() {
 
     resolve!("max(1,2)", Number::DecimalNumber(2.0));
     resolve!("min(1,2)", Number::DecimalNumber(1.0));
+    
+    resolve_err!("min()");
+    resolve_err!("max()");
 }
 
 #[test]

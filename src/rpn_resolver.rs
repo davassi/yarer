@@ -349,10 +349,10 @@ mod tests {
         let mut resolver = session.process("max(1,2)");
         assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
         
-        let mut resolver2 = session.process("min(1,2)");
-        assert_eq!(resolver2.resolve().unwrap(), Number::DecimalNumber(1.0));
+        let mut resolver = session.process("min(1,2)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(1.0));
 
-        let mut resolver2 = session.process("min(max(1,2),3)");
-        assert_eq!(resolver2.resolve().unwrap(), Number::DecimalNumber(2.0));
+        let mut resolver = session.process("min(max(1,2),3)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
     }
 }
