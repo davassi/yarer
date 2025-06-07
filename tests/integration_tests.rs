@@ -95,6 +95,9 @@ fn test_expressions() {
         "2^3^2 - 3^3",
         Number::NaturalNumber(BigInt::from(512 - 27))
     );
+
+    resolve!("max(1,2)", Number::DecimalNumber(2.0));
+    resolve!("min(1,2)", Number::DecimalNumber(1.0));
 }
 
 #[test]

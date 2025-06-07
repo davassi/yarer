@@ -51,7 +51,6 @@ impl RpnResolver<'_> {
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
       
         let mut result_stack: VecDeque<Number> = VecDeque::new();
-
         let mut last_var_ref: Option<String> = None;
 
         for t in &self.rpn_expr {
@@ -204,7 +203,13 @@ impl RpnResolver<'_> {
 
                     while let Some(token) = operators_stack.pop() {
                         match token {
-                            Token::Bracket(token::Bracket::Open) => break, // discards left parenthesis
+                            Token::Bracket(token::Bracket::Open) => {
+                                // If the token is a left parenthesis, pop it from the stack
+                                if let Some(Token::Function(_)) = operators_stack.last() {
+                                    postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                                }
+                                break;
+                            }, // discards left parenthesis
                             _ => postfix_stack.push_back(token),
                         }
                     }
@@ -338,4 +343,16 @@ mod tests {
         assert!(resolver2.resolve().is_err());
     }
 
+    #[test]
+    fn test_max_min() {
+        let session = Session::init();
+        let mut resolver = session.process("max(1,2)");
+        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
+        
+        let mut resolver2 = session.process("min(1,2)");
+        assert_eq!(resolver2.resolve().unwrap(), Number::DecimalNumber(1.0));
+
+        let mut resolver2 = session.process("min(max(1,2),3)");
+        assert_eq!(resolver2.resolve().unwrap(), Number::DecimalNumber(2.0));
+    }
 }

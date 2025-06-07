@@ -112,7 +112,9 @@ pub enum MathFunction {
     Abs,
     /// square root
     Sqrt,
+    /// max value
     Max,
+    /// min value
     Min,
     /// Nope!
     None,
@@ -162,8 +164,8 @@ impl Token<'_> {
             "log" => Some(MathFunction::Log),
             "abs" => Some(MathFunction::Abs),
             "sqrt" => Some(MathFunction::Sqrt),
-            //   "max" => MathFunction::Max,
-            //   "min" => MathFunction::Min,
+            "max" => Some(MathFunction::Max),
+            "min" => Some(MathFunction::Min),
             &_ => None,
         }
     }
