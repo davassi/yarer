@@ -156,11 +156,19 @@ impl RpnResolver<'_> {
                         MathFunction::Log => f64::log10(value.into()),
                         MathFunction::Abs => f64::abs(value.into()),
                         MathFunction::Max => {
-                            let value2: Number = result_stack.pop_back().unwrap();
+                            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
+                                "{} {}",
+                                MALFORMED_ERR,
+                                "Wrong number of parameters for function Max"
+                            ))?;
                             f64::max(value.into(), value2.into())
                         }
                         MathFunction::Min => {
-                            let value2: Number = result_stack.pop_back().unwrap();
+                            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
+                                "{} {}",
+                                MALFORMED_ERR,
+                                "Wrong number of parameters for function Min"
+                            ))?;
                             f64::min(value.into(), value2.into())
                         }
                         MathFunction::Sqrt => f64::sqrt(value.into()),
