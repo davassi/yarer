@@ -1,11 +1,11 @@
+use bigdecimal::ToPrimitive;
+use log::debug;
+use num_bigint::BigInt;
+use num_traits::FromPrimitive;
 use std::{
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
 };
-use num_bigint::BigInt;
-use num_traits::FromPrimitive;
-use log::debug;
-use bigdecimal::ToPrimitive;
 
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
 /// or a f64 float [`Number::DecimalNumber`]
@@ -92,29 +92,31 @@ pub enum Token<'a> {
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MathFunction {
-    /// Trigonometric Sine : sin(0)
+    /// Trigonometric Sine
     Sin,
-    /// Trigonometric Cosine : cos(0)
+    /// Trigonometric Cosine
     Cos,
-    /// tan(0)
+    /// Trigonometric Tangent
     Tan,
-    /// asin(0)
+    /// Arcsine
     ASin,
-    /// acos(0)
+    /// Arccosine
     ACos,
-    /// atan
+    /// Arctangent
     ATan,
-    /// logaritm base 2
+    /// Natural logarithm
     Ln,
-    /// logaritm base 10
+    /// Base 10 logarithm
     Log,
-    /// absolute value
+    /// Absolute value
     Abs,
-    /// square root
+    /// Square root
     Sqrt,
+    /// Max value
     Max,
+    /// Min value
     Min,
-    /// Nope!
+    /// No function expected
     None,
 }
 
@@ -162,8 +164,8 @@ impl Token<'_> {
             "log" => Some(MathFunction::Log),
             "abs" => Some(MathFunction::Abs),
             "sqrt" => Some(MathFunction::Sqrt),
-            //   "max" => MathFunction::Max,
-            //   "min" => MathFunction::Min,
+            "max" => Some(MathFunction::Max),
+            "min" => Some(MathFunction::Min),
             &_ => None,
         }
     }
@@ -324,9 +326,9 @@ impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&v2),
-            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-                ToPrimitive::to_f64(v1).expect("Should not happen").partial_cmp(v2)
-            }
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => ToPrimitive::to_f64(v1)
+                .expect("Should not happen")
+                .partial_cmp(v2),
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
                 v1.partial_cmp(&(ToPrimitive::to_f64(v2).expect("Should not happen")))
             }
@@ -380,7 +382,6 @@ impl From<Number> for i128 {
         }
     }
 }
-
 
 impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

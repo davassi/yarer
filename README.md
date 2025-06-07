@@ -136,6 +136,8 @@ There are many examples of processed expressions in the [integration test file](
     Log
     Abs
     Sqrt
+    Max
+    Min
 ```
 
 ## Built-in Defined Constants

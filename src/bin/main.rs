@@ -56,7 +56,9 @@ fn main() -> Result<()> {
     }
 
     let mut rl = DefaultEditor::new()?;
-    let local_history = dirs::config_dir().unwrap_or(PathBuf::default()).join(HISTORY_FILE);
+    let local_history = dirs::config_dir()
+        .unwrap_or(PathBuf::default())
+        .join(HISTORY_FILE);
     let local_history = local_history.as_os_str().to_str().unwrap_or(HISTORY_FILE);
     debug!("Local history file: '{}'", local_history);
 

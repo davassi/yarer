@@ -10,9 +10,10 @@ use regex::Regex;
 #[derive(Debug)]
 pub struct Parser;
 
-static EXPRESSION_REGEX: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)")
-    .expect("Should compile regex"));
+static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^()=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)")
+        .expect("Should compile regex")
+});
 
 impl Parser {
     /// Parses and splits a &str into a vec of &str with
@@ -69,9 +70,9 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
-    use num_bigint::BigInt;
     use super::*;
     use crate::token::{Bracket, Number, Operator};
+    use num_bigint::BigInt;
 
     #[test]
     fn test_parse_valid() {
