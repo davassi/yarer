@@ -84,6 +84,8 @@ pub enum Token<'a> {
     Bracket(Bracket),
     /// sin cos tan ln log...
     Function(MathFunction),
+    /// comma separator for function arguments
+    Comma,
     /// a b c x y ...
     Variable(&'a str),
 }
@@ -187,6 +189,7 @@ impl Token<'_> {
                     return Some(Token::from_operator(c).unwrap())
                 }
                 b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
+                ',' => return Some(Token::Comma),
                 _ => (), // continue the flow
             },
             None => return None,
@@ -421,6 +424,7 @@ impl Display for Token<'_> {
             Token::Bracket(v) => write!(f, "({v})"),
             Token::Function(v) => write!(f, "({v})"),
             Token::Variable(v) => write!(f, "({v})"),
+            Token::Comma => write!(f, "(,)")
         }
     }
 }
