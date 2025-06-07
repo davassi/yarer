@@ -91,8 +91,65 @@ fn test_expressions() {
     resolve_decimal!("max(1,2)", 2.0);
     resolve_decimal!("min(max(2,3),max(5,1))", 3.0);
 
+    resolve_decimal!("((2+3)!/5!)*(10-7)", 3.0);
+    resolve_decimal!("log(1000)+ln(e^3)", 6.0);
+    resolve_decimal!("sqrt(9)+abs(-2)-min(5,3)", 2.0);
+    resolve_decimal!("max(1+2,3*4)-min(10,5)", 7.0);
+    resolve_decimal!("sin(pi/2)+cos(0)", 2.0);
+    resolve_decimal!("tan(pi/4)^2+1", 1.9999999999999998);
+    resolve_natural!("(2^3+3^2)^(1+1)", 289);
+    resolve_natural!("((3+5)*2)^2", 256);
+    resolve_natural!("4^(3-1)+2!", 18);
+    resolve_natural!("5!*2^2", 480);
+    resolve_decimal!("sin(pi/6)*cos(pi/3)", 0.25);
+    resolve_decimal!("abs(-10)+sqrt(16)", 14.0);
+    resolve_decimal!("ln(e^(2*2))", 4.0);
+    resolve_decimal!("log(100)+log(1000)", 5.0);
+    resolve_decimal!("sin(pi)*cos(0)", 1.2246467991473532e-16);
+    resolve_decimal!("sqrt(81)+sin(0)-tan(0)", 9.0);
+    resolve_decimal!("max(4,2)+min(1,2)*abs(-3)", 7.0);
+    resolve_decimal!("abs(-5^2)", 25.0);
+    resolve_decimal!("ln(e)+log(10)", 2.0);
+    resolve_decimal!("sqrt(2^3*4)", 5.656854249492381);
+    resolve_natural!("2^(3! - 5)", 2);
+    resolve_natural!("((3+1)!)+(2^3)", 32);
+    resolve_decimal!("((4+2)!)/((2+1)!)", 120.0);
+    resolve_decimal!("cos(pi/3)^2+sin(pi/3)^2", 1.0);
+    resolve_decimal!("atan(1)*4", std::f64::consts::PI);
+    resolve_decimal!("acos(0)", std::f64::consts::FRAC_PI_2);
+    resolve_decimal!("asin(1)", std::f64::consts::FRAC_PI_2);
+    resolve_decimal!("e^(ln(5))", 4.999999999999999);
+    resolve_natural!("(2+3)^2*(3!)", 150);
+    resolve_decimal!("sqrt(abs(-16))", 4.0);
+    resolve_decimal!("max(1+2,2+2)", 4.0);
+    resolve_decimal!("min(3!,10)", 6.0);
+    resolve_decimal!("max(2^3,3^2)", 9.0);
+    resolve_decimal!("min(max(2^3,3^3),max(4^2,2^5))", 27.0);
+    resolve_natural!("3!+4!+5!", 150);
+    resolve_decimal!("sqrt(3^2+4^2)", 5.0);
+    resolve_decimal!("sin(pi/6)+cos(pi/3)", 1.0);
+    resolve_decimal!("ln(e^2)+log(100)", 4.0);
+    resolve_decimal!("sin(asin(1))", 1.0);
+    resolve_decimal!("cos(acos(0))", 6.123233995736766e-17);
+    resolve_decimal!("tan(atan(1))", 0.9999999999999999);
+    resolve_decimal!("2^-2", 0.25);
+    resolve_decimal!("3^-3", 0.037037037037037035);
+    resolve_natural!("2^(3^2)", 512);
+    resolve_natural!("4!+3!+2!", 32);
+    resolve_decimal!("((2^3 + 4^2) / (5 - 3))", 12.0);
+    resolve_decimal!("abs(-3)^2+abs(-4)^2", 25.0);
+    resolve_decimal!("sqrt(2)^2", 2.0000000000000004);
+    resolve_decimal!("sqrt(2)*sqrt(8)", 4.000000000000001);
+    resolve_decimal!("ln(e^(ln(e)))", 1.0);
+
     resolve_err!("min()");
     resolve_err!("max()");
+
+    resolve_decimal!("sqrt(16)", 4.0);
+    resolve_decimal!("abs(-3)", 3.0);
+    resolve_decimal!("asin(1)", std::f64::consts::FRAC_PI_2);
+    resolve_decimal!("acos(1)", 0.0);
+    resolve_decimal!("atan(1)", std::f64::consts::FRAC_PI_4);
 }
 
 #[test]
