@@ -16,8 +16,8 @@ static HISTORY_FILE: &str = ".yarer_history";
 #[command(
     author,
     version,
-    about = "Yarer (Yet Another Rust Expression Resolver) ...",
-    long_about = "Yarer (Yet Another Rust Expression Resolver) ...\n\
+    about = "Yarer (Yet Another Rust Expression Resolver)\n",
+    long_about = "Yarer (Yet Another Rust Expression Resolver)\n\
                   Copyright (c) 2024 Davassi <gianluigi.davassi@gmail.com>\n\
                   License MIT OR Apache-2.0",
     help_template = "{before-help}{name} {version}\n{author-with-newline}{about-with-newline}{usage-heading} {usage}\n\n{all-args}{after-help}"
