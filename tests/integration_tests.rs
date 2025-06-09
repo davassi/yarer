@@ -147,6 +147,7 @@ fn test_expressions() {
     resolve_decimal!("round(3.6)", 4.0);
     resolve_decimal!("round(3.4)", 3.0);
     resolve_decimal!("exp(1)", std::f64::consts::E);
+    resolve_decimal!("cdf(0)", 0.5);
 
     resolve_err!("min()");
     resolve_err!("max()");
