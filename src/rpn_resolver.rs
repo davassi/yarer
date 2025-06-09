@@ -206,6 +206,10 @@ impl RpnResolver<'_> {
                     result_stack.push_back(Number::DecimalNumber(res));
                     var_stack.push_back(None);
                 }
+                Token::SemiColon => {
+                    result_stack.clear();
+                    var_stack.clear();
+                }
                 _ => {
                     return Err(anyhow!(
                         "{} Internal Error at line: {}.",
@@ -269,6 +273,13 @@ impl RpnResolver<'_> {
                         }
                         postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
                     }
+                }
+
+                Token::SemiColon => {
+                    while let Some(token) = operators_stack.pop() {
+                        postfix_stack.push_back(token);
+                    }
+                    postfix_stack.push_back(Token::SemiColon);
                 }
 
                 Token::Operator(_op) => {
