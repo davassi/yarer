@@ -138,6 +138,10 @@ There are many examples of processed expressions in the [integration test file](
     Sqrt
     Max
     Min
+    Floor
+    Ceil
+    Round
+    Exp
 ```
 
 ## Built-in Defined Constants

@@ -118,6 +118,14 @@ pub enum MathFunction {
     Max,
     /// Min value
     Min,
+    /// Rounds down
+    Floor,
+    /// Rounds up
+    Ceil,
+    /// Rounds to nearest integer
+    Round,
+    /// e^x exponentiation
+    Exp,
     /// No function expected
     None,
 }
@@ -168,6 +176,10 @@ impl Token<'_> {
             "sqrt" => Some(MathFunction::Sqrt),
             "max" => Some(MathFunction::Max),
             "min" => Some(MathFunction::Min),
+            "floor" => Some(MathFunction::Floor),
+            "ceil" => Some(MathFunction::Ceil),
+            "round" => Some(MathFunction::Round),
+            "exp" => Some(MathFunction::Exp),
             &_ => None,
         }
     }

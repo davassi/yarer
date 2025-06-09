@@ -197,6 +197,10 @@ impl RpnResolver<'_> {
                             f64::min(value.into(), value2.into())
                         }
                         MathFunction::Sqrt => f64::sqrt(value.into()),
+                        MathFunction::Floor => f64::floor(value.into()),
+                        MathFunction::Ceil => f64::ceil(value.into()),
+                        MathFunction::Round => f64::round(value.into()),
+                        MathFunction::Exp => f64::exp(value.into()),
                         MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
