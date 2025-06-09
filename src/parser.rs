@@ -11,7 +11,7 @@ use regex::Regex;
 pub struct Parser;
 
 static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=×÷!]|[a-zA-Z_][a-zA-Z0-9_]*|)")
+    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*|)")
         .expect("Should compile regex")
 });
 
@@ -60,7 +60,7 @@ impl Parser {
                     }
                     expect_operand_next = true;
                 }
-                Token::Comma => {
+                Token::Comma | Token::SemiColon => {
                     expect_operand_next = true;
                 }
                 _ => (),

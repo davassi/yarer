@@ -88,6 +88,8 @@ pub enum Token<'a> {
     Comma,
     /// a b c x y ...
     Variable(&'a str),
+    /// Semicolon ';' separator for chained expressions
+    SemiColon,
 }
 
 /// The [`MathFunction`] enum. It represents a common math function.
@@ -202,6 +204,7 @@ impl Token<'_> {
                 }
                 b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
                 ',' => return Some(Token::Comma),
+                ';' => return Some(Token::SemiColon),
                 _ => (), // continue the flow
             },
             None => return None,
@@ -436,7 +439,8 @@ impl Display for Token<'_> {
             Token::Bracket(v) => write!(f, "({v})"),
             Token::Function(v) => write!(f, "({v})"),
             Token::Variable(v) => write!(f, "({v})"),
-            Token::Comma => write!(f, "(,)")
+            Token::Comma => write!(f, "(,)") ,
+            Token::SemiColon => write!(f, "(;)")
         }
     }
 }

@@ -207,3 +207,17 @@ fn test_factorial_invalid_operand() {
     let mut resolver = session.process("2.5!");
     assert!(resolver.resolve().is_err());
 }
+
+#[test]
+fn test_chained_expressions() {
+    let session = Session::init();
+    let mut resolver = session.process("x=2; y=3; x*y");
+    assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(6)));
+}
+
+#[test]
+fn test_chained_without_assignment() {
+    let session = Session::init();
+    let mut resolver = session.process("1+2; 3+4");
+    assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(7)));
+}
