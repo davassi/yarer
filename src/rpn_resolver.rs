@@ -2,6 +2,7 @@ use crate::{
     parser::Parser,
     token::{self, MathFunction, Number, Operator, Token},
 };
+use statrs::distribution::{ContinuousCDF, Normal};
 use anyhow::anyhow;
 use log::debug;
 use std::{
@@ -200,6 +201,10 @@ impl RpnResolver<'_> {
                         MathFunction::Floor => f64::floor(value.into()),
                         MathFunction::Ceil => f64::ceil(value.into()),
                         MathFunction::Round => f64::round(value.into()),
+                        MathFunction::Cdf => {
+                            let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
+                            normal.cdf(value.into())
+                        }
                         MathFunction::Exp => f64::exp(value.into()),
                         MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };

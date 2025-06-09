@@ -103,6 +103,13 @@
 //! Log
 //! Abs
 //! Sqrt
+//! Max
+//! Min
+//! Floor
+//! Ceil
+//! Round
+//! Exp
+//! Cdf
 //! ```
 /// Parser
 pub mod parser;
