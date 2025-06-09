@@ -142,6 +142,12 @@ fn test_expressions() {
     resolve_decimal!("sqrt(2)*sqrt(8)", 4.000000000000001);
     resolve_decimal!("ln(e^(ln(e)))", 1.0);
 
+    resolve_decimal!("floor(3.7)", 3.0);
+    resolve_decimal!("ceil(3.2)", 4.0);
+    resolve_decimal!("round(3.6)", 4.0);
+    resolve_decimal!("round(3.4)", 3.0);
+    resolve_decimal!("exp(1)", std::f64::consts::E);
+
     resolve_err!("min()");
     resolve_err!("max()");
 
