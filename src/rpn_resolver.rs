@@ -55,17 +55,20 @@ impl RpnResolver<'_> {
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
 
         let mut result_stack: VecDeque<Number> = VecDeque::new();
-        let mut last_var_ref: Option<String> = None;
+        let mut var_stack: VecDeque<Option<String>> = VecDeque::new();
 
         for t in &self.rpn_expr {
             match t {
                 Token::Operand(n) => {
                     result_stack.push_back(n.clone());
+                    var_stack.push_back(None);
                 }
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
                         .pop_back()
                         .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Right Operand."))?;
+
+                    var_stack.pop_back();
 
                     let mut left_value = if op != &Operator::Une && op != &Operator::Fac {
                         result_stack.pop_back().ok_or_else(|| {
@@ -74,17 +77,32 @@ impl RpnResolver<'_> {
                     } else {
                         zero.clone()
                     };
+                    let left_var = if op != &Operator::Une && op != &Operator::Fac {
+                        var_stack.pop_back().unwrap_or(None)
+                    } else {
+                        None
+                    };
 
                     match op {
-                        Operator::Add => result_stack.push_back(left_value + right_value),
-                        Operator::Sub => result_stack.push_back(left_value - right_value),
-                        Operator::Mul => result_stack.push_back(left_value * right_value),
+                        Operator::Add => {
+                            result_stack.push_back(left_value + right_value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Sub => {
+                            result_stack.push_back(left_value - right_value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Mul => {
+                            result_stack.push_back(left_value * right_value);
+                            var_stack.push_back(None);
+                        }
                         Operator::Div => {
                             if right_value == zero {
                                 return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
                             left_value = Number::DecimalNumber(left_value.into());
                             result_stack.push_back(left_value / right_value);
+                            var_stack.push_back(None);
                         }
                         Operator::Pow => {
                             if right_value < zero {
@@ -94,14 +112,16 @@ impl RpnResolver<'_> {
                                 left_value = Number::DecimalNumber(left_value.into());
                             }
                             result_stack.push_back(left_value ^ right_value);
+                            var_stack.push_back(None);
                         }
                         Operator::Eql => {
-                            if let Some(var) = last_var_ref.clone() {
+                            if let Some(var) = left_var {
                                 self.local_heap
                                     .borrow_mut()
-                                    .insert(var, right_value.clone());
+                                    .insert(var.clone(), right_value.clone());
 
                                 result_stack.push_back(right_value);
+                                var_stack.push_back(None);
                             } else {
                                 return Err(anyhow!(NO_VARIABLE_ERR));
                             }
@@ -117,26 +137,28 @@ impl RpnResolver<'_> {
                                         anyhow!("Runtime Error: Factorial operand is too large")
                                     })?;
                                     let res = Self::factorial_helper(n.into());
-                                    result_stack.push_back(Number::NaturalNumber(res.into()));
-                                }
-                                Number::DecimalNumber(_) => {
-                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
-                                }
+                                result_stack.push_back(Number::NaturalNumber(res.into()));
+                                var_stack.push_back(None);
                             }
+                            Number::DecimalNumber(_) => {
+                                return Err(anyhow!(FACTORIAL_NATURAL_ERR));
+                            }
+                        }
                         }
                         Operator::Une => {
                             //# unary neg
                             result_stack.push_back(right_value * minus_one.clone());
+                            var_stack.push_back(None);
                         }
                     }
                 }
                 Token::Variable(v) => {
                     let var_name = v.to_lowercase();
-                    last_var_ref = Some(var_name.clone());
                     debug!("Heap {:?}", self.local_heap);
                     let heap = self.local_heap.borrow();
                     let n = heap.get(&var_name).unwrap_or(&Number::DecimalNumber(0.));
                     result_stack.push_back(n.clone());
+                    var_stack.push_back(Some(var_name));
                 }
                 Token::Function(fun) => {
                     let value: Number = result_stack.pop_back().ok_or(anyhow!(
@@ -144,6 +166,7 @@ impl RpnResolver<'_> {
                         MALFORMED_ERR,
                         "Wrong use of function"
                     ))?;
+                    var_stack.pop_back();
 
                     let res = match fun {
                         MathFunction::Sin => f64::sin(value.into()),
@@ -161,6 +184,7 @@ impl RpnResolver<'_> {
                                 MALFORMED_ERR,
                                 "Wrong number of parameters for function Max"
                             ))?;
+                            var_stack.pop_back();
                             f64::max(value.into(), value2.into())
                         }
                         MathFunction::Min => {
@@ -169,12 +193,14 @@ impl RpnResolver<'_> {
                                 MALFORMED_ERR,
                                 "Wrong number of parameters for function Min"
                             ))?;
+                            var_stack.pop_back();
                             f64::min(value.into(), value2.into())
                         }
                         MathFunction::Sqrt => f64::sqrt(value.into()),
                         MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };
                     result_stack.push_back(Number::DecimalNumber(res));
+                    var_stack.push_back(None);
                 }
                 _ => {
                     return Err(anyhow!(
@@ -185,6 +211,7 @@ impl RpnResolver<'_> {
                 }
             }
         }
+        var_stack.pop_front();
         result_stack.pop_front().ok_or(anyhow!("{}", MALFORMED_ERR))
     }
 
