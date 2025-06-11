@@ -109,6 +109,7 @@
 //! Ceil
 //! Round
 //! Exp
+//! Pdf
 //! Cdf
 //! ```
 /// Parser

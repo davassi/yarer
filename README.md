@@ -142,6 +142,7 @@ There are many examples of processed expressions in the [integration test file](
     Ceil
     Round
     Exp
+    Pdf
     Cdf
 ```
 

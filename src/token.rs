@@ -128,6 +128,8 @@ pub enum MathFunction {
     Round,
     /// e^x exponentiation
     Exp,
+    /// Standard Normal probability density function
+    Pdf,
     /// Standard Normal cumulative distribution function
     Cdf,
     /// No function expected
@@ -184,6 +186,7 @@ impl Token<'_> {
             "ceil" => Some(MathFunction::Ceil),
             "round" => Some(MathFunction::Round),
             "exp" => Some(MathFunction::Exp),
+            "pdf" => Some(MathFunction::Pdf),
             "cdf" => Some(MathFunction::Cdf),
             &_ => None,
         }
