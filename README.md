@@ -24,11 +24,11 @@ Example of usage of the library:
 ```
 
 All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
-The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or is present a trigonometric function (i.e. 1/cos(x+1)).
+The library returns a natural number or a decimal number if the expression contains a decimal literal (e.g., '2.1+1') or includes a trigonometric function (e.g., 1/cos(x+1)).
 
 ## Variables
 
-Yarer handles variables and functions. Here an example:
+Yarer handles variables and functions. Here is an example:
 
 ```rust
       let session = Session::init();
@@ -52,7 +52,7 @@ and of course, the expression can be re-evaluated if the variable changes.
 
 ## Casting
 
-The result can be simply casted into a i32 or a f64 (if decimal) simply with
+The result can be cast into an i32 or an f64 (if decimal) using
 
 ```rust
       let result: Number = resolver.resolve().unwrap();
@@ -64,7 +64,7 @@ The result can be simply casted into a i32 or a f64 (if decimal) simply with
 
 ## CLI
 
-Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
+Yarer can also be used from the command line and behaves similarly to GNU bc
 
 ```rust
       $ yarer
@@ -215,7 +215,7 @@ Step 2 - RpnResolver: Using the Shunting Yard algorithm the token array is conve
 
 Step 3 - RpnResolver: The resulting RPN (Reverse Polish Notation) expression is evaluated.
 
-Worth to mention that the Session is responsible to store all variables (and constants) that are borrowed by all the RpnResolvers.
+It's worth mentioning that the Session is responsible for storing all variables (and constants) that are borrowed by all the RpnResolvers.
 
 ## Contribution
 
