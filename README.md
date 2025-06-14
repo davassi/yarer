@@ -68,7 +68,7 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 
 ```rust
       $ yarer
-      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
+      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
@@ -93,11 +93,21 @@ Yarer can be used also from command line, and behaves in a very similar manner t
 ```
 ## News and Updates
 
+### Version 0.1.8
+
+Yarer 0.1.8 comes with several enhancements:
+
+* Decimal numbers are now represented using the `num-rational` crate for higher precision.
+* Added new math functions: `floor`, `ceil`, `round`, `exp`, `pdf` and `cdf`.
+* Expressions can be chained with semicolons, e.g. `x=2; y=3; x*y`.
+* Variable assignments inside expressions are handled more reliably.
+* This README includes a demonstration of the Black–Scholes formula.
+
 Starting with Yarer version 0.1.7, natural numbers are implemented internally using [BigInt](https://crates.io/crates/num-bigint) from the [num crate](https://crates.io/crates/num). Now it is possible to do calculations with arbitrarily large natural numbers.
 
 ```rust
     $ yarer
-      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
+      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > 78!
       1132428117820629783145752115873204622873174957948825.....
@@ -164,7 +174,7 @@ Using Yarer, the Black–Scholes formula for a European call option can be evalu
 
 ```rust
       $ yarer
-      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
+      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > S=100;K=100;T=1;r=0.05;sigma=0.2;
       > d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))
