@@ -46,20 +46,31 @@ impl Session {
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert(
             "pi".to_string(),
-            Number::DecimalNumber(std::f64::consts::PI),
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(std::f64::consts::PI).unwrap(),
+            ),
         );
-        local_heap.insert("e".to_string(), Number::DecimalNumber(std::f64::consts::E));
+        local_heap.insert(
+            "e".to_string(),
+            Number::DecimalNumber(num_rational::BigRational::from_float(std::f64::consts::E).unwrap()),
+        );
         local_heap.insert(
             "tau".to_string(),
-            Number::DecimalNumber(std::f64::consts::TAU),
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(std::f64::consts::TAU).unwrap(),
+            ),
         );
         local_heap.insert(
             "phi".to_string(),
-            Number::DecimalNumber((1.0 + 5.0f64.sqrt()) / 2.0),
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float((1.0 + 5.0f64.sqrt()) / 2.0).unwrap(),
+            ),
         );
         local_heap.insert(
             "gamma".to_string(),
-            Number::DecimalNumber(0.577_215_664_901_532_9_f64),
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(0.577_215_664_901_532_9_f64).unwrap(),
+            ),
         );
         local_heap
     }
@@ -88,7 +99,10 @@ impl Session {
     pub fn setf(&self, key: &str, value: f64) {
         self.variable_heap
             .borrow_mut()
-            .insert(key.to_lowercase(), Number::DecimalNumber(value));
+            .insert(
+                key.to_lowercase(),
+                Number::DecimalNumber(num_rational::BigRational::from_float(value).unwrap()),
+            );
     }
 }
 
@@ -102,7 +116,10 @@ mod tests {
     fn test_session() {
         let session = Session::init();
         let mut resolver: RpnResolver = session.process("1+2*3/(4-5)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-5.0));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(num_rational::BigRational::from_float(-5.0).unwrap())
+        );
     }
 
     /// Test for setting an integer variable
@@ -111,7 +128,10 @@ mod tests {
         let session = Session::init();
         session.set("x", 4);
         let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+        );
     }
 
     /// Test for setting a float variable
@@ -120,7 +140,10 @@ mod tests {
         let session = Session::init();
         session.setf("x", 4.5);
         let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-1.5));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(num_rational::BigRational::from_float(-1.5).unwrap())
+        );
     }
 
     /// Test for the default variables initialization
@@ -130,7 +153,10 @@ mod tests {
         let mut resolver: RpnResolver = session.process("pi + e");
         assert_eq!(
             resolver.resolve().unwrap(),
-            Number::DecimalNumber(std::f64::consts::PI + std::f64::consts::E)
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(std::f64::consts::PI).unwrap()
+                    + num_rational::BigRational::from_float(std::f64::consts::E).unwrap()
+            )
         );
     }
 
@@ -141,7 +167,9 @@ mod tests {
         let mut resolver: RpnResolver = session.process("tau / 2");
         assert_eq!(
             resolver.resolve().unwrap(),
-            Number::DecimalNumber(std::f64::consts::TAU / 2.0)
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(std::f64::consts::TAU / 2.0).unwrap(),
+            )
         );
     }
 }

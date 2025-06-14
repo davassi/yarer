@@ -1,4 +1,5 @@
-use bigdecimal::ToPrimitive;
+use num_traits::ToPrimitive;
+use num_rational::BigRational;
 use log::debug;
 use num_bigint::BigInt;
 use num_traits::FromPrimitive;
@@ -8,14 +9,14 @@ use std::{
 };
 
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
-/// or a f64 float [`Number::DecimalNumber`]
+/// or a [`BigRational`] rational number [`Number::DecimalNumber`]
 ///
 #[derive(Debug, PartialEq, Clone)]
 pub enum Number {
     /// an Integer [BigInt]
     NaturalNumber(BigInt),
-    /// a Float [f64]
-    DecimalNumber(f64),
+    /// a Rational number [BigRational]
+    DecimalNumber(BigRational),
 }
 
 /// A binary or unary Math [`Operator`]
@@ -221,7 +222,9 @@ impl Token<'_> {
         }
 
         if let Ok(v) = t.parse::<f64>() {
-            return Some(Token::Operand(Number::DecimalNumber(v)));
+            if let Some(r) = BigRational::from_float(v) {
+                return Some(Token::Operand(Number::DecimalNumber(r)));
+            }
         }
 
         if let Some(fun) = Token::get_some(t) {
@@ -268,7 +271,10 @@ impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Number::NaturalNumber(v) => write!(f, "{v}"),
-            Number::DecimalNumber(v) => write!(f, "{v}"),
+            Number::DecimalNumber(v) => {
+                let fl = v.to_f64().expect("Should not happen");
+                write!(f, "{fl}")
+            }
         }
     }
 }
@@ -287,14 +293,17 @@ impl Display for Number {
 fn apply_functional_token_operation<NF, DF>(ln: Number, rn: Number, nf: NF, df: DF) -> Number
 where
     NF: Fn(BigInt, BigInt) -> BigInt,
-    DF: Fn(f64, f64) -> f64,
+    DF: Fn(BigRational, BigRational) -> BigRational,
 {
     match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(ToPrimitive::to_f64(&v1).expect("Should not happen"), v2))
+            Number::DecimalNumber(df(BigRational::from(v1), v2))
         }
-        (Number::DecimalNumber(v1), _) => Number::DecimalNumber(df(v1, rn.into())),
+        (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
+            Number::DecimalNumber(df(v1, BigRational::from(v2)))
+        }
+        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::DecimalNumber(df(v1, v2)),
     }
 }
 
@@ -339,7 +348,11 @@ impl BitXor for Number {
             self,
             rhs,
             |a, b| BigInt::pow(&a, b.try_into().unwrap()),
-            f64::powf,
+            |a, b| {
+                let af = a.to_f64().expect("Should not happen");
+                let bf = b.to_f64().expect("Should not happen");
+                BigRational::from_float(f64::powf(af, bf)).expect("Should not happen")
+            },
         )
     }
 }
@@ -350,11 +363,11 @@ impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&v2),
-            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => ToPrimitive::to_f64(v1)
-                .expect("Should not happen")
-                .partial_cmp(v2),
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
+                BigRational::from(v1.clone()).partial_cmp(v2)
+            }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-                v1.partial_cmp(&(ToPrimitive::to_f64(v2).expect("Should not happen")))
+                v1.partial_cmp(&BigRational::from(v2.clone()))
             }
             (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => v1.partial_cmp(&v2),
         }
@@ -365,7 +378,7 @@ impl From<Number> for f64 {
     fn from(n: Number) -> f64 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_f64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => v,
+            Number::DecimalNumber(v) => v.to_f64().expect("Should not happen"),
         }
     }
 }
@@ -375,7 +388,9 @@ impl From<Number> for BigInt {
     fn from(n: Number) -> BigInt {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => BigInt::from_f64(v).expect("Should not happen"),
+            Number::DecimalNumber(v) => {
+                BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")
+            }
         }
     }
 }
@@ -384,7 +399,7 @@ impl From<Number> for i32 {
     fn from(n: Number) -> i32 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"), // not good
+            Number::DecimalNumber(v) => ToPrimitive::to_i32(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
         }
     }
 }
@@ -393,7 +408,7 @@ impl From<Number> for i64 {
     fn from(n: Number) -> i64 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"), // not good
+            Number::DecimalNumber(v) => ToPrimitive::to_i64(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
         }
     }
 }
@@ -402,7 +417,7 @@ impl From<Number> for i128 {
     fn from(n: Number) -> i128 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"), // not good
+            Number::DecimalNumber(v) => ToPrimitive::to_i128(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
         }
     }
 }
@@ -467,7 +482,9 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize(v[2]),
-            Some(Token::Operand(Number::DecimalNumber(2.1)))
+            Some(Token::Operand(Number::DecimalNumber(
+                BigRational::from_float(2.1).unwrap()
+            )))
         );
     }
 
@@ -511,7 +528,9 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(3.14)))
+            Some(Token::Operand(Number::DecimalNumber(
+                BigRational::from_float(3.14).unwrap()
+            )))
         );
         assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }
@@ -525,7 +544,9 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(3.14)))
+            Some(Token::Operand(Number::DecimalNumber(
+                BigRational::from_float(3.14).unwrap()
+            )))
         );
         assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }

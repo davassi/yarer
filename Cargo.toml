@@ -31,6 +31,7 @@ dirs = "6.0.0"
 num = "0.4.1"
 num-bigint = "0.4.4"
 num-traits = "0.2.18"
+num-rational = "0.4"
 bigdecimal = "0.4.2"
 statrs = "0.18.0"
 
