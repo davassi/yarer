@@ -16,7 +16,12 @@ macro_rules! resolve {
 
 macro_rules! resolve_decimal {
     ($expr:expr, $expected:expr) => {{
-        resolve!($expr, Number::DecimalNumber($expected));
+        let session = Session::init();
+        let mut resolver = session.process($expr);
+        let result = resolver.resolve().unwrap();
+        assert!(matches!(result, Number::DecimalNumber(_)));
+        let res_f: f64 = result.clone().into();
+        assert!((res_f - $expected).abs() < 1e-10);
     }};
     () => {
         panic!("Expected a decimal number, but got an invalid result.");
@@ -200,7 +205,10 @@ fn test_session_set() {
     let session = Session::init();
     session.set("x", 4);
     let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-    assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(-2.0));
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+    );
 }
 
 #[test]

@@ -13,6 +13,7 @@ use std::{
 };
 
 use num::{BigInt, BigUint, One, Zero};
+use num_rational::BigRational;
 use num_traits::ToPrimitive;
 
 static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
@@ -101,7 +102,10 @@ impl RpnResolver<'_> {
                             if right_value == zero {
                                 return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
-                            left_value = Number::DecimalNumber(left_value.into());
+                            left_value = Number::DecimalNumber(
+                                BigRational::from_float(f64::from(left_value))
+                                    .expect("valid float"),
+                            );
                             result_stack.push_back(left_value / right_value);
                             var_stack.push_back(None);
                         }
@@ -110,7 +114,10 @@ impl RpnResolver<'_> {
                                 if left_value == zero {
                                     return Err(anyhow!(DIVISION_ZERO_ERR));
                                 }
-                                left_value = Number::DecimalNumber(left_value.into());
+                                left_value = Number::DecimalNumber(
+                                    BigRational::from_float(f64::from(left_value))
+                                        .expect("valid float"),
+                                );
                             }
                             result_stack.push_back(left_value ^ right_value);
                             var_stack.push_back(None);
@@ -157,8 +164,11 @@ impl RpnResolver<'_> {
                     let var_name = v.to_lowercase();
                     debug!("Heap {:?}", self.local_heap);
                     let heap = self.local_heap.borrow();
-                    let n = heap.get(&var_name).unwrap_or(&Number::DecimalNumber(0.));
-                    result_stack.push_back(n.clone());
+                    let n = heap
+                        .get(&var_name)
+                        .cloned()
+                        .unwrap_or_else(|| Number::DecimalNumber(BigRational::from_integer(BigInt::zero())));
+                    result_stack.push_back(n);
                     var_stack.push_back(Some(var_name));
                 }
                 Token::Function(fun) => {
@@ -212,7 +222,9 @@ impl RpnResolver<'_> {
                         MathFunction::Exp => f64::exp(value.into()),
                         MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };
-                    result_stack.push_back(Number::DecimalNumber(res));
+                    result_stack.push_back(Number::DecimalNumber(
+                        BigRational::from_float(res).expect("valid float"),
+                    ));
                     var_stack.push_back(None);
                 }
                 Token::SemiColon => {
@@ -452,12 +464,21 @@ mod tests {
     fn test_max_min() {
         let session = Session::init();
         let mut resolver = session.process("max(1,2)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(BigRational::from_float(2.0).unwrap())
+        );
 
         let mut resolver = session.process("min(1,2)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(1.0));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(BigRational::from_float(1.0).unwrap())
+        );
 
         let mut resolver = session.process("min(max(1,2),3)");
-        assert_eq!(resolver.resolve().unwrap(), Number::DecimalNumber(2.0));
+        assert_eq!(
+            resolver.resolve().unwrap(),
+            Number::DecimalNumber(BigRational::from_float(2.0).unwrap())
+        );
     }
 }
