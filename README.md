@@ -158,6 +158,21 @@ There are a few predefined math constants available:
     gamma -> 0.57721566...
 ```
 
+## Example: Black-Scholes Option Pricing
+
+Using Yarer, the Black–Scholes formula for a European call option can be evaluated straight from the CLI.
+
+```rust
+      $ yarer
+      Yarer v.0.1.7 - Yet Another Rust Expression Resolver.
+      License MIT OR Apache-2.0
+      > S=100;K=100;T=1;r=0.05;sigma=0.2;
+      > d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))
+      > d2=d1-sigma*sqrt(T)
+      > S*cdf(d1)-K*exp(-r*T)*cdf(d2)
+      10.450583572185565
+```
+
 ## Execute
 
 To run it from cargo, just type:
