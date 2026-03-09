@@ -1,5 +1,6 @@
 use crate::token::{self, Operator, Token};
 
+use anyhow::{anyhow, Result};
 use log::debug;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -11,7 +12,7 @@ use regex::Regex;
 pub struct Parser;
 
 static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*|)")
+    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=\[\]×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*)")
         .expect("Should compile regex")
 });
 
@@ -19,14 +20,27 @@ impl Parser {
     /// Parses and splits a &str into a vec of &str with
     /// the help of [`EXPRESSION_REGEX`] and then wraps in tokens the &str chunks
     ///
-    pub fn parse(expr: &str) -> Vec<Token> {
-        let vex: Vec<Token<'_>> = EXPRESSION_REGEX
-            .find_iter(expr)
-            .map(|m| m.as_str())
-            .filter_map(|s| Token::tokenize(s))
-            .collect();
+    pub fn parse(expr: &str) -> Result<Vec<Token<'_>>> {
+        let mut vex: Vec<Token<'_>> = Vec::new();
+        let mut cursor = 0;
 
-        Self::mod_unary_operators(&vex)
+        for m in EXPRESSION_REGEX.find_iter(expr) {
+            Self::validate_gap(expr, cursor, m.start())?;
+            vex.push(Token::tokenize(m.as_str()).ok_or_else(|| {
+                anyhow!("Runtime Error: The mathematical expression is malformed.")
+            })?);
+            cursor = m.end();
+        }
+
+        Self::validate_gap(expr, cursor, expr.len())?;
+
+        if vex.is_empty() {
+            return Err(anyhow!(
+                "Runtime Error: The mathematical expression is malformed."
+            ));
+        }
+
+        Ok(Self::mod_unary_operators(&vex))
     }
 
     /// Finds out all the unary operators that are present in the expression
@@ -69,6 +83,15 @@ impl Parser {
         }
         mod_vec
     }
+
+    fn validate_gap(expr: &str, start: usize, end: usize) -> Result<()> {
+        let gap = &expr[start..end];
+        if gap.chars().all(char::is_whitespace) {
+            return Ok(());
+        }
+
+        Err(anyhow!("Parse Error: Unexpected token '{}'.", gap.trim()))
+    }
 }
 
 #[cfg(test)]
@@ -80,7 +103,7 @@ mod tests {
     #[test]
     fn test_parse_valid() {
         assert_eq!(
-            Parser::parse("1+2*3/(4-5)"),
+            Parser::parse("1+2*3/(4-5)").unwrap(),
             (vec![
                 Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
                 Token::Operator(Operator::Add),
@@ -95,6 +118,11 @@ mod tests {
                 Token::Bracket(Bracket::Close),
             ])
         );
+    }
+
+    #[test]
+    fn test_parse_invalid_character() {
+        assert!(Parser::parse("1@2").is_err());
     }
 
     #[test]

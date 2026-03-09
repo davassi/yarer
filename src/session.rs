@@ -11,6 +11,8 @@ pub struct Session {
     variable_heap: Rc<RefCell<HashMap<String, Number>>>,
 }
 
+const BUILTIN_CONSTANTS: [&str; 5] = ["pi", "e", "tau", "phi", "gamma"];
+
 impl Session {
     /// Default builder constructor without any arguments
     ///
@@ -52,7 +54,9 @@ impl Session {
         );
         local_heap.insert(
             "e".to_string(),
-            Number::DecimalNumber(num_rational::BigRational::from_float(std::f64::consts::E).unwrap()),
+            Number::DecimalNumber(
+                num_rational::BigRational::from_float(std::f64::consts::E).unwrap(),
+            ),
         );
         local_heap.insert(
             "tau".to_string(),
@@ -75,6 +79,10 @@ impl Session {
         local_heap
     }
 
+    pub(crate) fn is_constant_name(key: &str) -> bool {
+        BUILTIN_CONSTANTS.contains(&key)
+    }
+
     /// Declares and saves a new integer variable ([`Number::NaturalNumber`])
     ///
     /// Example
@@ -83,10 +91,14 @@ impl Session {
     /// ``
     ///
     pub fn set(&self, key: &str, value: i64) {
-        self.variable_heap.borrow_mut().insert(
-            key.to_lowercase(),
-            Number::NaturalNumber(BigInt::from(value)),
-        );
+        let key = key.to_lowercase();
+        if Self::is_constant_name(&key) {
+            return;
+        }
+
+        self.variable_heap
+            .borrow_mut()
+            .insert(key, Number::NaturalNumber(BigInt::from(value)));
     }
 
     /// Declares and saves a new float variable ([`Number::DecimalNumber`])
@@ -97,12 +109,16 @@ impl Session {
     /// ``
     ///
     pub fn setf(&self, key: &str, value: f64) {
-        self.variable_heap
-            .borrow_mut()
-            .insert(
-                key.to_lowercase(),
-                Number::DecimalNumber(num_rational::BigRational::from_float(value).unwrap()),
-            );
+        let key = key.to_lowercase();
+        if Self::is_constant_name(&key) {
+            return;
+        }
+
+        if let Some(value) = num_rational::BigRational::from_float(value) {
+            self.variable_heap
+                .borrow_mut()
+                .insert(key, Number::DecimalNumber(value));
+        }
     }
 }
 

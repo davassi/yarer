@@ -1,8 +1,7 @@
-use num_traits::ToPrimitive;
-use num_rational::BigRational;
 use log::debug;
 use num_bigint::BigInt;
-use num_traits::FromPrimitive;
+use num_rational::BigRational;
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
 use std::{
     fmt::Display,
     ops::{Add, BitXor, Div, Mul, Sub},
@@ -145,8 +144,8 @@ impl Token<'_> {
         match c {
             '+' => Some(Token::Operator(Operator::Add)),
             '-' => Some(Token::Operator(Operator::Sub)),
-            '*' => Some(Token::Operator(Operator::Mul)),
-            '/' => Some(Token::Operator(Operator::Div)),
+            '*' | '×' => Some(Token::Operator(Operator::Mul)),
+            '/' | '÷' => Some(Token::Operator(Operator::Div)),
             '^' => Some(Token::Operator(Operator::Pow)),
             '#' => Some(Token::Operator(Operator::Une)),
             '!' => Some(Token::Operator(Operator::Fac)),
@@ -178,7 +177,7 @@ impl Token<'_> {
             "acos" => Some(MathFunction::ACos),
             "atan" => Some(MathFunction::ATan),
             "ln" => Some(MathFunction::Ln),
-            "log" => Some(MathFunction::Log),
+            "log" | "log10" => Some(MathFunction::Log),
             "abs" => Some(MathFunction::Abs),
             "sqrt" => Some(MathFunction::Sqrt),
             "max" => Some(MathFunction::Max),
@@ -203,10 +202,10 @@ impl Token<'_> {
     /// "x"   -> [`Token::Variable`]
     ///
     #[must_use]
-    pub fn tokenize(t: &str) -> Option<Token> {
+    pub fn tokenize(t: &str) -> Option<Token<'_>> {
         match t.chars().next() {
             Some(s) => match s {
-                c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=') => {
+                c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=' | '×' | '÷') => {
                     return Some(Token::from_operator(c).unwrap())
                 }
                 b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
@@ -221,10 +220,8 @@ impl Token<'_> {
             return Some(Token::Operand(Number::NaturalNumber(v)));
         }
 
-        if let Ok(v) = t.parse::<f64>() {
-            if let Some(r) = BigRational::from_float(v) {
-                return Some(Token::Operand(Number::DecimalNumber(r)));
-            }
+        if let Some(v) = parse_decimal_literal(t) {
+            return Some(Token::Operand(Number::DecimalNumber(v)));
         }
 
         if let Some(fun) = Token::get_some(t) {
@@ -272,8 +269,13 @@ impl Display for Number {
         match self {
             Number::NaturalNumber(v) => write!(f, "{v}"),
             Number::DecimalNumber(v) => {
-                let fl = v.to_f64().expect("Should not happen");
-                write!(f, "{fl}")
+                if v.denom().is_one() {
+                    write!(f, "{}", v.to_integer())
+                } else if let Some(fl) = v.to_f64() {
+                    write!(f, "{fl}")
+                } else {
+                    write!(f, "{}/{}", v.numer(), v.denom())
+                }
             }
         }
     }
@@ -335,7 +337,20 @@ impl Div for Number {
     type Output = Number;
 
     fn div(self, rhs: Self) -> Self::Output {
-        apply_functional_token_operation(self, rhs, |a, b| a / b, |a, b| a / b)
+        match (self, rhs) {
+            (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => {
+                Number::DecimalNumber(BigRational::new(v1, v2))
+            }
+            (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
+                Number::DecimalNumber(BigRational::from(v1) / v2)
+            }
+            (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
+                Number::DecimalNumber(v1 / BigRational::from(v2))
+            }
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
+                Number::DecimalNumber(v1 / v2)
+            }
+        }
     }
 }
 
@@ -399,7 +414,11 @@ impl From<Number> for i32 {
     fn from(n: Number) -> i32 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i32(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i32(
+                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
+                    .expect("Should not happen"),
+            )
+            .expect("Should not happen"),
         }
     }
 }
@@ -408,7 +427,11 @@ impl From<Number> for i64 {
     fn from(n: Number) -> i64 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i64(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i64(
+                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
+                    .expect("Should not happen"),
+            )
+            .expect("Should not happen"),
         }
     }
 }
@@ -417,7 +440,11 @@ impl From<Number> for i128 {
     fn from(n: Number) -> i128 {
         match n {
             Number::NaturalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i128(&BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")).expect("Should not happen"),
+            Number::DecimalNumber(v) => ToPrimitive::to_i128(
+                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
+                    .expect("Should not happen"),
+            )
+            .expect("Should not happen"),
         }
     }
 }
@@ -460,10 +487,37 @@ impl Display for Token<'_> {
             Token::Bracket(v) => write!(f, "({v})"),
             Token::Function(v) => write!(f, "({v})"),
             Token::Variable(v) => write!(f, "({v})"),
-            Token::Comma => write!(f, "(,)") ,
-            Token::SemiColon => write!(f, "(;)")
+            Token::Comma => write!(f, "(,)"),
+            Token::SemiColon => write!(f, "(;)"),
         }
     }
+}
+
+fn parse_decimal_literal(literal: &str) -> Option<BigRational> {
+    let (whole, fractional) = literal.split_once('.')?;
+
+    let whole = if whole.is_empty() {
+        BigInt::zero()
+    } else {
+        whole.parse::<BigInt>().ok()?
+    };
+    let fractional = if fractional.is_empty() {
+        BigInt::zero()
+    } else {
+        fractional.parse::<BigInt>().ok()?
+    };
+    let fractional_digits = literal
+        .split_once('.')
+        .map_or(0, |(_, digits)| digits.len());
+    let mut exact_scale = BigInt::one();
+    for _ in 0..fractional_digits {
+        exact_scale *= 10_u8;
+    }
+
+    Some(BigRational::new(
+        whole * exact_scale.clone() + fractional,
+        exact_scale,
+    ))
 }
 
 #[cfg(test)]
@@ -482,9 +536,10 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize(v[2]),
-            Some(Token::Operand(Number::DecimalNumber(
-                BigRational::from_float(2.1).unwrap()
-            )))
+            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+                BigInt::from(21),
+                BigInt::from(10)
+            ))))
         );
     }
 
@@ -503,7 +558,15 @@ mod tests {
             Some(Token::Operator(Operator::Mul))
         );
         assert_eq!(
+            Token::from_operator('×'),
+            Some(Token::Operator(Operator::Mul))
+        );
+        assert_eq!(
             Token::from_operator('/'),
+            Some(Token::Operator(Operator::Div))
+        );
+        assert_eq!(
+            Token::from_operator('÷'),
             Some(Token::Operator(Operator::Div))
         );
         assert_eq!(
@@ -528,9 +591,10 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(
-                BigRational::from_float(3.14).unwrap()
-            )))
+            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+                BigInt::from(157),
+                BigInt::from(50)
+            ))))
         );
         assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }
@@ -544,9 +608,10 @@ mod tests {
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(
-                BigRational::from_float(3.14).unwrap()
-            )))
+            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+                BigInt::from(157),
+                BigInt::from(50)
+            ))))
         );
         assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
     }

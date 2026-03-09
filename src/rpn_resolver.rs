@@ -1,10 +1,12 @@
 use crate::{
     parser::Parser,
+    session::Session,
     token::{self, MathFunction, Number, Operator, Token},
 };
-use statrs::distribution::{Continuous, ContinuousCDF, Normal};
 use anyhow::anyhow;
 use log::debug;
+use num::{Integer, Signed};
+use statrs::distribution::{Continuous, ContinuousCDF, Normal};
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
@@ -21,6 +23,13 @@ static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
 static FACTORIAL_NATURAL_ERR: &str =
     "Runtime error: Factorial is only defined for non-negative integers.";
+static BUILTIN_CONSTANT_ERR: &str = "Runtime error: Built-in constants are read-only.";
+static INVALID_FUNCTION_RESULT_ERR: &str = "Runtime error: Function result is not a real number.";
+static INVALID_POWER_ERR: &str = "Runtime error: Invalid power operation.";
+static FLOAT_EVAL_TOO_LARGE_ERR: &str =
+    "Runtime error: Operand is too large for floating-point evaluation.";
+static POWER_TOO_LARGE_ERR: &str =
+    "Runtime error: Power operands are too large for non-integer evaluation.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -31,6 +40,7 @@ static FACTORIAL_NATURAL_ERR: &str =
 pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: Rc<RefCell<HashMap<String, Number>>>,
+    build_error: Option<String>,
 }
 
 impl RpnResolver<'_> {
@@ -40,19 +50,30 @@ impl RpnResolver<'_> {
         exp: &'a str,
         borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
     ) -> RpnResolver<'a> {
-        let tokenised_expr: Vec<Token<'a>> = Parser::parse(exp);
-        let (rpn_expr, local_heap) =
-            RpnResolver::reverse_polish_notation(&tokenised_expr, borrowed_heap);
-
-        RpnResolver {
-            rpn_expr,
-            local_heap,
+        let heap_for_parse = Rc::clone(&borrowed_heap);
+        match Parser::parse(exp).and_then(|tokenised_expr| {
+            RpnResolver::reverse_polish_notation(&tokenised_expr, heap_for_parse)
+        }) {
+            Ok((rpn_expr, local_heap)) => RpnResolver {
+                rpn_expr,
+                local_heap,
+                build_error: None,
+            },
+            Err(err) => RpnResolver {
+                rpn_expr: VecDeque::new(),
+                local_heap: borrowed_heap,
+                build_error: Some(err.to_string()),
+            },
         }
     }
 
     /// This method evaluates the rpn expression stack
     ///
     pub fn resolve(&mut self) -> anyhow::Result<Number> {
+        if let Some(build_error) = &self.build_error {
+            return Err(anyhow!(build_error.clone()));
+        }
+
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
 
@@ -72,7 +93,7 @@ impl RpnResolver<'_> {
 
                     var_stack.pop_back();
 
-                    let mut left_value = if op != &Operator::Une && op != &Operator::Fac {
+                    let left_value = if op != &Operator::Une && op != &Operator::Fac {
                         result_stack.pop_back().ok_or_else(|| {
                             anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand.")
                         })?
@@ -102,28 +123,18 @@ impl RpnResolver<'_> {
                             if right_value == zero {
                                 return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
-                            left_value = Number::DecimalNumber(
-                                BigRational::from_float(f64::from(left_value))
-                                    .expect("valid float"),
-                            );
                             result_stack.push_back(left_value / right_value);
                             var_stack.push_back(None);
                         }
                         Operator::Pow => {
-                            if right_value < zero {
-                                if left_value == zero {
-                                    return Err(anyhow!(DIVISION_ZERO_ERR));
-                                }
-                                left_value = Number::DecimalNumber(
-                                    BigRational::from_float(f64::from(left_value))
-                                        .expect("valid float"),
-                                );
-                            }
-                            result_stack.push_back(left_value ^ right_value);
+                            result_stack.push_back(Self::power(left_value, right_value)?);
                             var_stack.push_back(None);
                         }
                         Operator::Eql => {
                             if let Some(var) = left_var {
+                                if Session::is_constant_name(&var) {
+                                    return Err(anyhow!(BUILTIN_CONSTANT_ERR));
+                                }
                                 self.local_heap
                                     .borrow_mut()
                                     .insert(var.clone(), right_value.clone());
@@ -145,13 +156,13 @@ impl RpnResolver<'_> {
                                         anyhow!("Runtime Error: Factorial operand is too large")
                                     })?;
                                     let res = Self::factorial_helper(n.into());
-                                result_stack.push_back(Number::NaturalNumber(res.into()));
-                                var_stack.push_back(None);
+                                    result_stack.push_back(Number::NaturalNumber(res.into()));
+                                    var_stack.push_back(None);
+                                }
+                                Number::DecimalNumber(_) => {
+                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
+                                }
                             }
-                            Number::DecimalNumber(_) => {
-                                return Err(anyhow!(FACTORIAL_NATURAL_ERR));
-                            }
-                        }
                         }
                         Operator::Une => {
                             //# unary neg
@@ -167,7 +178,7 @@ impl RpnResolver<'_> {
                     let n = heap
                         .get(&var_name)
                         .cloned()
-                        .unwrap_or_else(|| Number::DecimalNumber(BigRational::from_integer(BigInt::zero())));
+                        .unwrap_or_else(|| Number::NaturalNumber(BigInt::zero()));
                     result_stack.push_back(n);
                     var_stack.push_back(Some(var_name));
                 }
@@ -179,16 +190,43 @@ impl RpnResolver<'_> {
                     ))?;
                     var_stack.pop_back();
 
-                    let res = match fun {
-                        MathFunction::Sin => f64::sin(value.into()),
-                        MathFunction::Cos => f64::cos(value.into()),
-                        MathFunction::Tan => f64::tan(value.into()),
-                        MathFunction::ASin => f64::asin(value.into()),
-                        MathFunction::ACos => f64::acos(value.into()),
-                        MathFunction::ATan => f64::atan(value.into()),
-                        MathFunction::Ln => f64::ln(value.into()),
-                        MathFunction::Log => f64::log10(value.into()),
-                        MathFunction::Abs => f64::abs(value.into()),
+                    let result = match fun {
+                        MathFunction::Sin => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sin(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Cos => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.cos(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Tan => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.tan(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::ASin => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.asin(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::ACos => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.acos(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::ATan => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.atan(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Ln => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.ln(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Log => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.log10(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Abs => Self::to_decimal_number(match value {
+                            Number::NaturalNumber(v) => Number::NaturalNumber(v.abs()),
+                            Number::DecimalNumber(v) => Number::DecimalNumber(v.abs()),
+                        }),
                         MathFunction::Max => {
                             let value2: Number = result_stack.pop_back().ok_or(anyhow!(
                                 "{} {}",
@@ -196,7 +234,7 @@ impl RpnResolver<'_> {
                                 "Wrong number of parameters for function Max"
                             ))?;
                             var_stack.pop_back();
-                            f64::max(value.into(), value2.into())
+                            Self::to_decimal_number(if value >= value2 { value } else { value2 })
                         }
                         MathFunction::Min => {
                             let value2: Number = result_stack.pop_back().ok_or(anyhow!(
@@ -205,26 +243,57 @@ impl RpnResolver<'_> {
                                 "Wrong number of parameters for function Min"
                             ))?;
                             var_stack.pop_back();
-                            f64::min(value.into(), value2.into())
+                            Self::to_decimal_number(if value <= value2 { value } else { value2 })
                         }
-                        MathFunction::Sqrt => f64::sqrt(value.into()),
-                        MathFunction::Floor => f64::floor(value.into()),
-                        MathFunction::Ceil => f64::ceil(value.into()),
-                        MathFunction::Round => f64::round(value.into()),
+                        MathFunction::Sqrt => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sqrt(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
+                        MathFunction::Floor => {
+                            let value = Self::number_to_rational(value);
+                            Self::to_decimal_number(Number::NaturalNumber(
+                                value.numer().div_floor(value.denom()),
+                            ))
+                        }
+                        MathFunction::Ceil => {
+                            let value = Self::number_to_rational(value);
+                            Self::to_decimal_number(Number::NaturalNumber(
+                                value.numer().div_ceil(value.denom()),
+                            ))
+                        }
+                        MathFunction::Round => {
+                            let value = Self::number_to_rational(value);
+                            let denom = value.denom().clone();
+                            let doubled_numer = value.numer().clone() * BigInt::from(2_u8);
+                            let doubled_denom = denom.clone() * BigInt::from(2_u8);
+                            let rounded = if doubled_numer >= BigInt::zero() {
+                                (doubled_numer + denom).div_floor(&doubled_denom)
+                            } else {
+                                (doubled_numer - denom).div_ceil(&doubled_denom)
+                            };
+                            Self::to_decimal_number(Number::NaturalNumber(rounded))
+                        }
                         MathFunction::Pdf => {
                             let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
-                            normal.pdf(value.into())
+                            Self::decimal_from_f64(
+                                normal.pdf(Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
+                                INVALID_FUNCTION_RESULT_ERR,
+                            )?
                         }
                         MathFunction::Cdf => {
                             let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
-                            normal.cdf(value.into())
+                            Self::decimal_from_f64(
+                                normal.cdf(Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
+                                INVALID_FUNCTION_RESULT_ERR,
+                            )?
                         }
-                        MathFunction::Exp => f64::exp(value.into()),
+                        MathFunction::Exp => Self::decimal_from_f64(
+                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.exp(),
+                            INVALID_FUNCTION_RESULT_ERR,
+                        )?,
                         MathFunction::None => return Err(anyhow!("This should never happen!")),
                     };
-                    result_stack.push_back(Number::DecimalNumber(
-                        BigRational::from_float(res).expect("valid float"),
-                    ));
+                    result_stack.push_back(result);
                     var_stack.push_back(None);
                 }
                 Token::SemiColon => {
@@ -240,8 +309,12 @@ impl RpnResolver<'_> {
                 }
             }
         }
-        var_stack.pop_front();
-        result_stack.pop_front().ok_or(anyhow!("{}", MALFORMED_ERR))
+
+        if result_stack.len() != 1 || var_stack.len() != 1 {
+            return Err(anyhow!(MALFORMED_ERR));
+        }
+
+        result_stack.pop_back().ok_or(anyhow!("{}", MALFORMED_ERR))
     }
 
     /// Transforming an infix notation to Reverse Polish Notation (RPN)
@@ -253,10 +326,11 @@ impl RpnResolver<'_> {
     fn reverse_polish_notation<'a>(
         infix_stack: &[Token<'a>],
         local_heap: Rc<RefCell<HashMap<String, Number>>>,
-    ) -> (VecDeque<Token<'a>>, Rc<RefCell<HashMap<String, Number>>>) {
+    ) -> anyhow::Result<(VecDeque<Token<'a>>, Rc<RefCell<HashMap<String, Number>>>)> {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
+        let mut seen_variables: Vec<String> = Vec::new();
 
         /* Scan the infix expression from left to right. */
         for t in infix_stack {
@@ -271,9 +345,11 @@ impl RpnResolver<'_> {
                 Pop the stack and add operators to the output list until you encounter a left parenthesis.
                 Pop the left parenthesis from the stack but do not add it to the output list.*/
                 Token::Bracket(token::Bracket::Close) => {
+                    let mut found_open = false;
                     while let Some(token) = operators_stack.pop() {
                         match token {
                             Token::Bracket(token::Bracket::Open) => {
+                                found_open = true;
                                 // If the token is a left parenthesis, pop it from the stack
                                 if let Some(Token::Function(_)) = operators_stack.last() {
                                     postfix_stack.push_back(
@@ -285,14 +361,23 @@ impl RpnResolver<'_> {
                             _ => postfix_stack.push_back(token),
                         }
                     }
+                    if !found_open {
+                        return Err(anyhow!(MALFORMED_ERR));
+                    }
                 }
 
                 Token::Comma => {
+                    let mut found_open = false;
                     while let Some(token) = operators_stack.last() {
                         if matches!(token, Token::Bracket(token::Bracket::Open)) {
+                            found_open = true;
                             break;
                         }
-                        postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                        postfix_stack
+                            .push_back(operators_stack.pop().expect("It should not happen."));
+                    }
+                    if !found_open {
+                        return Err(anyhow!(MALFORMED_ERR));
                     }
                 }
 
@@ -336,11 +421,7 @@ impl RpnResolver<'_> {
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => {
                     postfix_stack.push_back(t.clone());
-                    let s = s.to_lowercase();
-                    local_heap
-                        .borrow_mut()
-                        .entry(s) // let's not override consts
-                        .or_insert(Number::NaturalNumber(Zero::zero()));
+                    seen_variables.push(s.to_lowercase());
                 }
             }
             debug!(
@@ -353,9 +434,19 @@ impl RpnResolver<'_> {
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();
-        operators_stack
-            .iter()
-            .for_each(|t| postfix_stack.push_back(t.clone()));
+        for t in &operators_stack {
+            if matches!(t, Token::Bracket(_)) {
+                return Err(anyhow!(MALFORMED_ERR));
+            }
+            postfix_stack.push_back(t.clone());
+        }
+
+        let mut heap = local_heap.borrow_mut();
+        for variable in seen_variables {
+            heap.entry(variable)
+                .or_insert(Number::NaturalNumber(Zero::zero()));
+        }
+        drop(heap);
 
         debug!(
             "DEBUG: EOF - OUT {} - OP - {}",
@@ -363,17 +454,142 @@ impl RpnResolver<'_> {
             DisplayThatVec(&operators_stack)
         );
 
-        (postfix_stack, local_heap)
+        Ok((postfix_stack, local_heap))
     }
 
     fn factorial_helper(n: BigUint) -> BigUint {
-        if n == BigUint::zero() {
-            return BigUint::one();
+        let mut acc = BigUint::one();
+        let mut current = BigUint::one();
+
+        while current <= n {
+            acc *= &current;
+            current += BigUint::one();
         }
 
-        let previous = n.clone() - BigUint::one();
-        let sub_result = RpnResolver::factorial_helper(previous);
-        n * sub_result
+        acc
+    }
+
+    fn number_to_f64(value: &Number, error_message: &'static str) -> anyhow::Result<f64> {
+        match value {
+            Number::NaturalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
+            Number::DecimalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
+        }
+    }
+
+    fn decimal_from_f64(value: f64, error_message: &'static str) -> anyhow::Result<Number> {
+        if !value.is_finite() {
+            return Err(anyhow!(error_message));
+        }
+
+        BigRational::from_float(value)
+            .map(Number::DecimalNumber)
+            .ok_or_else(|| anyhow!(error_message))
+    }
+
+    fn number_to_rational(value: Number) -> BigRational {
+        match value {
+            Number::NaturalNumber(v) => BigRational::from_integer(v),
+            Number::DecimalNumber(v) => v,
+        }
+    }
+
+    fn to_decimal_number(value: Number) -> Number {
+        match value {
+            Number::NaturalNumber(v) => Number::DecimalNumber(BigRational::from_integer(v)),
+            Number::DecimalNumber(v) => Number::DecimalNumber(v),
+        }
+    }
+
+    fn integer_exponent(value: &Number) -> Option<BigInt> {
+        match value {
+            Number::NaturalNumber(v) => Some(v.clone()),
+            Number::DecimalNumber(v) if v.denom().is_one() => Some(v.to_integer()),
+            Number::DecimalNumber(_) => None,
+        }
+    }
+
+    fn power(left_value: Number, right_value: Number) -> anyhow::Result<Number> {
+        if let Some(exponent) = Self::integer_exponent(&right_value) {
+            return Self::power_integer(left_value, exponent);
+        }
+
+        let base = Self::number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
+        let exponent = Self::number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
+        Self::decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)
+    }
+
+    fn power_integer(base: Number, exponent: BigInt) -> anyhow::Result<Number> {
+        if exponent.is_zero() {
+            return Ok(Number::NaturalNumber(BigInt::one()));
+        }
+
+        let is_negative = exponent < BigInt::zero();
+        let magnitude = if is_negative { -exponent } else { exponent };
+        let exponent = magnitude
+            .to_biguint()
+            .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
+
+        match base {
+            Number::NaturalNumber(base) => {
+                if is_negative {
+                    if base.is_zero() {
+                        return Err(anyhow!(DIVISION_ZERO_ERR));
+                    }
+
+                    let value = Self::pow_big_int(base, exponent);
+                    Ok(Number::DecimalNumber(BigRational::new(
+                        BigInt::one(),
+                        value,
+                    )))
+                } else {
+                    Ok(Number::NaturalNumber(Self::pow_big_int(base, exponent)))
+                }
+            }
+            Number::DecimalNumber(base) => {
+                if is_negative && base.is_zero() {
+                    return Err(anyhow!(DIVISION_ZERO_ERR));
+                }
+
+                let value = Self::pow_big_rational(base, exponent);
+                if is_negative {
+                    Ok(Number::DecimalNumber(value.recip()))
+                } else {
+                    Ok(Number::DecimalNumber(value))
+                }
+            }
+        }
+    }
+
+    fn pow_big_int(mut base: BigInt, mut exponent: BigUint) -> BigInt {
+        let mut result = BigInt::one();
+
+        while !exponent.is_zero() {
+            if exponent.is_odd() {
+                result *= &base;
+            }
+            exponent >>= 1_usize;
+            if !exponent.is_zero() {
+                base = &base * &base;
+            }
+        }
+
+        result
+    }
+
+    fn pow_big_rational(mut base: BigRational, mut exponent: BigUint) -> BigRational {
+        let mut result = BigRational::from_integer(BigInt::one());
+
+        while !exponent.is_zero() {
+            if exponent.is_odd() {
+                result *= &base;
+            }
+            exponent >>= 1_usize;
+            if !exponent.is_zero() {
+                base = &base * &base;
+            }
+        }
+
+        result
     }
 }
 
@@ -422,7 +638,9 @@ mod tests {
             Token::Operator(Operator::Add),
         ];
         assert_eq!(
-            RpnResolver::reverse_polish_notation(&a, Rc::new(RefCell::new(HashMap::new()))).0,
+            RpnResolver::reverse_polish_notation(&a, Rc::new(RefCell::new(HashMap::new())))
+                .unwrap()
+                .0,
             b
         );
     }
@@ -444,6 +662,7 @@ mod tests {
                 Token::Operator(Operator::Add),
             ]),
             local_heap: Rc::new(RefCell::new(HashMap::new())),
+            build_error: None,
         };
         assert_eq!(
             resolver.resolve().unwrap(),

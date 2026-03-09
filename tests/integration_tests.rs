@@ -60,9 +60,9 @@ fn test_expressions() {
         std::f64::consts::PI * 4.0 + 2.0f64.powf(std::f64::consts::PI)
     );
     resolve_natural!("2^3 * 4 + 5^2", 8 * 4 + 25);
-    resolve_decimal!("sin(pi/4) + cos(pi/4)", 1.414213562373095); // Approximately sqrt(2)
+    resolve_decimal!("sin(pi/4) + cos(pi/4)", std::f64::consts::SQRT_2);
     resolve_decimal!("tan(pi/4) * cos(pi/6)", 0.8660254037844386); // Approximately sqrt(3)/2
-    resolve_decimal!("ln(e) + log10(100)", 1.0);
+    resolve_decimal!("ln(e) + log10(100)", 3.0);
     //resolve_natural!("3 * 2^3! - 2 * 3 + 6 / (2 + 1)", 188);
     resolve_decimal!("cos(sin(0.5) * pi / 2)", 0.7295860397469262); // Approximately cos(PI/4)
     resolve_decimal!(
@@ -70,7 +70,7 @@ fn test_expressions() {
         8.0 * std::f64::consts::PI + std::f64::consts::PI / 2.0 - std::f64::consts::E
     );
     resolve_natural!("2 ^ 3 ^ 2", 512);
-    resolve_decimal!("ln(e^2) - log10(1000)", 2.);
+    resolve_decimal!("ln(e^2) - log10(1000)", -1.0);
     resolve_decimal!(
         "pi^2 - e^2",
         std::f64::consts::PI * std::f64::consts::PI - std::f64::consts::E * std::f64::consts::E
@@ -83,7 +83,7 @@ fn test_expressions() {
     resolve!("(2^3 + 3^2) * 4", Number::NaturalNumber(BigInt::from(68)));
     resolve_decimal!("e * pi - pi * e", 0.0);
     resolve_natural!("(2 + 3) * (4 - 5) + (6 - 7) * (8 + 9)", -22);
-    resolve_decimal!("ln(e^3) / log10(1000)", 3.);
+    resolve_decimal!("ln(e^3) / log10(1000)", 1.0);
     resolve_natural!("(2^2 + 3^2) * (4^2 + 5^2)", 533);
     resolve_decimal!(
         "pi*e*(pi-e)",
@@ -153,10 +153,7 @@ fn test_expressions() {
     resolve_decimal!("round(3.4)", 3.0);
     resolve_decimal!("exp(1)", std::f64::consts::E);
     resolve_decimal!("cdf(0)", 0.5);
-    resolve_decimal!(
-        "pdf(0)",
-        0.39894228040143265
-    );
+    resolve_decimal!("pdf(0)", 0.39894228040143265);
 
     resolve_err!("min()");
     resolve_err!("max()");
@@ -225,12 +222,73 @@ fn test_factorial_invalid_operand() {
 fn test_chained_expressions() {
     let session = Session::init();
     let mut resolver = session.process("x=2; y=3; x*y");
-    assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(6)));
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(6))
+    );
 }
 
 #[test]
 fn test_chained_without_assignment() {
     let session = Session::init();
     let mut resolver = session.process("1+2; 3+4");
-    assert_eq!(resolver.resolve().unwrap(), Number::NaturalNumber(BigInt::from(7)));
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(7))
+    );
+}
+
+#[test]
+fn test_invalid_input_is_rejected() {
+    resolve_err!("1@2");
+    resolve_err!("1 2");
+    resolve_err!("(1+2");
+    resolve_err!("1+2)");
+}
+
+#[test]
+fn test_unicode_operators_work() {
+    resolve_decimal!("2×3 + 8÷4", 8.0);
+}
+
+#[test]
+fn test_decimal_literals_remain_exact() {
+    let session = Session::init();
+    let mut resolver = session.process("0.1+0.2");
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::DecimalNumber(num_rational::BigRational::new(
+            BigInt::from(3),
+            BigInt::from(10)
+        ))
+    );
+}
+
+#[test]
+fn test_large_integer_division_and_negative_power_do_not_panic() {
+    let session = Session::init();
+    let mut resolver = session.process("(10^100)/2");
+    assert_eq!(
+        format!("{}", resolver.resolve().unwrap()),
+        format!("5{}", "0".repeat(99))
+    );
+
+    let mut resolver = session.process("(10^100)^-1 * 10^100");
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::DecimalNumber(num_rational::BigRational::from_integer(BigInt::from(1)))
+    );
+}
+
+#[test]
+fn test_builtin_constants_are_read_only() {
+    let session = Session::init();
+    session.set("pi", 0);
+
+    let mut resolver = session.process("pi");
+    let pi: f64 = resolver.resolve().unwrap().into();
+    assert!((pi - std::f64::consts::PI).abs() < 1e-10);
+
+    let mut resolver = session.process("pi=0");
+    assert!(resolver.resolve().is_err());
 }
