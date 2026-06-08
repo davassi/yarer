@@ -52,14 +52,16 @@ and of course, the expression can be re-evaluated if the variable changes.
 
 ## Casting
 
-The result can be cast into an i32 or an f64 (if decimal) using
+The result can be converted into an i32 or an f64 (if decimal) using the
+fallible `TryFrom`/`TryInto` conversions, which return an error instead of
+panicking when the value does not fit the target type:
 
 ```rust
       let result: Number = resolver.resolve().unwrap();
 
-      let int : i32 = result.into();
+      let int : i32 = result.clone().try_into().unwrap();
       // or
-      let float : f64 = result.into();
+      let float : f64 = result.try_into().unwrap();
 ```
 
 ## CLI
@@ -68,7 +70,7 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
 
 ```rust
       $ yarer
-      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
+      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
@@ -93,6 +95,24 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
 ```
 ## News and Updates
 
+### Version 0.2.0
+
+Yarer 0.2.0 is a correctness-focused release that includes a breaking API change.
+
+**Breaking change:** conversions from `Number` to `i32`, `i64`, `i128` and `f64` are now
+fallible. They are exposed via `TryFrom`/`TryInto` (returning a `ConversionError`) instead of
+the previous panicking `From`/`Into`. Conversion to `BigInt` remains infallible via `From`.
+Update `let n: i32 = result.into();` to `let n: i32 = result.try_into()?;` (or `.unwrap()`).
+
+Other changes:
+
+* Out-of-range numeric conversions now return an error instead of panicking.
+* `Number` → `BigInt` conversion is exact (truncates the rational toward zero) rather than round-tripping through `f64`, so precision is no longer silently lost.
+* A trailing `;` now returns the last segment's value instead of reporting a spurious "malformed expression" error after the assignment already took effect.
+* Malformed segments inside a `;`-chained expression are now rejected instead of being silently discarded.
+* Stricter parser validation: malformed expressions and unexpected tokens raise a clear error.
+* Removed an unused, internally-panicking `BitXor` implementation for `Number`.
+
 ### Version 0.1.8
 
 Yarer 0.1.8 comes with several enhancements:
@@ -107,7 +127,7 @@ Starting with Yarer version 0.1.7, natural numbers are implemented internally us
 
 ```rust
     $ yarer
-      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
+      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > 78!
       1132428117820629783145752115873204622873174957948825.....
@@ -174,7 +194,7 @@ Using Yarer, the Black–Scholes formula for a European call option can be evalu
 
 ```rust
       $ yarer
-      Yarer v.0.1.8 - Yet Another Rust Expression Resolver.
+      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > S=100;K=100;T=1;r=0.05;sigma=0.2;
       > d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))

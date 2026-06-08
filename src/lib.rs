@@ -54,9 +54,9 @@
 //!
 //! let result: Number = resolver.resolve().unwrap();
 //!
-//! let int : i32 = result.clone().into();
+//! let int : i32 = result.clone().try_into().unwrap();
 //! // or
-//! let float : f64 = result.into();
+//! let float : f64 = result.try_into().unwrap();
 //! ```
 //!
 //! Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
