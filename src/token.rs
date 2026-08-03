@@ -1,10 +1,9 @@
-use log::debug;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_traits::{One, ToPrimitive, Zero};
 use std::{
     fmt::Display,
-    ops::{Add, BitXor, Div, Mul, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
@@ -354,24 +353,6 @@ impl Div for Number {
     }
 }
 
-impl BitXor for Number {
-    type Output = Number;
-
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        debug!("{} {}", self, rhs);
-        apply_functional_token_operation(
-            self,
-            rhs,
-            |a, b| BigInt::pow(&a, b.try_into().unwrap()),
-            |a, b| {
-                let af = a.to_f64().expect("Should not happen");
-                let bf = b.to_f64().expect("Should not happen");
-                BigRational::from_float(f64::powf(af, bf)).expect("Should not happen")
-            },
-        )
-    }
-}
-
 /// PartialOrd between [Number]s with the required conversions.
 ///
 impl PartialOrd for Number {
@@ -389,63 +370,90 @@ impl PartialOrd for Number {
     }
 }
 
-impl From<Number> for f64 {
-    fn from(n: Number) -> f64 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_f64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => v.to_f64().expect("Should not happen"),
-        }
-    }
+/// Error returned when a [`Number`] cannot be converted into a fixed-size
+/// numeric type because the value falls outside that type's representable range.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ConversionError {
+    /// The value does not fit in the requested target type.
+    #[error("value '{value}' is out of range for target type {target}")]
+    OutOfRange {
+        /// The offending value, rendered as a decimal string.
+        value: String,
+        /// The name of the target type that could not hold the value.
+        target: &'static str,
+    },
 }
 
-#[allow(clippy::cast_possible_truncation)]
+/// Converts a [`Number`] into a [`BigInt`], truncating any fractional part
+/// toward zero. This is exact and infallible: a [`BigInt`] holds any integer.
 impl From<Number> for BigInt {
     fn from(n: Number) -> BigInt {
         match n {
             Number::NaturalNumber(v) => v,
-            Number::DecimalNumber(v) => {
-                BigInt::from_f64(v.to_f64().expect("Should not happen")).expect("Should not happen")
-            }
+            // `to_integer` truncates the exact rational toward zero — no lossy f64 round-trip.
+            Number::DecimalNumber(v) => v.to_integer(),
         }
     }
 }
 
-impl From<Number> for i32 {
-    fn from(n: Number) -> i32 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i32(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i32(
-                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
-                    .expect("Should not happen"),
-            )
-            .expect("Should not happen"),
-        }
+/// Fallible conversion to [`f64`]. Fails when the value cannot be represented
+/// as a finite double (e.g. it exceeds [`f64::MAX`]).
+impl TryFrom<Number> for f64 {
+    type Error = ConversionError;
+
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        let value = match &n {
+            Number::NaturalNumber(v) => v.to_f64(),
+            Number::DecimalNumber(v) => v.to_f64(),
+        };
+        value
+            .filter(|f| f.is_finite())
+            .ok_or_else(|| ConversionError::OutOfRange {
+                value: n.to_string(),
+                target: "f64",
+            })
     }
 }
 
-impl From<Number> for i64 {
-    fn from(n: Number) -> i64 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i64(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i64(
-                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
-                    .expect("Should not happen"),
-            )
-            .expect("Should not happen"),
-        }
+/// Fallible conversion to [`i32`]: the fractional part is truncated toward zero,
+/// then the integer must fit in the target type.
+impl TryFrom<Number> for i32 {
+    type Error = ConversionError;
+
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        let value: BigInt = n.into();
+        value.to_i32().ok_or_else(|| ConversionError::OutOfRange {
+            value: value.to_string(),
+            target: "i32",
+        })
     }
 }
 
-impl From<Number> for i128 {
-    fn from(n: Number) -> i128 {
-        match n {
-            Number::NaturalNumber(v) => ToPrimitive::to_i128(&v).expect("Should not happen"),
-            Number::DecimalNumber(v) => ToPrimitive::to_i128(
-                &BigInt::from_f64(v.to_f64().expect("Should not happen"))
-                    .expect("Should not happen"),
-            )
-            .expect("Should not happen"),
-        }
+/// Fallible conversion to [`i64`]: the fractional part is truncated toward zero,
+/// then the integer must fit in the target type.
+impl TryFrom<Number> for i64 {
+    type Error = ConversionError;
+
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        let value: BigInt = n.into();
+        value.to_i64().ok_or_else(|| ConversionError::OutOfRange {
+            value: value.to_string(),
+            target: "i64",
+        })
+    }
+}
+
+/// Fallible conversion to [`i128`]: the fractional part is truncated toward zero,
+/// then the integer must fit in the target type.
+impl TryFrom<Number> for i128 {
+    type Error = ConversionError;
+
+    fn try_from(n: Number) -> Result<Self, Self::Error> {
+        let value: BigInt = n.into();
+        value.to_i128().ok_or_else(|| ConversionError::OutOfRange {
+            value: value.to_string(),
+            target: "i128",
+        })
     }
 }
 
@@ -617,6 +625,46 @@ mod tests {
     }
 
     #[test]
+    fn test_tryfrom_i32_out_of_range_is_err_not_panic() {
+        // 2^100 is a valid NaturalNumber that does not fit in i32:
+        // the conversion must return Err, never panic.
+        let big = Number::NaturalNumber(BigInt::from(2).pow(100));
+        assert!(i32::try_from(big).is_err());
+    }
+
+    #[test]
+    fn test_tryfrom_i64_in_range_ok() {
+        let n = Number::NaturalNumber(BigInt::from(3_265_920));
+        assert_eq!(i64::try_from(n).unwrap(), 3_265_920_i64);
+    }
+
+    #[test]
+    fn test_decimal_to_bigint_is_exact_for_large_values() {
+        // f64 cannot represent 10^30 + 1 exactly, so a round-trip through f64
+        // would lose the +1. Exact conversion via to_integer() must preserve it.
+        let big = BigInt::from(10).pow(30) + BigInt::from(1);
+        let n = Number::DecimalNumber(BigRational::from_integer(big.clone()));
+        assert_eq!(BigInt::from(n), big);
+    }
+
+    #[test]
+    fn test_decimal_to_bigint_truncates_toward_zero() {
+        let pos = Number::DecimalNumber(BigRational::new(BigInt::from(7), BigInt::from(2)));
+        assert_eq!(BigInt::from(pos), BigInt::from(3));
+        let neg = Number::DecimalNumber(BigRational::new(BigInt::from(-7), BigInt::from(2)));
+        assert_eq!(BigInt::from(neg), BigInt::from(-3));
+    }
+
+    #[test]
+    fn test_tryfrom_f64_ok_and_overflow_is_err() {
+        let half = Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(2)));
+        assert!((f64::try_from(half).unwrap() - 0.5_f64).abs() < f64::EPSILON);
+        // 10^400 exceeds f64::MAX: must error, not silently become infinity.
+        let huge = Number::NaturalNumber(BigInt::from(10).pow(400));
+        assert!(f64::try_from(huge).is_err());
+    }
+
+    #[test]
     fn test_operator_priority() {
         assert_eq!(
             Token::operator_priority(Token::Operator(Operator::Add)),
@@ -645,6 +693,114 @@ mod tests {
         assert_eq!(
             Token::operator_priority(Token::Operator(Operator::Fac)),
             (5, Associate::LeftAssociative)
+        );
+    }
+
+    #[test]
+    fn test_operator_priority_for_assignment() {
+        assert_eq!(
+            Token::operator_priority(Token::Operator(Operator::Eql)),
+            (0, Associate::RightAssociative)
+        );
+    }
+
+    #[test]
+    fn test_tokenize_edge_cases() {
+        assert_eq!(Token::tokenize(""), None);
+        assert_eq!(Token::tokenize("["), Some(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("]"), Some(Token::Bracket(Bracket::Close)));
+        assert_eq!(Token::tokenize(";"), Some(Token::SemiColon));
+        assert_eq!(Token::tokenize(","), Some(Token::Comma));
+        assert_eq!(Token::tokenize("×"), Some(Token::Operator(Operator::Mul)));
+        assert_eq!(Token::tokenize("÷"), Some(Token::Operator(Operator::Div)));
+        assert_eq!(Token::tokenize("foo"), Some(Token::Variable("foo")));
+    }
+
+    #[test]
+    fn test_tokenize_functions_are_case_insensitive() {
+        assert_eq!(
+            Token::tokenize("SIN"),
+            Some(Token::Function(MathFunction::Sin))
+        );
+        assert_eq!(
+            Token::tokenize("Cos"),
+            Some(Token::Function(MathFunction::Cos))
+        );
+        assert_eq!(
+            Token::tokenize("log10"),
+            Some(Token::Function(MathFunction::Log))
+        );
+    }
+
+    #[test]
+    fn test_parse_decimal_literal_variants() {
+        assert_eq!(
+            parse_decimal_literal(".5"),
+            Some(BigRational::new(BigInt::from(1), BigInt::from(2)))
+        );
+        assert_eq!(
+            parse_decimal_literal("1."),
+            Some(BigRational::from_integer(BigInt::from(1)))
+        );
+        assert_eq!(
+            parse_decimal_literal("3.14"),
+            Some(BigRational::new(BigInt::from(157), BigInt::from(50)))
+        );
+        assert_eq!(
+            parse_decimal_literal("0.001"),
+            Some(BigRational::new(BigInt::from(1), BigInt::from(1000)))
+        );
+        // a token without a '.' is not a decimal literal
+        assert_eq!(parse_decimal_literal("42"), None);
+    }
+
+    #[test]
+    fn test_number_display() {
+        assert_eq!(Number::NaturalNumber(BigInt::from(5)).to_string(), "5");
+        // a rational that reduces to a whole number prints as an integer
+        assert_eq!(
+            Number::DecimalNumber(BigRational::new(BigInt::from(4), BigInt::from(2))).to_string(),
+            "2"
+        );
+        assert_eq!(
+            Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(2))).to_string(),
+            "0.5"
+        );
+        // 1/3 is not a finite decimal, so it is rendered via its f64 approximation
+        let third = Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(3)));
+        assert_eq!(third.to_string(), format!("{}", 1.0_f64 / 3.0));
+    }
+
+    #[test]
+    fn test_conversion_error_reports_target_type() {
+        let big = Number::NaturalNumber(BigInt::from(2).pow(100));
+        let msg = i32::try_from(big).unwrap_err().to_string();
+        assert!(msg.contains("i32"), "message was: {msg}");
+        assert!(msg.contains("out of range"), "message was: {msg}");
+    }
+
+    #[test]
+    fn test_tryfrom_ok_paths() {
+        assert_eq!(
+            i32::try_from(Number::NaturalNumber(BigInt::from(42))).unwrap(),
+            42_i32
+        );
+        // a decimal is truncated toward zero before the range check
+        assert_eq!(
+            i32::try_from(Number::DecimalNumber(BigRational::new(
+                BigInt::from(7),
+                BigInt::from(2)
+            )))
+            .unwrap(),
+            3_i32
+        );
+        assert_eq!(
+            i128::try_from(Number::NaturalNumber(BigInt::from(2).pow(70))).unwrap(),
+            1_180_591_620_717_411_303_424_i128
+        );
+        assert!(
+            (f64::try_from(Number::NaturalNumber(BigInt::from(10))).unwrap() - 10.0).abs()
+                < f64::EPSILON
         );
     }
 }

@@ -79,6 +79,7 @@ impl RpnResolver<'_> {
 
         let mut result_stack: VecDeque<Number> = VecDeque::new();
         let mut var_stack: VecDeque<Option<String>> = VecDeque::new();
+        let mut last_result: Option<Number> = None;
 
         for t in &self.rpn_expr {
             match t {
@@ -297,6 +298,15 @@ impl RpnResolver<'_> {
                     var_stack.push_back(None);
                 }
                 Token::SemiColon => {
+                    // A chained segment just ended. A well-formed segment leaves exactly
+                    // one value on the stack; capture it as the running result, then reset
+                    // for the next segment. An empty segment (e.g. a leading ';') is a no-op.
+                    if !result_stack.is_empty() {
+                        if result_stack.len() != 1 {
+                            return Err(anyhow!(MALFORMED_ERR));
+                        }
+                        last_result = result_stack.pop_back();
+                    }
                     result_stack.clear();
                     var_stack.clear();
                 }
@@ -308,6 +318,12 @@ impl RpnResolver<'_> {
                     ))
                 }
             }
+        }
+
+        // A trailing ';' leaves the working stack empty: fall back to the last
+        // completed segment's value rather than reporting a spurious error.
+        if result_stack.is_empty() {
+            return last_result.ok_or_else(|| anyhow!(MALFORMED_ERR));
         }
 
         if result_stack.len() != 1 || var_stack.len() != 1 {

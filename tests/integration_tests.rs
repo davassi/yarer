@@ -20,7 +20,7 @@ macro_rules! resolve_decimal {
         let mut resolver = session.process($expr);
         let result = resolver.resolve().unwrap();
         assert!(matches!(result, Number::DecimalNumber(_)));
-        let res_f: f64 = result.clone().into();
+        let res_f: f64 = result.clone().try_into().unwrap();
         assert!((res_f - $expected).abs() < 1e-10);
     }};
     () => {
@@ -192,7 +192,7 @@ fn test_sharing_session() {
     if let (Ok(a), Ok(b)) = (res.resolve(), res2.resolve()) {
         assert!(a == Number::NaturalNumber(BigInt::from(100)));
 
-        let b: i64 = b.into();
+        let b: i64 = b.try_into().unwrap();
         assert!(b == 3265920i64);
     }
 }
@@ -236,6 +236,41 @@ fn test_chained_without_assignment() {
         resolver.resolve().unwrap(),
         Number::NaturalNumber(BigInt::from(7))
     );
+}
+
+#[test]
+fn test_trailing_semicolon_returns_last_value() {
+    // A trailing ';' must return the last completed segment's value, not error.
+    let session = Session::init();
+    let mut resolver = session.process("x=2;");
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(2))
+    );
+}
+
+#[test]
+fn test_trailing_semicolon_does_not_error_after_assignment() {
+    // The assignment side-effect and the reported result must agree: a successful
+    // assignment must not be reported as a malformed-expression error.
+    let session = Session::init();
+    let mut resolver = session.process("a=5;");
+    assert!(resolver.resolve().is_ok());
+
+    let mut reader = session.process("a");
+    assert_eq!(
+        reader.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(5))
+    );
+}
+
+#[test]
+fn test_malformed_segment_in_chain_is_rejected() {
+    // A malformed segment ('1 2' is two adjacent operands) must not be silently
+    // discarded by the following ';'.
+    let session = Session::init();
+    let mut resolver = session.process("1 2; 3");
+    assert!(resolver.resolve().is_err());
 }
 
 #[test]
@@ -286,9 +321,137 @@ fn test_builtin_constants_are_read_only() {
     session.set("pi", 0);
 
     let mut resolver = session.process("pi");
-    let pi: f64 = resolver.resolve().unwrap().into();
+    let pi: f64 = resolver.resolve().unwrap().try_into().unwrap();
     assert!((pi - std::f64::consts::PI).abs() < 1e-10);
 
     let mut resolver = session.process("pi=0");
     assert!(resolver.resolve().is_err());
+}
+
+#[test]
+fn test_rounding_functions_on_negative_values() {
+    // floor goes toward -inf, ceil toward +inf, round to nearest (half away from zero).
+    resolve_decimal!("floor(-3.2)", -4.0);
+    resolve_decimal!("ceil(-3.2)", -3.0);
+    resolve_decimal!("round(-3.6)", -4.0);
+    resolve_decimal!("round(-0.5)", -1.0);
+    resolve_decimal!("round(2.5)", 3.0);
+    resolve_decimal!("round(1.5)", 2.0);
+    resolve_decimal!("floor(5.0)", 5.0);
+    resolve_decimal!("ceil(5.0)", 5.0);
+}
+
+#[test]
+fn test_power_edge_cases() {
+    resolve_natural!("0^0", 1);
+    resolve_natural!("5^0", 1);
+    resolve_natural!("2^10", 1024);
+    resolve_natural!("(-2)^3", -8);
+    resolve_natural!("(-2)^2", 4);
+    resolve_natural!("2^64", 18_446_744_073_709_551_616_i128);
+    resolve_decimal!("2^-3", 0.125);
+    // unary minus binds tighter than '^', so -2^2 = (-2)^2 = 4 (documented behaviour).
+    resolve_natural!("-2^2", 4);
+}
+
+#[test]
+fn test_factorial_and_abs_edge_cases() {
+    resolve_natural!("0!", 1);
+    resolve_natural!("1!", 1);
+    resolve_natural!("6!", 720);
+    resolve_decimal!("abs(-2.5)", 2.5);
+    resolve_decimal!("abs(2.5)", 2.5);
+    resolve_decimal!("max(-5,-3)", -3.0);
+    resolve_decimal!("min(-5,-3)", -5.0);
+    resolve_decimal!("exp(0)", 1.0);
+}
+
+#[test]
+fn test_domain_errors_are_rejected() {
+    resolve_err!("sqrt(-1)");
+    resolve_err!("ln(0)");
+    resolve_err!("ln(-5)");
+    resolve_err!("log(0)");
+    resolve_err!("1/0");
+    resolve_err!("5/(3-3)");
+}
+
+#[test]
+fn test_variable_names_are_case_insensitive() {
+    let session = Session::init();
+    let mut resolver = session.process("X=7; x");
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(7))
+    );
+}
+
+#[test]
+fn test_chained_assignment_sets_all_variables() {
+    let session = Session::init();
+    let mut resolver = session.process("x=y=5");
+    assert_eq!(
+        resolver.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(5))
+    );
+
+    let mut reader = session.process("x+y");
+    assert_eq!(
+        reader.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(10))
+    );
+}
+
+#[test]
+fn test_large_result_to_i64_returns_error_not_panic() {
+    // 2^200 vastly exceeds i64: the public TryFrom must report an error.
+    let session = Session::init();
+    let mut resolver = session.process("2^200");
+    let n = resolver.resolve().unwrap();
+    assert!(i64::try_from(n).is_err());
+}
+
+#[test]
+fn test_square_and_mixed_brackets() {
+    resolve_natural!("[1+2]*3", 9);
+    resolve_natural!("[(1+2)*3]", 9);
+    resolve_natural!("2*[3+[4-1]]", 12);
+}
+
+#[test]
+fn test_whitespace_is_ignored() {
+    resolve_natural!("  1   +   2  ", 3);
+    resolve_natural!("\t3*\t4", 12);
+}
+
+#[test]
+fn test_functions_are_case_insensitive_end_to_end() {
+    resolve_decimal!("COS(0)", 1.0);
+    resolve_decimal!("SqRt(16)", 4.0);
+    resolve_decimal!("LOG10(1000)", 3.0);
+}
+
+#[test]
+fn test_large_factorial_is_exact() {
+    // 20! = 2_432_902_008_176_640_000 (still fits in i64, but is computed exactly via BigInt)
+    resolve_natural!("20!", 2_432_902_008_176_640_000_i64);
+}
+
+#[test]
+fn test_large_power_is_exact() {
+    let session = Session::init();
+    let mut resolver = session.process("2^100");
+    assert_eq!(
+        format!("{}", resolver.resolve().unwrap()),
+        "1267650600228229401496703205376"
+    );
+}
+
+#[test]
+fn test_setf_declares_a_decimal_variable() {
+    let session = Session::init();
+    session.setf("r", 2.5);
+    let mut resolver = session.process("r*2");
+    let v: f64 = resolver.resolve().unwrap().try_into().unwrap();
+    assert!((v - 5.0).abs() < 1e-10);
 }
