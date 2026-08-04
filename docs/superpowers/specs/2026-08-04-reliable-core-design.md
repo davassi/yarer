@@ -114,6 +114,22 @@ no existing signature changes.
 Limits are **on by default**. An opt-in limit leaves the default configuration
 non-terminating, which is precisely the state this stage exists to remove.
 
+**The 1 Mibit default is provisional and must be chosen from a measurement.** A bit
+budget bounds memory directly and running time only indirectly: `n!` is not one
+multiplication but a loop of `n` bignum multiplications, so cost grows faster than the
+size of the result. A limit calibrated on memory alone can still admit a computation
+taking several seconds, which inside a service is the same availability problem in a
+quieter form. Before the stage is done, the worst case at the limit — the slowest
+expression that the limit still accepts — is timed, and the default is lowered until
+that worst case stays comfortably below one second on ordinary hardware. The measured
+figure and the expression used to obtain it are recorded here.
+
+One consequence to accept knowingly: for `+ − × ÷` the check happens after the fact,
+so an operation whose operands are each just under the limit allocates the oversized
+result before it is rejected. The overshoot is bounded by roughly a factor of two and
+is transient. Avoiding it would mean predicting the size of every arithmetic result,
+which buys little for the complexity it costs.
+
 ### C. Function arity — closes defect 4
 
 `MathFunction` gains `arity(self) -> u8`: 2 for `Max` and `Min`, 1 for the rest.
@@ -199,4 +215,5 @@ Test-driven: for each defect the failing test is written first.
 - `cargo clippy --all-targets` below the current 40 warnings, with
   `too many lines` gone.
 - `cargo fmt --check` clean.
+- The default `max_value_bits` justified by a recorded timing, not asserted.
 - Every declared behaviour change recorded for the 0.3.0 CHANGELOG entry.
