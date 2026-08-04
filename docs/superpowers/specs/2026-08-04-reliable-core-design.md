@@ -133,31 +133,37 @@ calibrated on memory alone can still admit a computation taking several seconds,
 inside a service is the same availability problem in a quieter form. `power_integer`
 uses repeated squaring — `O(log exponent)` multiplications — so for a fixed bit budget
 the factorial is the more expensive of the two predictive checks; it dominates the
-worst case. Walking `n` down from `200000!` (refused, ~3.2 Mibit) against a release
-build (`cargo build --release`) found the boundary the 1 Mibit default admits: `71422!`
-succeeds (predicted 1_048_574 bits), while `71423!` is refused (predicted 1_048_591
-bits). Timing the admitted boundary case,
-```
-time (printf '71422!\nquit\n' | ./target/release/yarer -q)
-```
-took ~0.53–0.56s across three runs, comfortably below one second on ordinary hardware.
-For comparison, the boundary power case, `2^524288` (the largest exponent whose
-predicted 1_048_576 bits still fits), took ~0.05s — confirming the factorial, not the
-power, sets the worst case. Since the worst case the default admits already stays well
-under the one-second budget, `max_value_bits` keeps its `1 << 20` value; no lowering
-was needed.
+worst case.
 
-One imprecision surfaced by this measurement and worth recording rather than hiding:
-`71422!`'s *actual* bit length, computed independently, is 1_048_584 — 8 bits over the
-nominal budget, and above the 1_048_574 the guard predicted. The simplified Stirling
-form used here (`n·log2 n − n·log2 e`) omits the `+0.5·log2(2πn)` correction term, so it
-slightly underestimates for every `n`; the gap is a few bits and grows only as `log n`,
-invisible except within a handful of bits of the boundary, which is exactly where this
-measurement landed. Unlike the power check — documented above to overestimate, and so
-err toward refusing — the factorial check is not guaranteed conservative in the same
-direction. The practical exposure is a fixed, tiny number of bits, not a scaling one,
-so it does not change the timing conclusion above; it is noted here as a known gap
-rather than silently glossed over.
+The factorial prediction uses the full Stirling series, `n·log2(n) − n·log2(e) +
+0.5·log2(2πn)`, not just its two leading terms: the omitted correction term is close to
+ten bits at the scale this measurement operates at, enough to let a two-term prediction
+admit a value whose actual size is over budget (an earlier pass of this measurement
+caught exactly that — see the note below). With the correction included, the prediction
+matches `lgamma(n+1)/ln(2)` to under a bit, so — like the power prediction, which
+overestimates for the opposite reason — the factorial prediction no longer
+underestimates the size it guards.
+
+Walking `n` down from `200000!` (refused, ~3.2 Mibit) against a release build (`cargo
+build --release`) found the boundary the 1 Mibit default admits: `71421!` succeeds
+(predicted 1_048_568 bits, matching its actual bit length exactly), while `71422!` is
+refused (predicted 1_048_584 bits, likewise exact). Timing the admitted boundary case,
+```
+time (printf '71421!\nquit\n' | ./target/release/yarer -q)
+```
+took ~0.43s across three runs, comfortably below one second on ordinary hardware. For
+comparison, the boundary power case, `2^524288` (the largest exponent whose predicted
+1_048_576 bits still fits), took ~0.05s — confirming the factorial, not the power, sets
+the worst case. Since the worst case the default admits already stays well under the
+one-second budget, `max_value_bits` keeps its `1 << 20` value; no lowering was needed.
+
+**Note on the correction term's origin.** The first pass of this measurement used only
+the two leading Stirling terms and found the boundary at `71422!` — but that build's
+prediction for `71422!` (1_048_574 bits) undershot the value's actual bit length
+(1_048_584, verified independently), meaning the guard admitted a computation 8 bits
+over its own nominal budget. The gap matched the omitted `0.5·log2(2πn)` term almost
+exactly, which is why that term is now included above rather than left as a documented
+caveat.
 
 One consequence to accept knowingly: for `+ − × ÷` the check happens after the fact,
 so an operation whose operands are each just under the limit allocates the oversized

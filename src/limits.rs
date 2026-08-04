@@ -54,14 +54,21 @@ pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Res
     Ok(())
 }
 
-/// Predicts the bit length of `n!` without computing it, via Stirling:
-/// `log2(n!) ≈ n·log2(n) − 1.44·n`.
+/// Predicts the bit length of `n!` without computing it, via Stirling's series:
+/// `log2(n!) ≈ n·log2(n) − n·log2(e) + 0.5·log2(2πn)`.
 ///
-/// This is an estimate, not an exact count, so the precision lost converting `n`
-/// to `f64` and the truncation converting the rounded-up estimate back to `u128`
-/// are both intentional: `.max(1.0)` rules out a negative or sub-one result before
-/// the cast, and a saturating cast is the correct outcome for an `n` so large that
-/// the estimate would not fit anyway.
+/// The first two terms alone are optimistic — they omit the `0.5·log2(2πn)` term,
+/// which for `n` in the hundreds of thousands is close to ten bits, enough to let a
+/// prediction land just under a tight budget while the true value lands just over
+/// it. With the correction included this matches `lgamma(n+1)/ln(2)` to under a bit
+/// across tested magnitudes, so — like the power prediction, which overestimates
+/// for the opposite reason — this one no longer underestimates the size it guards.
+///
+/// This is still an estimate, not an exact count, so the precision lost converting
+/// `n` to `f64` and the truncation converting the rounded-up estimate back to
+/// `u128` are both intentional: `.max(1.0)` rules out a negative or sub-one result
+/// before the cast, and a saturating cast is the correct outcome for an `n` so
+/// large that the estimate would not fit anyway.
 #[must_use]
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -72,7 +79,10 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
     let n_f = n as f64;
     // -1.442_695_040_888_963_4 is bit-for-bit -LOG2_E; clippy's approx_constant
     // lint (deny-by-default) requires the named constant instead of the literal.
-    let bits = n_f.mul_add(n_f.log2(), -std::f64::consts::LOG2_E * n_f);
+    let leading_terms = n_f.mul_add(n_f.log2(), -std::f64::consts::LOG2_E * n_f);
+    // 0.5 * log2(2 * pi * n); TAU is the named constant for 2*pi.
+    let correction = 0.5 * (std::f64::consts::TAU * n_f).log2();
+    let bits = leading_terms + correction;
     // Round up and never report less than one bit.
     bits.max(1.0).ceil() as u128
 }

@@ -542,11 +542,15 @@ fn test_the_limit_is_configurable() {
 
 #[test]
 fn test_growth_through_multiplication_is_caught() {
-    // 2^3000 occupies 3001 bits and is admitted; squaring it needs 6001, which
-    // is not. Each step is individually under budget only until it is not.
+    // Budget 4000 is exactly the power's own prediction for this base and
+    // exponent (size_in_bits(2) * 2000 = 2 * 2000 = 4000): the largest value the
+    // predictive power check admits for "2^2000", so a failure here can only come
+    // from the multiplication, not from the power check firing again. 2^2000 is
+    // actually 2001 bits (passes both checks); squaring it needs 4001 bits, over
+    // budget, and only the post-hoc Mul check can catch that.
     let session = Session::with_limits(Limits {
-        max_value_bits: 4096,
+        max_value_bits: 4000,
     });
-    let mut resolver = session.process("x=2^3000; x*x");
-    assert!(resolver.resolve().is_err(), "the product needs 6001 bits");
+    let mut resolver = session.process("x=2^2000; x*x");
+    assert!(resolver.resolve().is_err(), "the product needs 4001 bits");
 }
