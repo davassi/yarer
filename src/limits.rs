@@ -12,15 +12,27 @@ use num_traits::ToPrimitive;
 /// Resource bounds applied while evaluating an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// The largest value any intermediate or final result may occupy, in bits.
+    /// The largest value a literal, a variable or an arithmetic result may
+    /// occupy, in bits.
+    ///
+    /// Function results are the one thing it does not cover: every built-in
+    /// routes its argument through `f64`, so what they return is bounded far
+    /// below any practical budget by construction rather than by this check.
     ///
     /// This bounds memory directly and worst-case running time only indirectly,
-    /// and the second relationship is superlinear: a factorial is a loop of `n`
-    /// bignum multiplications, so quadrupling this budget costs roughly twelve
-    /// times the worst-case factorial time. At the 1 Mibit default the largest
-    /// factorial admitted is `71421!`, measured at about 0.43 s in a release
-    /// build. Raise the budget with that ratio in mind rather than in the
-    /// expectation that time scales with it.
+    /// and the second relationship is superlinear, so raise it with the measured
+    /// ratios below in mind rather than in the expectation that time scales with
+    /// it.
+    ///
+    /// A factorial is a loop of `n` bignum multiplications, so quadrupling this
+    /// budget costs roughly twelve times the worst-case factorial time: at the
+    /// 1 Mibit default the largest factorial admitted is `71421!`, about 0.43 s
+    /// in a release build. That is no longer the worst case, though. A base of
+    /// magnitude 1 short-circuits the power prediction — `1^n` is `1` under any
+    /// limit — so it goes on to run a repeated-squaring loop over every bit of
+    /// `n`, and `n` is bounded only by this budget applied to the literal. At
+    /// the default the largest such exponent is 315,652 digits, and evaluating
+    /// it takes about 1.57 s.
     pub max_value_bits: u64,
 }
 

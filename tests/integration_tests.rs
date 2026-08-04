@@ -655,6 +655,43 @@ fn test_an_oversized_variable_is_refused() {
 }
 
 #[test]
+fn test_a_tiny_budget_rejects_the_builtin_constants() {
+    // The constants are f64s held exactly as rationals, so they are wide:
+    // numerator bits plus denominator bits, tau is the narrowest at 98 and gamma
+    // the widest at 107 (pi is 884279719003555/281474976710656, 50 + 49 = 99).
+    // A variable is size-checked as it is pushed, so a small budget rejects a
+    // value the caller never supplied. This test exists so the 107-bit floor
+    // quoted by Session::with_limits stays a measured number, not folklore.
+    let below_all = Session::with_limits(Limits { max_value_bits: 97 });
+    for name in ["pi", "e", "tau", "phi", "gamma"] {
+        let mut resolver = below_all.process(name);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("size limit"), "{name} reported: {err}");
+    }
+
+    // 107 is the exact floor, pinned from both sides: one bit under it the
+    // widest constant still does not fit, at it every constant does. Asserting
+    // only the lower bound would pass for any number that happens to be too
+    // small, which is how a figure like this drifts out of date unnoticed.
+    let one_short = Session::with_limits(Limits {
+        max_value_bits: 106,
+    });
+    let mut widest = one_short.process("gamma");
+    assert!(widest.resolve().is_err(), "gamma fits in 106 bits?");
+
+    let exact = Session::with_limits(Limits {
+        max_value_bits: 107,
+    });
+    for name in ["pi", "e", "tau", "phi", "gamma"] {
+        let mut resolver = exact.process(name);
+        assert!(
+            resolver.resolve().is_ok(),
+            "{name} was rejected at 107 bits"
+        );
+    }
+}
+
+#[test]
 fn test_wrong_arity_is_diagnosed_by_name() {
     let session = Session::init();
     for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {

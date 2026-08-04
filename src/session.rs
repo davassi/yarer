@@ -34,6 +34,13 @@ impl Session {
     }
 
     /// Builds a session whose evaluations are bound by `limits`.
+    ///
+    /// The bound reaches the built-in constants too, and they are wider than
+    /// they look: `pi`, `e`, `tau`, `phi` and `gamma` are `f64`s held exactly as
+    /// rationals, costing numerator bits plus denominator bits — 99 for `pi`, and
+    /// 107 for `gamma`, the widest. A `max_value_bits` under 107 therefore
+    /// rejects a value the caller never supplied. A limit meant to bound
+    /// untrusted input should sit well above that.
     #[must_use]
     pub fn with_limits(limits: Limits) -> Session {
         Session {

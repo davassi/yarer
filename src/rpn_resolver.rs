@@ -418,11 +418,20 @@ impl RpnResolver<'_> {
                     // not an operator or a function, and the `SemiColon` arm
                     // refuses a non-empty `bracket_stack` before it drains.
                     // Popping a frame above therefore guarantees a matching open
-                    // bracket is still below us here.
-                    debug_assert!(
-                        found_open,
-                        "a popped bracket frame must have a matching '(' in the operator stack"
-                    );
+                    // bracket is still below us here, so this branch is
+                    // unreachable and no test can cover it. It stays anyway,
+                    // because the loop above has by then drained the operator
+                    // stack into the output in exactly the order the normal
+                    // end-of-expression drain uses: the postfix sequence is still
+                    // evaluable, so falling through would not raise an error, it
+                    // would return a number computed with the bracket grouping
+                    // dissolved — `2*(3+4)` as `2 3 * 4 +`, which is 10 rather
+                    // than 14. Note also that the last clause above is doing real
+                    // work: the `SemiColon` guard is what keeps the two stacks in
+                    // step, and relaxing it makes this reachable again.
+                    if !found_open {
+                        return Err(anyhow!(MALFORMED_ERR));
+                    }
                 }
 
                 Token::Comma => {
@@ -454,11 +463,15 @@ impl RpnResolver<'_> {
                     // reached here through `bracket_stack.last_mut()` having
                     // yielded a frame: an enclosing frame exists, so its open
                     // bracket is still on `operators_stack`. This arm only peeks
-                    // at that bracket, so it also leaves the two in step.
-                    debug_assert!(
-                        found_open,
-                        "a comma inside a bracket frame must find that frame's '(' in the operator stack"
-                    );
+                    // at that bracket, so it also leaves the two in step. Also
+                    // unreachable, and kept for the same reason: the loop above
+                    // has already moved the operators into the output, so falling
+                    // through would silently mis-group the arguments rather than
+                    // fail, and the invariant it relies on rests on the
+                    // `SemiColon` guard staying where it is.
+                    if !found_open {
+                        return Err(anyhow!(MALFORMED_ERR));
+                    }
                 }
 
                 Token::SemiColon => {
