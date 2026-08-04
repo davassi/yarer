@@ -615,13 +615,33 @@ fn test_the_limit_is_configurable() {
 
 #[test]
 fn test_growth_through_multiplication_is_caught() {
-    // 2^3000 occupies 3001 bits and is admitted; squaring it needs 6001, which
-    // is not. Each step is individually under budget only until it is not.
-    let session = Session::with_limits(Limits { max_value_bits: 4096 });
-    let mut resolver = session.process("x=2^3000; x*x");
-    assert!(resolver.resolve().is_err(), "the product needs 6001 bits");
+    // Budget 4000 is exactly the power's own prediction for this base and
+    // exponent (size_in_bits(2) * 2000 = 2 * 2000 = 4000): the largest value the
+    // predictive power check admits for "2^2000", so a failure here can only come
+    // from the multiplication, not from the power check firing again. 2^2000 is
+    // actually 2001 bits (passes both checks); squaring it needs 4001 bits, over
+    // budget, and only the post-hoc Mul check can catch that.
+    let session = Session::with_limits(Limits {
+        max_value_bits: 4000,
+    });
+    let mut resolver = session.process("x=2^2000; x*x");
+    let err = resolver.resolve().unwrap_err().to_string();
+    // "occupies" is the post-hoc wording; a prediction says "would need".
+    assert!(err.contains("occupies"), "message was: {err}");
 }
 ```
+
+**Amended after Task 3's fix rounds.** This test originally specified
+`Limits { max_value_bits: 4096 }` with `x=2^3000; x*x`, and a comment saying the
+product's 6001 bits are what fails. They are not. The power prediction for `2^3000`
+is `bits(2) · 3000 = 6000`, already over 4096, so the expression is refused before
+`x*x` is ever reached and the post-hoc `Mul` check — the only thing this test exists
+to cover — never runs. Verified: the original wording errors with `the result would
+need about 6000 bits`, the predictive wording, while the version above errors with
+`the result occupies about 4001 bits`. The budget is now set to exactly the power
+prediction so that the power check must pass, and the assertion is on the `"occupies"`
+wording so that a regression to the predictive path fails the test instead of
+silently satisfying it.
 
 Add `use yarer::limits::Limits;` to the imports at the top of the file.
 
@@ -691,15 +711,26 @@ pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Res
     Ok(())
 }
 
-/// Predicts the bit length of `n!` without computing it, via Stirling:
-/// `log2(n!) ≈ n·log2(n) − 1.44·n`.
+/// Predicts the bit length of `n!` without computing it, via Stirling's series:
+/// `log2(n!) ≈ n·log2(n) − n·log2(e) + 0.5·log2(2πn)`.
+///
+/// The first two terms alone are optimistic — they omit the `0.5·log2(2πn)` term,
+/// which for `n` in the hundreds of thousands is close to ten bits, enough to let a
+/// prediction land just under a tight budget while the true value lands just over it.
 #[must_use]
+#[allow(clippy::cast_precision_loss)]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
 pub fn predicted_factorial_bits(n: u64) -> u128 {
     if n < 2 {
         return 1;
     }
     let n_f = n as f64;
-    let bits = n_f.mul_add(n_f.log2(), -1.442_695_040_888_963_4 * n_f);
+    // -1.442_695_040_888_963_4 is bit-for-bit -LOG2_E; clippy's approx_constant
+    // lint (deny-by-default) requires the named constant instead of the literal.
+    let leading_terms = n_f.mul_add(n_f.log2(), -std::f64::consts::LOG2_E * n_f);
+    // 0.5 * log2(2 * pi * n); TAU is the named constant for 2*pi.
+    let correction = 0.5 * (std::f64::consts::TAU * n_f).log2();
+    let bits = leading_terms + correction;
     // Round up and never report less than one bit.
     bits.max(1.0).ceil() as u128
 }
@@ -729,13 +760,13 @@ mod tests {
     }
 
     #[test]
-    fn test_factorial_prediction_is_in_the_right_ballpark() {
-        // 1000! is 8529 bits; Stirling must land close and never far under.
-        let predicted = predicted_factorial_bits(1000);
-        assert!(
-            (8000..=9200).contains(&predicted),
-            "predicted {predicted} bits for 1000!"
-        );
+    fn test_factorial_prediction_matches_stirling_with_correction() {
+        // 1000! is 8529 bits (lgamma(1001)/ln(2) = 8529.4); the three-term series
+        // used here predicts 8530. A wide "ballpark" range does not pin this down:
+        // dropping the 0.5*log2(2*pi*n) correction term still predicts 8524, which
+        // is inside almost any range wide enough to be useful, so only an exact
+        // value catches the correction term going missing.
+        assert_eq!(predicted_factorial_bits(1000), 8530);
     }
 
     #[test]
@@ -752,6 +783,30 @@ mod tests {
     }
 }
 ```
+
+**`predicted_factorial_bits` amended after Task 3's fix rounds.** It originally
+specified the two-term Stirling series, `n·log2(n) − n·log2(e)`, with a doc comment to
+match, and wrote the constant as the literal `1.442_695_040_888_963_4`. Two problems.
+That literal is bit-for-bit `std::f64::consts::LOG2_E`, which trips clippy's
+deny-by-default `approx_constant`, so the snippet as written does not compile under
+this crate's lint settings. And two terms is not enough: the omitted `0.5·log2(2πn)`
+correction is close to ten bits at the scale the default budget operates at, which is
+exactly how the first calibration pass admitted a `71422!` whose real size was eight
+bits over its own nominal budget. The design spec in this same change requires the
+three-term series and explains why at length; this snippet now matches it.
+
+The companion test was tightened at the same time, from
+`assert!((8000..=9200).contains(&predicted))` to `assert_eq!(…, 8530)`. The loose range
+is why the two-term formula survived review: dropping the correction term still predicts
+8524 for `1000!`, comfortably inside that range, so the test could not distinguish the
+two formulas it was meant to be checking.
+
+One further inconsistency is left standing knowingly: `predicted_power_bits`' doc above
+still calls itself "an upper bound on the bit length of `base^exponent`", which the
+merged implementation no longer claims, because a negative exponent returns a reciprocal
+whose denominator is also counted. That was corrected in `src/limits.rs` rather than
+here, and the surrounding snippet is a Task 3 artefact; the authority on what the
+function guarantees is the source, not this plan.
 
 - [ ] **Step 4: Thread the limits through `Session` and `RpnResolver`**
 
