@@ -149,23 +149,20 @@ impl RpnResolver<'_> {
                             }
                         }
                         Operator::Fac => {
-                            // factorial. Only for non-negative integers
-                            match right_value {
-                                Number::NaturalNumber(v) => {
-                                    if v < Zero::zero() {
-                                        return Err(anyhow!(FACTORIAL_NATURAL_ERR));
-                                    }
-                                    let n = v.to_u64().ok_or_else(|| {
-                                        anyhow!("Runtime Error: Factorial operand is too large")
-                                    })?;
-                                    let res = Self::factorial_helper(n.into());
-                                    result_stack.push_back(Number::NaturalNumber(res.into()));
-                                    var_stack.push_back(None);
-                                }
-                                Number::DecimalNumber(_) => {
-                                    return Err(anyhow!(FACTORIAL_NATURAL_ERR));
-                                }
+                            // Factorial is defined on non-negative integers. It asks the
+                            // value, not the enum tag: floor(2.5) and 6/3 are integers.
+                            let n = right_value
+                                .as_integer()
+                                .ok_or_else(|| anyhow!(FACTORIAL_NATURAL_ERR))?;
+                            if n < BigInt::zero() {
+                                return Err(anyhow!(FACTORIAL_NATURAL_ERR));
                             }
+                            let n = n.to_u64().ok_or_else(|| {
+                                anyhow!("Runtime Error: Factorial operand is too large")
+                            })?;
+                            let res = Self::factorial_helper(n.into());
+                            result_stack.push_back(Number::NaturalNumber(res.into()));
+                            var_stack.push_back(None);
                         }
                         Operator::Une => {
                             //# unary neg
@@ -385,16 +382,8 @@ impl RpnResolver<'_> {
         acc
     }
 
-    fn integer_exponent(value: &Number) -> Option<BigInt> {
-        match value {
-            Number::NaturalNumber(v) => Some(v.clone()),
-            Number::DecimalNumber(v) if v.denom().is_one() => Some(v.to_integer()),
-            Number::DecimalNumber(_) => None,
-        }
-    }
-
     fn power(left_value: Number, right_value: Number) -> anyhow::Result<Number> {
-        if let Some(exponent) = Self::integer_exponent(&right_value) {
+        if let Some(exponent) = right_value.as_integer() {
             return Self::power_integer(left_value, exponent);
         }
 
@@ -422,10 +411,7 @@ impl RpnResolver<'_> {
                     }
 
                     let value = Self::pow_big_int(base, exponent);
-                    Ok(Number::DecimalNumber(BigRational::new(
-                        BigInt::one(),
-                        value,
-                    )))
+                    Ok(Number::decimal(BigRational::new(BigInt::one(), value)))
                 } else {
                     Ok(Number::NaturalNumber(Self::pow_big_int(base, exponent)))
                 }
@@ -437,9 +423,9 @@ impl RpnResolver<'_> {
 
                 let value = Self::pow_big_rational(base, exponent);
                 if is_negative {
-                    Ok(Number::DecimalNumber(value.recip()))
+                    Ok(Number::decimal(value.recip()))
                 } else {
-                    Ok(Number::DecimalNumber(value))
+                    Ok(Number::decimal(value))
                 }
             }
         }

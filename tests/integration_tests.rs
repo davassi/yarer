@@ -14,13 +14,18 @@ macro_rules! resolve {
     };
 }
 
+/// Asserts the numeric value of an expression, within 1e-10.
+///
+/// It deliberately does not assert which `Number` variant came back: under the
+/// canonicalisation invariant an integral result is a `NaturalNumber`, and
+/// which side of that line an expression falls on is asserted once, on purpose,
+/// by `test_integral_results_are_natural_numbers`.
 macro_rules! resolve_decimal {
     ($expr:expr, $expected:expr) => {{
         let session = Session::init();
         let mut resolver = session.process($expr);
         let result = resolver.resolve().unwrap();
-        assert!(matches!(result, Number::DecimalNumber(_)));
-        let res_f: f64 = result.clone().try_into().unwrap();
+        let res_f: f64 = result.try_into().unwrap();
         assert!((res_f - $expected).abs() < 1e-10);
     }};
     () => {
@@ -454,4 +459,42 @@ fn test_setf_declares_a_decimal_variable() {
     let mut resolver = session.process("r*2");
     let v: f64 = resolver.resolve().unwrap().try_into().unwrap();
     assert!((v - 5.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_factorial_accepts_integral_results_of_functions() {
+    // These all produced "Factorial is only defined for non-negative integers"
+    // before the Number invariant, because the functions tagged an integral
+    // result as decimal and the factorial branched on the tag.
+    resolve_natural!("abs(-3)!", 6);
+    resolve_natural!("floor(2.5)!", 2);
+    resolve_natural!("max(3,2)!", 6);
+    resolve_natural!("round(2.4)!", 2);
+    resolve_natural!("(6/3)!", 2);
+}
+
+#[test]
+fn test_integral_results_are_natural_numbers() {
+    let session = Session::init();
+    for expr in ["6/3", "floor(3.7)", "exp(0)", "max(1,2)", "sqrt(16)"] {
+        let mut resolver = session.process(expr);
+        let result = resolver.resolve().unwrap();
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "{expr} produced {result:?}, expected a NaturalNumber"
+        );
+    }
+}
+
+#[test]
+fn test_non_integral_results_stay_decimal() {
+    let session = Session::init();
+    for expr in ["1/3", "abs(-2.5)", "2^-3", "sqrt(2)"] {
+        let mut resolver = session.process(expr);
+        let result = resolver.resolve().unwrap();
+        assert!(
+            matches!(result, Number::DecimalNumber(_)),
+            "{expr} produced {result:?}, expected a DecimalNumber"
+        );
+    }
 }

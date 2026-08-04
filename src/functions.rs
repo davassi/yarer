@@ -59,10 +59,10 @@ pub(crate) fn eval(
             number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.log10(),
             INVALID_FUNCTION_RESULT_ERR,
         )?,
-        MathFunction::Abs => to_decimal_number(match value {
+        MathFunction::Abs => match value {
             Number::NaturalNumber(v) => Number::NaturalNumber(v.abs()),
-            Number::DecimalNumber(v) => Number::DecimalNumber(v.abs()),
-        }),
+            Number::DecimalNumber(v) => Number::decimal(v.abs()),
+        },
         MathFunction::Max => {
             let value2: Number = result_stack.pop_back().ok_or(anyhow!(
                 "{} {}",
@@ -70,7 +70,11 @@ pub(crate) fn eval(
                 "Wrong number of parameters for function Max"
             ))?;
             var_stack.pop_back();
-            to_decimal_number(if value >= value2 { value } else { value2 })
+            if value >= value2 {
+                value
+            } else {
+                value2
+            }
         }
         MathFunction::Min => {
             let value2: Number = result_stack.pop_back().ok_or(anyhow!(
@@ -79,7 +83,11 @@ pub(crate) fn eval(
                 "Wrong number of parameters for function Min"
             ))?;
             var_stack.pop_back();
-            to_decimal_number(if value <= value2 { value } else { value2 })
+            if value <= value2 {
+                value
+            } else {
+                value2
+            }
         }
         MathFunction::Sqrt => decimal_from_f64(
             number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sqrt(),
@@ -87,13 +95,11 @@ pub(crate) fn eval(
         )?,
         MathFunction::Floor => {
             let value = number_to_rational(value);
-            to_decimal_number(Number::NaturalNumber(
-                value.numer().div_floor(value.denom()),
-            ))
+            Number::NaturalNumber(value.numer().div_floor(value.denom()))
         }
         MathFunction::Ceil => {
             let value = number_to_rational(value);
-            to_decimal_number(Number::NaturalNumber(value.numer().div_ceil(value.denom())))
+            Number::NaturalNumber(value.numer().div_ceil(value.denom()))
         }
         MathFunction::Round => {
             let value = number_to_rational(value);
@@ -105,7 +111,7 @@ pub(crate) fn eval(
             } else {
                 (doubled_numer - denom).div_ceil(&doubled_denom)
             };
-            to_decimal_number(Number::NaturalNumber(rounded))
+            Number::NaturalNumber(rounded)
         }
         MathFunction::Pdf => {
             let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
@@ -143,7 +149,7 @@ pub(crate) fn decimal_from_f64(value: f64, error_message: &'static str) -> anyho
     }
 
     BigRational::from_float(value)
-        .map(Number::DecimalNumber)
+        .map(Number::decimal)
         .ok_or_else(|| anyhow!(error_message))
 }
 
@@ -151,12 +157,5 @@ pub(crate) fn number_to_rational(value: Number) -> BigRational {
     match value {
         Number::NaturalNumber(v) => BigRational::from_integer(v),
         Number::DecimalNumber(v) => v,
-    }
-}
-
-pub(crate) fn to_decimal_number(value: Number) -> Number {
-    match value {
-        Number::NaturalNumber(v) => Number::DecimalNumber(BigRational::from_integer(v)),
-        Number::DecimalNumber(v) => Number::DecimalNumber(v),
     }
 }

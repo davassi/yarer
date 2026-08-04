@@ -9,7 +9,7 @@ use std::{
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
 /// or a [`BigRational`] rational number [`Number::DecimalNumber`]
 ///
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub enum Number {
     /// an Integer [BigInt]
     NaturalNumber(BigInt),
@@ -220,7 +220,7 @@ impl Token<'_> {
         }
 
         if let Some(v) = parse_decimal_literal(t) {
-            return Some(Token::Operand(Number::DecimalNumber(v)));
+            return Some(Token::Operand(Number::decimal(v)));
         }
 
         if let Some(fun) = Token::get_some(t) {
@@ -258,6 +258,56 @@ impl Token<'_> {
 
         v_op1.1 == Associate::LeftAssociative && v_op1.0 <= v_op2.0
             || v_op1.1 == Associate::RightAssociative && v_op1.0 < v_op2.0
+    }
+}
+
+impl Number {
+    /// Builds a decimal number, degrading to [`Number::NaturalNumber`] when the
+    /// rational turns out to be a whole number.
+    ///
+    /// This is the only sanctioned way to build a [`Number::DecimalNumber`]:
+    /// it upholds the invariant that a decimal never carries a denominator of 1,
+    /// so a given mathematical value has exactly one representation.
+    #[must_use]
+    pub fn decimal(value: BigRational) -> Number {
+        if value.denom().is_one() {
+            Number::NaturalNumber(value.to_integer())
+        } else {
+            Number::DecimalNumber(value)
+        }
+    }
+
+    /// Returns the integral value of this number, or [`None`] when it has a
+    /// fractional part.
+    ///
+    /// The decimal arm matters only for values built by hand from outside the
+    /// crate, which can bypass [`Number::decimal`]; internally the invariant
+    /// makes it unreachable.
+    #[must_use]
+    pub fn as_integer(&self) -> Option<BigInt> {
+        match self {
+            Number::NaturalNumber(v) => Some(v.clone()),
+            Number::DecimalNumber(v) if v.denom().is_one() => Some(v.to_integer()),
+            Number::DecimalNumber(_) => None,
+        }
+    }
+}
+
+/// Equality by mathematical value, so that it agrees with [`PartialOrd`].
+///
+/// The derived implementation compared enum variants, which made
+/// `NaturalNumber(2) == DecimalNumber(2/1)` false while `>=` reported true —
+/// a violation of the `PartialOrd` contract that generic code relies on.
+impl PartialEq for Number {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Number::NaturalNumber(a), Number::NaturalNumber(b)) => a == b,
+            (Number::DecimalNumber(a), Number::DecimalNumber(b)) => a == b,
+            (Number::NaturalNumber(a), Number::DecimalNumber(b))
+            | (Number::DecimalNumber(b), Number::NaturalNumber(a)) => {
+                BigRational::from(a.clone()) == *b
+            }
+        }
     }
 }
 
@@ -299,12 +349,12 @@ where
     match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::DecimalNumber(df(BigRational::from(v1), v2))
+            Number::decimal(df(BigRational::from(v1), v2))
         }
         (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-            Number::DecimalNumber(df(v1, BigRational::from(v2)))
+            Number::decimal(df(v1, BigRational::from(v2)))
         }
-        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::DecimalNumber(df(v1, v2)),
+        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(df(v1, v2)),
     }
 }
 
@@ -338,17 +388,15 @@ impl Div for Number {
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::DecimalNumber(BigRational::new(v1, v2))
+                Number::decimal(BigRational::new(v1, v2))
             }
             (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-                Number::DecimalNumber(BigRational::from(v1) / v2)
+                Number::decimal(BigRational::from(v1) / v2)
             }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::DecimalNumber(v1 / BigRational::from(v2))
+                Number::decimal(v1 / BigRational::from(v2))
             }
-            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
-                Number::DecimalNumber(v1 / v2)
-            }
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(v1 / v2),
         }
     }
 }
@@ -802,5 +850,61 @@ mod tests {
             (f64::try_from(Number::NaturalNumber(BigInt::from(10))).unwrap() - 10.0).abs()
                 < f64::EPSILON
         );
+    }
+
+    #[test]
+    fn test_decimal_constructor_degrades_integral_rationals() {
+        // 4/2 reduces to 2, which is an integer: it must not stay tagged as decimal.
+        let n = Number::decimal(BigRational::new(BigInt::from(4), BigInt::from(2)));
+        assert_eq!(n, Number::NaturalNumber(BigInt::from(2)));
+        assert!(matches!(n, Number::NaturalNumber(_)));
+
+        // 1/2 is not integral and must stay decimal.
+        let half = Number::decimal(BigRational::new(BigInt::from(1), BigInt::from(2)));
+        assert!(matches!(half, Number::DecimalNumber(_)));
+    }
+
+    #[test]
+    fn test_as_integer_reads_the_value_not_the_tag() {
+        assert_eq!(
+            Number::NaturalNumber(BigInt::from(7)).as_integer(),
+            Some(BigInt::from(7))
+        );
+        // Built by hand, bypassing the constructor: the value is still integral.
+        assert_eq!(
+            Number::DecimalNumber(BigRational::from_integer(BigInt::from(7))).as_integer(),
+            Some(BigInt::from(7))
+        );
+        assert_eq!(
+            Number::DecimalNumber(BigRational::new(BigInt::from(3), BigInt::from(2))).as_integer(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_eq_agrees_with_partial_cmp_across_variants() {
+        use std::cmp::Ordering;
+        let pairs = [
+            (
+                Number::NaturalNumber(BigInt::from(2)),
+                Number::DecimalNumber(BigRational::from_integer(BigInt::from(2))),
+            ),
+            (
+                Number::NaturalNumber(BigInt::from(-3)),
+                Number::DecimalNumber(BigRational::new(BigInt::from(-6), BigInt::from(2))),
+            ),
+            (
+                Number::NaturalNumber(BigInt::from(2)),
+                Number::DecimalNumber(BigRational::new(BigInt::from(5), BigInt::from(2))),
+            ),
+        ];
+        for (a, b) in pairs {
+            let equal_by_eq = a == b;
+            let equal_by_ord = a.partial_cmp(&b) == Some(Ordering::Equal);
+            assert_eq!(
+                equal_by_eq, equal_by_ord,
+                "PartialEq and PartialOrd disagree on {a} vs {b}"
+            );
+        }
     }
 }

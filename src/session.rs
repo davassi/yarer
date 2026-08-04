@@ -48,31 +48,25 @@ impl Session {
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert(
             "pi".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::PI).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::PI).unwrap()),
         );
         local_heap.insert(
             "e".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::E).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::E).unwrap()),
         );
         local_heap.insert(
             "tau".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::TAU).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::TAU).unwrap()),
         );
         local_heap.insert(
             "phi".to_string(),
-            Number::DecimalNumber(
+            Number::decimal(
                 num_rational::BigRational::from_float((1.0 + 5.0f64.sqrt()) / 2.0).unwrap(),
             ),
         );
         local_heap.insert(
             "gamma".to_string(),
-            Number::DecimalNumber(
+            Number::decimal(
                 num_rational::BigRational::from_float(0.577_215_664_901_532_9_f64).unwrap(),
             ),
         );
@@ -117,7 +111,7 @@ impl Session {
         if let Some(value) = num_rational::BigRational::from_float(value) {
             self.variable_heap
                 .borrow_mut()
-                .insert(key, Number::DecimalNumber(value));
+                .insert(key, Number::decimal(value));
         }
     }
 }
