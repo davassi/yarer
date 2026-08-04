@@ -1,3 +1,4 @@
+use crate::rpn_resolver::MALFORMED_ERR;
 use crate::token::{self, Operator, Token};
 
 use anyhow::{anyhow, Result};
@@ -26,18 +27,14 @@ impl Parser {
 
         for m in EXPRESSION_REGEX.find_iter(expr) {
             Self::validate_gap(expr, cursor, m.start())?;
-            vex.push(Token::tokenize(m.as_str()).ok_or_else(|| {
-                anyhow!("Runtime Error: The mathematical expression is malformed.")
-            })?);
+            vex.push(Token::tokenize(m.as_str()).ok_or_else(|| anyhow!(MALFORMED_ERR))?);
             cursor = m.end();
         }
 
         Self::validate_gap(expr, cursor, expr.len())?;
 
         if vex.is_empty() {
-            return Err(anyhow!(
-                "Runtime Error: The mathematical expression is malformed."
-            ));
+            return Err(anyhow!(MALFORMED_ERR));
         }
 
         Ok(Self::mod_unary_operators(&vex))

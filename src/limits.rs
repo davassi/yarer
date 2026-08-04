@@ -27,7 +27,7 @@ impl Default for Limits {
 
 /// The size of a value in bits: for a rational, numerator plus denominator.
 #[must_use]
-pub fn size_in_bits(value: &Number) -> u64 {
+pub(crate) fn size_in_bits(value: &Number) -> u64 {
     match value {
         Number::NaturalNumber(v) => v.bits(),
         Number::DecimalNumber(v) => v.numer().bits() + v.denom().bits(),
@@ -51,7 +51,7 @@ fn check_bits(bits: u128, limits: Limits, phrase: &str) -> anyhow::Result<()> {
 ///
 /// # Errors
 /// When the value exceeds `limits.max_value_bits`.
-pub fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
+pub(crate) fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
     check_bits(u128::from(size_in_bits(value)), limits, "occupies")
 }
 
@@ -59,7 +59,7 @@ pub fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
 ///
 /// # Errors
 /// When `predicted_bits` exceeds `limits.max_value_bits`.
-pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Result<()> {
+pub(crate) fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Result<()> {
     check_bits(predicted_bits, limits, "would need")
 }
 
@@ -84,7 +84,7 @@ pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Res
 #[must_use]
 #[allow(clippy::cast_precision_loss)]
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-pub fn predicted_factorial_bits(n: u64) -> u128 {
+pub(crate) fn predicted_factorial_bits(n: u64) -> u128 {
     if n < 2 {
         return 1;
     }
@@ -121,7 +121,7 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
 /// direction to err in, and the discrepancy only matters within a factor of two of
 /// the budget.
 #[must_use]
-pub fn predicted_power_bits(base: &Number, exponent_magnitude: &BigUint) -> Option<u128> {
+pub(crate) fn predicted_power_bits(base: &Number, exponent_magnitude: &BigUint) -> Option<u128> {
     let base_bits = size_in_bits(base);
     if base_bits <= 1 {
         return Some(1);
