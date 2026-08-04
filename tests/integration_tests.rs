@@ -683,20 +683,34 @@ fn test_a_materialised_power_is_measured_not_just_predicted() {
 }
 
 #[test]
-fn test_a_materialised_factorial_is_measured_not_just_predicted() {
-    // predicted_factorial_bits is a three-term Stirling series rounded up. Over
-    // n = 1..=60000 it over-estimates everywhere except n = 2, where it predicts
-    // 1 bit and 2! actually needs 2 -- the one case its own doc calls out.
-    //
-    // Reaching it takes some doing, which is the interesting part: under a 1-bit
-    // budget every checked route to the value 2 is refused, because 2 is a 2-bit
-    // operand. floor(exp(1)) gets there anyway, since a function result is not
-    // size-checked. So the predictive guard admits the factorial and, without a
-    // post-hoc check, a 2-bit value is returned under a 1-bit budget.
+fn test_a_function_result_is_measured_like_any_other_value() {
+    // A function result is bounded by construction, since every built-in routes
+    // its argument through f64 -- but bounded is not measured, and the gap is not
+    // academic. While this arm was unchecked it was the one way to get a value
+    // onto the stack that nothing had measured, and the guards downstream assume
+    // their inputs were measured. floor(exp(1))! returned 2 under a 1-bit budget
+    // for exactly that reason: the factorial's predictive guard is a bit short at
+    // n = 2, and 2 is a 2-bit operand that no checked arm would have admitted.
     let one_bit = Session::with_limits(Limits { max_value_bits: 1 });
-    let mut smuggled = one_bit.process("floor(exp(1))!");
-    let err = smuggled.resolve().unwrap_err().to_string();
-    assert!(err.contains("occupies"), "message was: {err}");
+    for expr in ["exp(1)", "floor(exp(1))", "floor(exp(1))!"] {
+        let mut resolver = one_bit.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("occupies"), "{expr} reported: {err}");
+    }
+
+    // Nothing legitimate is refused by this: a function result is f64-bounded, so
+    // it is far below any budget anyone would set on purpose.
+    resolve_natural!("1/cos(0)", 1);
+    resolve_decimal!("sin(1)", 0.841_470_984_807_896_5);
+    resolve_decimal!("9801/(2206*sqrt(2))", 3.141_592_730_013_305_5);
+
+    // NOTE for whoever reads this next: closing this arm makes the factorial's
+    // own post-hoc check unreachable, since every route to an operand now
+    // measures it first. That check stays anyway -- n = 2 is the only value up to
+    // 60000 where the prediction falls short, which is an empirical bound and not
+    // a proof -- but it is now shadowed, and a test claiming to exercise it would
+    // really be exercising this arm. That is why this test asserts the function
+    // arm and says so, rather than keeping the old factorial framing green.
 
     // The predictive refusal must survive: 999999999! has to stay a fast "no",
     // not become a computation that is measured afterwards.

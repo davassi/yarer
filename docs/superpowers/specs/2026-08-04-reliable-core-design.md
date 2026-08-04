@@ -247,8 +247,9 @@ evaluation is now bounded by `Limits::max_value_bits`, 1 Mibit by default, rough
 315,000 decimal digits. Expressions such as `999999999!` or `10^100000000` return an
 error immediately instead of running until they exhaust memory; where the size can be
 predicted, the refusal happens before any of the work is done. The bound is
-configurable per session through `Session::with_limits`, and it applies to every
-literal, every variable read and every arithmetic result.
+configurable per session through `Session::with_limits`, and it applies to every value
+on the evaluation stack, whatever produced it — literals, variables, arithmetic results
+and function results alike.
 
 **A function name must be followed by `(`.** `sin 5` and `sqrt 16` were previously
 accepted and evaluated as `sin(5)` and `sqrt(16)`; they are now parse errors that name

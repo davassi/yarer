@@ -735,12 +735,18 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
     bits.max(1.0).ceil() as u128
 }
 
-/// An upper bound on the bit length of `base^exponent` for an integral exponent.
+/// An estimate of the bit length of `base` raised to the *magnitude* of an integral
+/// exponent.
 ///
-/// It uses `bits(base)` where `log2(base)` would be exact, so it overestimates by
+/// Note the "magnitude": a negative exponent returns the reciprocal, and
+/// `size_in_bits` counts a rational's denominator as well as its numerator, so this
+/// is **not** an upper bound on what the caller ends up holding. `2^-1` estimates
+/// 2 bits and produces `1/2`, which measures `1 + 2 = 3`.
+///
+/// It also uses `bits(base)` where `log2(base)` would be exact, so it overestimates by
 /// up to a factor of two for small bases — `2^100` is predicted at 200 bits and
-/// occupies 101. A guard that errs toward refusing is the right direction to err in,
-/// and the discrepancy only matters within a factor of two of the budget.
+/// occupies 101. For a pre-filter, erring toward refusing is the right direction to
+/// err in; `check_size` on the finished value is what makes the budget exact.
 #[must_use]
 pub fn predicted_power_bits(base: &Number, exponent_magnitude: u64) -> u128 {
     let base_bits = size_in_bits(base).max(1);
@@ -801,12 +807,15 @@ is why the two-term formula survived review: dropping the correction term still 
 8524 for `1000!`, comfortably inside that range, so the test could not distinguish the
 two formulas it was meant to be checking.
 
-One further inconsistency is left standing knowingly: `predicted_power_bits`' doc above
-still calls itself "an upper bound on the bit length of `base^exponent`", which the
-merged implementation no longer claims, because a negative exponent returns a reciprocal
-whose denominator is also counted. That was corrected in `src/limits.rs` rather than
-here, and the surrounding snippet is a Task 3 artefact; the authority on what the
-function guarantees is the source, not this plan.
+**`predicted_power_bits`' doc amended for the same reason.** It opened "An upper bound on
+the bit length of `base^exponent`", which is false for a negative exponent: the value
+returned is the reciprocal, and `size_in_bits` counts a rational's denominator as well as
+its numerator, so `2^-1` estimates 2 bits and produces `1/2`, which measures 3. That was
+found after the branch had merged its own copy, and the plan is corrected here to match.
+The wider point the three amendments share is recorded in the design spec: a prediction is
+a pre-filter that buys the right to refuse a hopeless computation cheaply, and
+`check_size` on the finished value is what makes the budget exact. Snippets that describe
+a prediction as a bound are describing the wrong contract.
 
 - [ ] **Step 4: Thread the limits through `Session` and `RpnResolver`**
 

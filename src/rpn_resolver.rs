@@ -275,6 +275,14 @@ impl RpnResolver<'_> {
                     var_stack.pop_back();
 
                     let result = functions::eval(*fun, value, &mut result_stack, &mut var_stack)?;
+                    // Every arm that pushes a value checks it. A function result
+                    // is bounded by construction — the built-ins all route
+                    // through `f64` — but "bounded" is not "checked", and the
+                    // difference is not academic: an unchecked value goes on to
+                    // feed guards that assume their input was checked, which is
+                    // how `floor(exp(1))!` slipped a 2-bit result past a 1-bit
+                    // budget through the factorial's predictive guard.
+                    limits::check_size(&result, limits)?;
                     result_stack.push_back(result);
                     var_stack.push_back(None);
                 }

@@ -27,12 +27,10 @@ use num_traits::ToPrimitive;
 /// Resource bounds applied while evaluating an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// The largest value a literal, a variable or an arithmetic result may
-    /// occupy, in bits.
-    ///
-    /// Function results are the one thing it does not cover: every built-in
-    /// routes its argument through `f64`, so what they return is bounded far
-    /// below any practical budget by construction rather than by this check.
+    /// The largest value any intermediate or final result may occupy, in bits.
+    /// Every value pushed onto the evaluation stack is measured against it,
+    /// whatever produced it — literal, variable, arithmetic result or function
+    /// result — with no exceptions.
     ///
     /// This bounds memory directly and worst-case running time only indirectly,
     /// and the second relationship is superlinear, so raise it with the measured
