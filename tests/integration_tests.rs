@@ -655,6 +655,58 @@ fn test_an_oversized_variable_is_refused() {
 }
 
 #[test]
+fn test_a_materialised_power_is_measured_not_just_predicted() {
+    // The size prediction is a pre-filter, not the guarantee, and there are two
+    // ways past it. Neither of these is caught by any predictive check.
+
+    // 1. The powf path never consults the prediction at all: "2^0.5" is a
+    //    non-integer exponent, so it converts to f64 and comes back as a
+    //    rational of roughly 53 + 53 bits.
+    let tight = Session::with_limits(Limits { max_value_bits: 16 });
+    let mut irrational = tight.process("2^0.5");
+    let err = irrational.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+
+    // 2. A negative exponent is predicted on the magnitude of base^|exponent|,
+    //    but the value returned is the reciprocal, whose denominator counts too.
+    //    "2^-1" predicts 2 bits and yields 1/2, which measures 1 + 2 = 3.
+    let two_bits = Session::with_limits(Limits { max_value_bits: 2 });
+    let mut reciprocal = two_bits.process("2^-1");
+    let err = reciprocal.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+
+    // Three bits is exactly enough, which pins the boundary rather than just
+    // asserting that something was refused.
+    let three_bits = Session::with_limits(Limits { max_value_bits: 3 });
+    let mut fits = three_bits.process("2^-1");
+    assert_eq!(fits.resolve().unwrap().to_string(), "0.5");
+}
+
+#[test]
+fn test_a_materialised_factorial_is_measured_not_just_predicted() {
+    // predicted_factorial_bits is a three-term Stirling series rounded up. Over
+    // n = 1..=60000 it over-estimates everywhere except n = 2, where it predicts
+    // 1 bit and 2! actually needs 2 -- the one case its own doc calls out.
+    //
+    // Reaching it takes some doing, which is the interesting part: under a 1-bit
+    // budget every checked route to the value 2 is refused, because 2 is a 2-bit
+    // operand. floor(exp(1)) gets there anyway, since a function result is not
+    // size-checked. So the predictive guard admits the factorial and, without a
+    // post-hoc check, a 2-bit value is returned under a 1-bit budget.
+    let one_bit = Session::with_limits(Limits { max_value_bits: 1 });
+    let mut smuggled = one_bit.process("floor(exp(1))!");
+    let err = smuggled.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+
+    // The predictive refusal must survive: 999999999! has to stay a fast "no",
+    // not become a computation that is measured afterwards.
+    let default = Session::init();
+    let mut huge = default.process("999999999!");
+    let err = huge.resolve().unwrap_err().to_string();
+    assert!(err.contains("would need"), "message was: {err}");
+}
+
+#[test]
 fn test_a_tiny_budget_rejects_the_builtin_constants() {
     // The constants are f64s held exactly as rationals, so they are wide:
     // numerator bits plus denominator bits, tau is the narrowest at 98 and gamma

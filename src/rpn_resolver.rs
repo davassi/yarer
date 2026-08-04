@@ -225,12 +225,20 @@ impl RpnResolver<'_> {
                             let n = n.to_u64().ok_or_else(|| {
                                 anyhow!("Runtime Error: Factorial operand is too large")
                             })?;
+                            // Predict first, to refuse `999999999!` in
+                            // milliseconds rather than computing it...
                             limits::check_predicted_size(
                                 limits::predicted_factorial_bits(n),
                                 limits,
                             )?;
                             let res = Self::factorial_helper(n.into());
-                            result_stack.push_back(Number::NaturalNumber(res.into()));
+                            // ...then measure what was actually built, because
+                            // the prediction is an asymptotic series rounded up
+                            // and is a bit short of the truth at `n = 2`. The
+                            // prediction buys the speed; this buys the exactness.
+                            let value = Number::NaturalNumber(res.into());
+                            limits::check_size(&value, limits)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Une => {
@@ -585,13 +593,24 @@ impl RpnResolver<'_> {
     }
 
     fn power(left_value: Number, right_value: Number, limits: Limits) -> anyhow::Result<Number> {
-        if let Some(exponent) = right_value.as_integer() {
-            return Self::power_integer(left_value, exponent, limits);
-        }
+        let value = if let Some(exponent) = right_value.as_integer() {
+            Self::power_integer(left_value, exponent, limits)?
+        } else {
+            let base = number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
+            let exponent = number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
+            decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)?
+        };
 
-        let base = number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
-        let exponent = number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
-        decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)
+        // The prediction inside `power_integer` is an optimisation: it buys the
+        // right to refuse `10^100000000` without computing it. It is not the
+        // guarantee, and on two counts it cannot be. It never runs on the `powf`
+        // path at all, and on the integer path it predicts the magnitude of
+        // `base^|exponent|` while a negative exponent returns the reciprocal,
+        // whose denominator `size_in_bits` also counts — `2^-1` predicts 2 bits
+        // and yields `1/2`, which measures 3. Measuring the value we actually
+        // built is what makes the budget exact, on every path.
+        limits::check_size(&value, limits)?;
+        Ok(value)
     }
 
     fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> anyhow::Result<Number> {

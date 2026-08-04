@@ -1,8 +1,23 @@
 //! Bounds on how large a value an evaluation may produce.
 //!
-//! The strategy is to predict the size of a result and refuse before computing
-//! it, rather than computing under a timeout: no threads, no interruption, and
-//! a decision that is deterministic and instantaneous.
+//! Two checks, with different jobs. **Predict to avoid the work, verify to be
+//! correct.**
+//!
+//! `check_predicted_size` runs before an expensive computation and refuses it
+//! on an estimate, which is what lets `999999999!` be declined in milliseconds
+//! instead of running until it exhausts memory. That is an optimisation, and an
+//! estimate is all it can be: it is beaten by any path that has no prediction
+//! (`2^0.5` goes through `f64`) and by any prediction that measures something
+//! other than the value finally returned (`2^-1` predicts the magnitude of
+//! `2^1` and returns its reciprocal).
+//!
+//! `check_size` runs on the value that was actually built, and is the
+//! guarantee. It is exact by construction, because it measures rather than
+//! estimates. Predictions may be tightened or added freely; correctness does not
+//! rest on them.
+//!
+//! Refusing rather than computing under a timeout keeps the decision
+//! deterministic and instantaneous: no threads, no interruption.
 
 use crate::token::Number;
 use anyhow::anyhow;
@@ -69,6 +84,10 @@ fn check_bits(bits: u128, limits: Limits, phrase: &str) -> anyhow::Result<()> {
 
 /// Rejects a value that has already been computed and turned out too large.
 ///
+/// This is the budget's guarantee: it measures the value in hand, so it holds
+/// regardless of whether a prediction ran first, or ran accurately. Every path
+/// that produces a value applies it.
+///
 /// # Errors
 /// When the value exceeds `limits.max_value_bits`.
 pub(crate) fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
@@ -76,6 +95,10 @@ pub(crate) fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
 }
 
 /// Rejects a computation whose result was predicted to be too large, before it runs.
+///
+/// A pre-filter, not the guarantee — see the module docs. Its purpose is to make
+/// a hopeless computation cheap to refuse; being approximate is acceptable
+/// because [`check_size`] measures the result afterwards either way.
 ///
 /// # Errors
 /// When `predicted_bits` exceeds `limits.max_value_bits`.
@@ -95,6 +118,13 @@ pub(crate) fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyh
 /// bit less than the true bit count — at `n = 2` the raw estimate is `0.94`, which
 /// ceils to `1`, while `2!` needs `2` bits. So the remaining exposure is about a bit,
 /// not zero, in either direction.
+///
+/// That exposure is a performance detail rather than a correctness one, because
+/// this is a pre-filter and [`check_size`] measures the factorial afterwards. An
+/// over-estimate refuses a computation that would have fitted, by about a bit; an
+/// under-estimate lets one start that is then refused on measurement. Neither can
+/// admit an oversized value. `n = 2` is the only under-estimate for any `n` up to
+/// 60000, verified by computing `n!` and comparing bit lengths.
 ///
 /// This is still an estimate, not an exact count, so the precision lost converting
 /// `n` to `f64` and the truncation converting the rounded-up estimate back to
@@ -119,8 +149,17 @@ pub(crate) fn predicted_factorial_bits(n: u64) -> u128 {
     bits.max(1.0).ceil() as u128
 }
 
-/// An upper bound on the bit length of `base^exponent` for an integral exponent,
-/// or [`None`] when the exponent is too large for the prediction to be made at all.
+/// An estimate of the bit length of `base` raised to the *magnitude* of an
+/// integral exponent, or [`None`] when that magnitude is too large for the
+/// estimate to be made at all.
+///
+/// Note the "magnitude": a negative exponent returns the reciprocal, and
+/// [`size_in_bits`] counts a rational's denominator as well as its numerator, so
+/// this is **not** an upper bound on what the caller ends up holding. `2^-1`
+/// estimates 2 bits and produces `1/2`, which measures `1 + 2 = 3`. Correcting
+/// that here would only narrow the gap, not close it, since the `powf` path has
+/// no prediction at all; [`check_size`] on the finished value is what makes the
+/// budget exact, and this stays a pre-filter.
 ///
 /// Degenerate bases are special-cased first: when `base`'s magnitude is 0 or 1, so
 /// is the magnitude of any power of it, regardless of how large the exponent is, so
@@ -137,9 +176,10 @@ pub(crate) fn predicted_factorial_bits(n: u64) -> u128 {
 ///
 /// For every other base it uses `bits(base)` where `log2(base)` would be exact, so
 /// it overestimates by up to a factor of two for small bases — `2^100` is predicted
-/// at 200 bits and occupies 101. A guard that errs toward refusing is the right
-/// direction to err in, and the discrepancy only matters within a factor of two of
-/// the budget.
+/// at 200 bits and occupies 101. For a pre-filter, erring toward refusing is the
+/// right direction to err in: the cost is a computation declined that would have
+/// fitted, within a factor of two of the budget, and never an oversized value
+/// admitted.
 #[must_use]
 pub(crate) fn predicted_power_bits(base: &Number, exponent_magnitude: &BigUint) -> Option<u128> {
     let base_bits = size_in_bits(base);
@@ -199,6 +239,19 @@ mod tests {
             );
             assert_eq!(predicted_power_bits(&base, &beyond_u64), Some(1));
         }
+    }
+
+    #[test]
+    fn test_power_prediction_is_not_an_upper_bound_for_a_negative_exponent() {
+        // The prediction is made on the magnitude, so it describes 2^1 and not
+        // the 1/2 a negative exponent actually returns. Pinning the gap here
+        // documents why check_size on the finished value is load-bearing rather
+        // than belt-and-braces: at a 2-bit budget the prediction admits, and the
+        // value measures 3.
+        let two = Number::NaturalNumber(BigInt::from(2));
+        assert_eq!(predicted_power_bits(&two, &BigUint::from(1_u32)), Some(2));
+        let half = Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(2)));
+        assert_eq!(size_in_bits(&half), 3);
     }
 
     #[test]

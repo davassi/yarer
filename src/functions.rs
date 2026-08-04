@@ -17,9 +17,11 @@ use std::collections::VecDeque;
 
 /// Evaluates `fun` against `value`, the operand already popped by the caller.
 ///
-/// A two-argument function pops its second operand from `result_stack` itself,
-/// keeping `var_stack` in step. Both stacks belong to the evaluation loop in
-/// [`crate::rpn_resolver::RpnResolver::resolve`].
+/// For a two-argument function that operand is the *second* argument, since the
+/// caller popped the top of the stack and postfix order puts the second argument
+/// there. What this function pops from `result_stack` is therefore the *first*
+/// argument, keeping `var_stack` in step. Both stacks belong to the evaluation
+/// loop in [`crate::rpn_resolver::RpnResolver::resolve`].
 pub(crate) fn eval(
     fun: MathFunction,
     value: Number,
