@@ -79,9 +79,21 @@ representations never coexist. Both are done anyway because `Number` is a **publ
 any consumer can construct `Number::DecimalNumber(BigRational::from_integer(2.into()))`
 by hand. The invariant protects our code, value-based `PartialEq` protects us from theirs.
 
-A welcome side effect: the tests in `session.rs` that assert `DecimalNumber(-5.0)` keep
-passing once the result becomes `NaturalNumber(-5)`, because equality is by value. This
-must be confirmed by running them, not assumed.
+The tests in `session.rs` that assert `DecimalNumber(-5.0)` keep passing once the result
+becomes `NaturalNumber(-5)`, because equality is by value.
+
+**The integration tests do not all survive, and that was checked rather than assumed.**
+The `resolve_decimal!` macro (`tests/integration_tests.rs:17`) asserts the *variant* as
+well, through `matches!(result, Number::DecimalNumber(_))`, across roughly 80 call sites.
+Under the invariant every integral result — `3*2^3+6/(2+1)`, `sqrt(16)`, `exp(0)`,
+`floor(3.7)` — becomes a `NaturalNumber` and those assertions fail.
+
+The repair is one line, not eighty. Those assertions never expressed intended behaviour;
+they photographed the enum tag as a side effect of the macro's name. The property worth
+asserting is the value, which the macro already checks separately. So the macro drops the
+variant assertion, and the invariant gains two dedicated tests that state it outright:
+integral results are `NaturalNumber`, non-integral results stay `DecimalNumber`. Eighty
+incidental assertions become two intentional ones.
 
 ### B. Size limits — closes defect 3
 
