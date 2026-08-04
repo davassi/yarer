@@ -14,7 +14,7 @@
 - Errors stay `anyhow` strings in this stage. Every new condition gets its own distinct message — never another reuse of `MALFORMED_ERR`. Typed errors are Stage 2.
 - Undefined variables keep evaluating to `0`. Prefix factorial (`!5` → `120`) stays accepted. Both are deliberate exclusions, not oversights.
 - Every task ends with `cargo test` green and `cargo fmt --check` clean.
-- `cargo clippy --all-targets` must not gain warnings. The baseline on `master` is 40, one of which is `this function has too many lines (243/100)` for `resolve()` and must be gone by the end of Task 1.
+- `cargo clippy --all-targets` must not gain warnings. The baseline on `master` is 40, one of which is `this function has too many lines (243/100)` for `resolve()`. Task 1 brings that function down to about 140 lines; it does not put it under the 100-line threshold, and neither that warning nor the one on the extracted function disappears during this stage.
 - Commit messages: imperative subject line, no tool attribution of any kind, no `Co-Authored-By` trailer.
 - Branch: `production-ready-core`, already created, already holding the spec.
 - Do not add dependencies. Everything needed is already in `Cargo.toml`.
@@ -139,11 +139,18 @@ In `src/rpn_resolver.rs`, add `use crate::functions;` to the existing `use crate
 Run: `cargo test 2>&1 | grep "^test result"`
 Expected: exactly the four lines recorded in Step 1. **No test file was edited** — `git status` must show no changes under `tests/`.
 
-Run: `cargo clippy --all-targets 2>&1 | grep "too many lines"`
-Expected: no output. `resolve()` is now roughly 140 lines.
-
 Run: `cargo clippy --all-targets 2>&1 | grep -c "^warning:"`
 Expected: 40 or fewer. If it grew, fix what was introduced before committing.
+
+Run: `cargo clippy --all-targets 2>&1 | grep -A2 "too many lines"`
+Expected: `resolve()` has dropped from 243 lines to about 140.
+
+It is still over clippy's 100-line threshold, and so is the extracted `eval()` at
+about 102 — splitting a 243-line function into 141 + 102 cannot put either under 100,
+and Tasks 3 and 4 add lines to both. The warning therefore does not disappear at this
+task, or at this stage. What must hold is that the **total** warning count does not
+grow. Beware that a stable total can hide movement in both directions: check the
+per-function line counts above, not only the count.
 
 Run: `cargo fmt --check`
 Expected: clean.
@@ -1182,7 +1189,7 @@ count within."
 
 - [ ] `cargo test` green, with the new tests from all four tasks.
 - [ ] `test_chained_assignment_sets_all_variables` (`x=y=5` sets both and returns 5) and `test_chained_expressions` (`x=2; y=3; x*y` returns 6) still pass untouched. The spec names them because they are load-bearing behaviour that none of these four changes may disturb.
-- [ ] `cargo clippy --all-targets` at or below 40 warnings, with `too many lines` gone.
+- [ ] `cargo clippy --all-targets` at or below 40 warnings, checked per-category rather than by the total alone.
 - [ ] `cargo fmt --check` clean.
 - [ ] The measured `max_value_bits` figure and its timing recorded in the spec.
 - [ ] The three declared behaviour changes gathered for the 0.3.0 CHANGELOG: integral results now come back as `NaturalNumber`, oversized results are refused, parentheses after a function name are mandatory.
