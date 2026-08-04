@@ -4,7 +4,7 @@ use crate::{
     functions,
     parser::Parser,
     session::Session,
-    token::{self, Number, Operator, Token},
+    token::{self, MathFunction, Number, Operator, Token},
 };
 use anyhow::anyhow;
 use log::debug;
@@ -35,6 +35,9 @@ static POWER_TOO_LARGE_ERR: &str =
     "Runtime error: Power operands are too large for non-integer evaluation.";
 static EXPONENT_TOO_LARGE_ERR: &str =
     "Runtime error: the exponent is too large to evaluate under any size limit.";
+static COMMA_OUTSIDE_CALL_ERR: &str =
+    "Parse Error: ',' is only valid between the arguments of a function call.";
+static UNBALANCED_BRACKET_ERR: &str = "Parse Error: Unbalanced brackets.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -47,6 +50,26 @@ pub struct RpnResolver<'a> {
     local_heap: Rc<RefCell<HashMap<String, Number>>>,
     build_error: Option<String>,
     limits: Limits,
+}
+
+/// One entry per open bracket, recording whether that bracket opens a function
+/// call and how many arguments it has seen so far.
+struct BracketFrame {
+    function: Option<MathFunction>,
+    commas: usize,
+    has_content: bool,
+}
+
+impl BracketFrame {
+    /// An empty pair of brackets carries zero arguments; otherwise there is one
+    /// more argument than there are separators.
+    fn argument_count(&self) -> usize {
+        if self.has_content {
+            self.commas + 1
+        } else {
+            0
+        }
+    }
 }
 
 impl RpnResolver<'_> {
@@ -264,20 +287,60 @@ impl RpnResolver<'_> {
         let mut operators_stack: Vec<Token> = Vec::new();
         let mut postfix_stack: VecDeque<Token> = VecDeque::new();
         let mut seen_variables: Vec<String> = Vec::new();
+        let mut bracket_stack: Vec<BracketFrame> = Vec::new();
+        let mut pending_function: Option<MathFunction> = None;
 
         /* Scan the infix expression from left to right. */
         for t in infix_stack {
+            if let Some(fun) = pending_function {
+                if !matches!(t, Token::Bracket(token::Bracket::Open)) {
+                    return Err(anyhow!(
+                        "Parse Error: Function '{}' must be followed by '('.",
+                        fun.to_string().to_lowercase()
+                    ));
+                }
+            }
+
+            if !matches!(t, Token::Comma | Token::Bracket(token::Bracket::Close)) {
+                if let Some(frame) = bracket_stack.last_mut() {
+                    frame.has_content = true;
+                }
+            }
+
             match *t {
                 /* If the token is an operand, add it to the output list. */
                 Token::Operand(_) => postfix_stack.push_back(t.clone()),
 
                 /* If the token is a left parenthesis, push it on the stack. */
-                Token::Bracket(token::Bracket::Open) => operators_stack.push(t.clone()),
+                Token::Bracket(token::Bracket::Open) => {
+                    bracket_stack.push(BracketFrame {
+                        function: pending_function.take(),
+                        commas: 0,
+                        has_content: false,
+                    });
+                    operators_stack.push(t.clone());
+                }
 
                 /* If the token is a right parenthesis:
                 Pop the stack and add operators to the output list until you encounter a left parenthesis.
                 Pop the left parenthesis from the stack but do not add it to the output list.*/
                 Token::Bracket(token::Bracket::Close) => {
+                    let frame = bracket_stack
+                        .pop()
+                        .ok_or_else(|| anyhow!(UNBALANCED_BRACKET_ERR))?;
+                    if let Some(fun) = frame.function {
+                        let given = frame.argument_count();
+                        let expected = usize::from(fun.arity());
+                        if given != expected {
+                            return Err(anyhow!(
+                                "Parse Error: Function '{}' expects {} argument(s), {} given.",
+                                fun.to_string().to_lowercase(),
+                                expected,
+                                given
+                            ));
+                        }
+                    }
+
                     let mut found_open = false;
                     while let Some(token) = operators_stack.pop() {
                         match token {
@@ -300,6 +363,14 @@ impl RpnResolver<'_> {
                 }
 
                 Token::Comma => {
+                    let frame = bracket_stack
+                        .last_mut()
+                        .ok_or_else(|| anyhow!(COMMA_OUTSIDE_CALL_ERR))?;
+                    if frame.function.is_none() {
+                        return Err(anyhow!(COMMA_OUTSIDE_CALL_ERR));
+                    }
+                    frame.commas += 1;
+
                     let mut found_open = false;
                     while let Some(token) = operators_stack.last() {
                         if matches!(token, Token::Bracket(token::Bracket::Open)) {
@@ -347,7 +418,8 @@ impl RpnResolver<'_> {
                     operators_stack.push(op1.clone());
                 }
 
-                Token::Function(_) => {
+                Token::Function(f) => {
+                    pending_function = Some(f);
                     operators_stack.push(t.clone());
                 }
 
@@ -363,6 +435,13 @@ impl RpnResolver<'_> {
                 DisplayThisDeque(&postfix_stack),
                 DisplayThatVec(&operators_stack)
             );
+        }
+
+        if let Some(fun) = pending_function {
+            return Err(anyhow!(
+                "Parse Error: Function '{}' must be followed by '('.",
+                fun.to_string().to_lowercase()
+            ));
         }
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */

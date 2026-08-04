@@ -580,3 +580,54 @@ fn test_degenerate_power_bases_are_not_refused() {
     resolve_natural!("0^10000000", 0);
     resolve_natural!("(-1)^10000000", 1); // even exponent
 }
+
+#[test]
+fn test_wrong_arity_is_diagnosed_by_name() {
+    let session = Session::init();
+    for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains(&format!("expects {expected}")) && err.contains(&format!("{given} given")),
+            "{expr} reported: {err}"
+        );
+    }
+}
+
+#[test]
+fn test_empty_argument_list_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("max()");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("0 given"), "message was: {err}");
+}
+
+#[test]
+fn test_comma_outside_a_function_call_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("(1,2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("function call"), "message was: {err}");
+}
+
+#[test]
+fn test_a_function_name_requires_parentheses() {
+    let session = Session::init();
+    for expr in ["sin 5", "sqrt 16", "cos"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains("must be followed by"),
+            "{expr} reported: {err}"
+        );
+    }
+    // The parenthesised form is untouched.
+    resolve_decimal!("sin(5)", -0.9589242746631385);
+}
+
+#[test]
+fn test_nested_and_multi_argument_calls_still_work() {
+    resolve_natural!("min(max(2,3),max(5,1))", 3);
+    resolve_natural!("max(1+2,3*4)-min(10,5)", 7);
+    resolve_natural!("max(1,(2+3))", 5);
+}

@@ -112,6 +112,8 @@
 //! Pdf
 //! Cdf
 //! ```
+//!
+//! Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
 /// Built-in function evaluation
 mod functions;
 /// Evaluation limits

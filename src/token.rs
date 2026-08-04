@@ -135,6 +135,21 @@ pub enum MathFunction {
     None,
 }
 
+impl MathFunction {
+    /// How many arguments this function takes.
+    ///
+    /// [`MathFunction::None`] is unreachable — [`Token::get_some`] never yields
+    /// it — and reports 1 rather than panicking, so that no input can reach a
+    /// panic through this path.
+    #[must_use]
+    pub const fn arity(self) -> u8 {
+        match self {
+            MathFunction::Max | MathFunction::Min => 2,
+            _ => 1,
+        }
+    }
+}
+
 impl Token<'_> {
     /// Converts a char to a [`Token::Operator`]
     /// or just returns [`None`] if nothing matches.
@@ -906,5 +921,13 @@ mod tests {
                 "PartialEq and PartialOrd disagree on {a} vs {b}"
             );
         }
+    }
+
+    #[test]
+    fn test_arity_of_the_two_argument_functions() {
+        assert_eq!(MathFunction::Max.arity(), 2);
+        assert_eq!(MathFunction::Min.arity(), 2);
+        assert_eq!(MathFunction::Sin.arity(), 1);
+        assert_eq!(MathFunction::Cdf.arity(), 1);
     }
 }

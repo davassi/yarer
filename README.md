@@ -176,6 +176,8 @@ There are many examples of processed expressions in the [integration test file](
     Cdf
 ```
 
+Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
+
 ## Built-in Defined Constants
 
 There are a few predefined math constants available:
