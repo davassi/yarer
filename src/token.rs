@@ -138,14 +138,34 @@ pub enum MathFunction {
 impl MathFunction {
     /// How many arguments this function takes.
     ///
-    /// [`MathFunction::None`] is unreachable — [`Token::get_some`] never yields
-    /// it — and reports 1 rather than panicking, so that no input can reach a
-    /// panic through this path.
+    /// [`MathFunction::None`] is unreachable — nothing in the tokenizer ever
+    /// produces it — and reports 1 rather than panicking, so that no input can
+    /// reach a panic through this path.
+    ///
+    /// The match is written out variant by variant, rather than falling back
+    /// on a wildcard arm, so that adding a new function forces its author to
+    /// state its arity here instead of silently inheriting 1.
     #[must_use]
     pub const fn arity(self) -> u8 {
         match self {
             MathFunction::Max | MathFunction::Min => 2,
-            _ => 1,
+            MathFunction::Sin
+            | MathFunction::Cos
+            | MathFunction::Tan
+            | MathFunction::ASin
+            | MathFunction::ACos
+            | MathFunction::ATan
+            | MathFunction::Ln
+            | MathFunction::Log
+            | MathFunction::Abs
+            | MathFunction::Sqrt
+            | MathFunction::Floor
+            | MathFunction::Ceil
+            | MathFunction::Round
+            | MathFunction::Exp
+            | MathFunction::Pdf
+            | MathFunction::Cdf
+            | MathFunction::None => 1,
         }
     }
 }

@@ -38,6 +38,9 @@ static EXPONENT_TOO_LARGE_ERR: &str =
 static COMMA_OUTSIDE_CALL_ERR: &str =
     "Parse Error: ',' is only valid between the arguments of a function call.";
 static UNBALANCED_BRACKET_ERR: &str = "Parse Error: Unbalanced brackets.";
+static EMPTY_ARGUMENT_ERR: &str = "Parse Error: A function argument cannot be empty.";
+static BRACKET_UNCLOSED_AT_SEMICOLON_ERR: &str =
+    "Parse Error: A bracket must be closed before ';'.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -56,13 +59,20 @@ pub struct RpnResolver<'a> {
 /// call and how many arguments it has seen so far.
 struct BracketFrame {
     function: Option<MathFunction>,
+    /// Number of `,` separators seen so far in this bracket.
     commas: usize,
+    /// Whether the *current* argument slot — since the bracket opened, or
+    /// since the last `,` — has seen any content. Reset after each `,` so an
+    /// empty slot (`max(,1)`, `max(1,)`) is caught exactly where it occurs,
+    /// rather than being silently absorbed into the overall argument count.
     has_content: bool,
 }
 
 impl BracketFrame {
     /// An empty pair of brackets carries zero arguments; otherwise there is one
-    /// more argument than there are separators.
+    /// more argument than there are separators. This is only accurate once
+    /// every slot has been confirmed non-empty, which the caller enforces at
+    /// each `,` and at the closing bracket before trusting this count.
     fn argument_count(&self) -> usize {
         if self.has_content {
             self.commas + 1
@@ -70,6 +80,17 @@ impl BracketFrame {
             0
         }
     }
+}
+
+/// The error reported when a function name is not immediately followed by an
+/// opening bracket. Built in one place because the check itself runs at two
+/// points: mid-scan, against whatever token follows the function name, and
+/// once more at end of input, for a function name with nothing after it at all.
+fn function_requires_parentheses_err(fun: MathFunction) -> anyhow::Error {
+    anyhow!(
+        "Parse Error: Function '{}' must be followed by '('.",
+        fun.to_string().to_lowercase()
+    )
 }
 
 impl RpnResolver<'_> {
@@ -294,14 +315,16 @@ impl RpnResolver<'_> {
         for t in infix_stack {
             if let Some(fun) = pending_function {
                 if !matches!(t, Token::Bracket(token::Bracket::Open)) {
-                    return Err(anyhow!(
-                        "Parse Error: Function '{}' must be followed by '('.",
-                        fun.to_string().to_lowercase()
-                    ));
+                    return Err(function_requires_parentheses_err(fun));
                 }
             }
 
-            if !matches!(t, Token::Comma | Token::Bracket(token::Bracket::Close)) {
+            // Both brackets are excluded here: an opening bracket has not yet
+            // proven it contributes a value (the group it opens might turn out
+            // empty, e.g. the inner `()` in `sin(())`), so marking is deferred
+            // to the moment its matching close confirms the group was non-empty.
+            // See the `Token::Bracket(Close)` arm below.
+            if !matches!(t, Token::Comma | Token::Bracket(_)) {
                 if let Some(frame) = bracket_stack.last_mut() {
                     frame.has_content = true;
                 }
@@ -328,6 +351,12 @@ impl RpnResolver<'_> {
                     let frame = bracket_stack
                         .pop()
                         .ok_or_else(|| anyhow!(UNBALANCED_BRACKET_ERR))?;
+                    // A trailing separator (`max(1,)`) leaves the final slot
+                    // empty; catch it here rather than letting it silently
+                    // shrink the argument count by one.
+                    if frame.commas > 0 && !frame.has_content {
+                        return Err(anyhow!(EMPTY_ARGUMENT_ERR));
+                    }
                     if let Some(fun) = frame.function {
                         let given = frame.argument_count();
                         let expected = usize::from(fun.arity());
@@ -338,6 +367,16 @@ impl RpnResolver<'_> {
                                 expected,
                                 given
                             ));
+                        }
+                    }
+                    // This bracket produced a value: let the enclosing slot (if
+                    // any) know, now that the group is confirmed non-empty
+                    // rather than merely opened. An empty group like the inner
+                    // `()` in `sin(())` must not count as content for the slot
+                    // that contains it.
+                    if frame.has_content {
+                        if let Some(outer) = bracket_stack.last_mut() {
+                            outer.has_content = true;
                         }
                     }
 
@@ -369,7 +408,14 @@ impl RpnResolver<'_> {
                     if frame.function.is_none() {
                         return Err(anyhow!(COMMA_OUTSIDE_CALL_ERR));
                     }
+                    // The slot that ends here (since the open bracket or the
+                    // previous ',') must not be empty, e.g. the first slot in
+                    // `max(,1)`.
+                    if !frame.has_content {
+                        return Err(anyhow!(EMPTY_ARGUMENT_ERR));
+                    }
                     frame.commas += 1;
+                    frame.has_content = false; // a fresh slot starts now
 
                     let mut found_open = false;
                     while let Some(token) = operators_stack.last() {
@@ -386,6 +432,15 @@ impl RpnResolver<'_> {
                 }
 
                 Token::SemiColon => {
+                    // A bracket left open across a ';' is a parse error in its
+                    // own right: without this check the frame just lingers
+                    // (out of sync with `operators_stack`, which the loop below
+                    // does drain), and the eventual mismatch on some later
+                    // close surfaces as a confusing arity error instead of
+                    // naming what's actually wrong.
+                    if !bracket_stack.is_empty() {
+                        return Err(anyhow!(BRACKET_UNCLOSED_AT_SEMICOLON_ERR));
+                    }
                     while let Some(token) = operators_stack.pop() {
                         postfix_stack.push_back(token);
                     }
@@ -438,10 +493,7 @@ impl RpnResolver<'_> {
         }
 
         if let Some(fun) = pending_function {
-            return Err(anyhow!(
-                "Parse Error: Function '{}' must be followed by '('.",
-                fun.to_string().to_lowercase()
-            ));
+            return Err(function_requires_parentheses_err(fun));
         }
 
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */

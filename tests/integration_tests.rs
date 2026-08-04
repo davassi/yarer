@@ -613,7 +613,10 @@ fn test_comma_outside_a_function_call_is_diagnosed() {
 #[test]
 fn test_a_function_name_requires_parentheses() {
     let session = Session::init();
-    for expr in ["sin 5", "sqrt 16", "cos"] {
+    // "sin;" pins down that a pending function cannot survive a ';' statement
+    // boundary either: the mandatory-parenthesis check fires on the very next
+    // token, whatever it is, before the ';' arm ever runs.
+    for expr in ["sin 5", "sqrt 16", "cos", "sin;"] {
         let mut resolver = session.process(expr);
         let err = resolver.resolve().unwrap_err().to_string();
         assert!(
@@ -630,4 +633,71 @@ fn test_nested_and_multi_argument_calls_still_work() {
     resolve_natural!("min(max(2,3),max(5,1))", 3);
     resolve_natural!("max(1+2,3*4)-min(10,5)", 7);
     resolve_natural!("max(1,(2+3))", 5);
+}
+
+#[test]
+fn test_unclosed_bracket_before_semicolon_is_diagnosed() {
+    // Before the fix, the open bracket's frame survived the ';' unclosed, and
+    // the mismatch surfaced later as a misleading arity error instead of
+    // naming the real problem.
+    let session = Session::init();
+    let mut resolver = session.process("max(1; 2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("before ';'"), "message was: {err}");
+    assert!(
+        !err.contains("expects"),
+        "should not be reported as an arity mismatch: {err}"
+    );
+}
+
+#[test]
+fn test_empty_argument_slot_is_diagnosed() {
+    // A comma with nothing before or after it must be its own diagnosis, not
+    // silently absorbed into the argument count.
+    let session = Session::init();
+    for expr in ["max(,1)", "max(1,)"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("empty"), "{expr} reported: {err}");
+    }
+}
+
+#[test]
+fn test_nested_empty_group_does_not_fake_an_argument() {
+    // The inner "()" is empty and must not be counted as content for the
+    // outer call's only argument slot.
+    let session = Session::init();
+    let mut resolver = session.process("sin(())");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(
+        err.contains("expects 1") && err.contains("0 given"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_unbalanced_closing_bracket_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("1+2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("Unbalanced brackets"), "message was: {err}");
+}
+
+#[test]
+fn test_single_argument_function_called_empty_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("sin()");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(
+        err.contains("expects 1") && err.contains("0 given"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("max((1,2),3)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("function call"), "message was: {err}");
 }
