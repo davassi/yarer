@@ -138,6 +138,11 @@ impl RpnResolver<'_> {
         for t in &self.rpn_expr {
             match t {
                 Token::Operand(n) => {
+                    // The budget is documented as bounding every intermediate and
+                    // final result, so it has to hold for a value that arrives as a
+                    // literal too — otherwise a long enough literal is returned
+                    // above the limit the caller asked for.
+                    limits::check_size(n, limits)?;
                     result_stack.push_back(n.clone());
                     var_stack.push_back(None);
                 }
@@ -496,6 +501,14 @@ impl RpnResolver<'_> {
             return Err(function_requires_parentheses_err(fun));
         }
 
+        // A frame still on the stack is a bracket that was opened and never
+        // closed. That is the same condition class as a stray closing bracket,
+        // so it gets the same named diagnosis rather than falling through to the
+        // generic malformed-expression message below.
+        if !bracket_stack.is_empty() {
+            return Err(anyhow!(UNBALANCED_BRACKET_ERR));
+        }
+
         /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
         operators_stack.reverse();
         for t in &operators_stack {
@@ -554,13 +567,13 @@ impl RpnResolver<'_> {
             .to_biguint()
             .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
 
-        let exponent_magnitude = exponent
-            .to_u64()
+        // A degenerate base short-circuits inside the prediction, before the
+        // exponent's own magnitude is ever consulted, so `1^n` stays evaluable for
+        // an `n` no `u64` could hold. Only a base that actually grows can make the
+        // exponent unrepresentable, and that is the one case this message fits.
+        let predicted_bits = limits::predicted_power_bits(&base, &exponent)
             .ok_or_else(|| anyhow!(EXPONENT_TOO_LARGE_ERR))?;
-        limits::check_predicted_size(
-            limits::predicted_power_bits(&base, exponent_magnitude),
-            limits,
-        )?;
+        limits::check_predicted_size(predicted_bits, limits)?;
 
         match base {
             Number::NaturalNumber(base) => {

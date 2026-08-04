@@ -6,6 +6,8 @@
 
 use crate::token::Number;
 use anyhow::anyhow;
+use num_bigint::BigUint;
+use num_traits::ToPrimitive;
 
 /// Resource bounds applied while evaluating an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,7 +99,8 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
     bits.max(1.0).ceil() as u128
 }
 
-/// An upper bound on the bit length of `base^exponent` for an integral exponent.
+/// An upper bound on the bit length of `base^exponent` for an integral exponent,
+/// or [`None`] when the exponent is too large for the prediction to be made at all.
 ///
 /// Degenerate bases are special-cased first: when `base`'s magnitude is 0 or 1, so
 /// is the magnitude of any power of it, regardless of how large the exponent is, so
@@ -106,18 +109,24 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
 /// computation that is actually free — `1^10000000` is `1`, computed instantly — into
 /// one refused for needing ten million bits.
 ///
+/// That test deliberately comes *before* the exponent is narrowed to a `u64`, which
+/// is why the narrowing lives here rather than at the call site: an exponent too
+/// large to narrow is still irrelevant to a base of magnitude 1, and answering
+/// [`None`] for it would make the caller report an exponent as unevaluable when
+/// `1^n` is `1` under every conceivable limit.
+///
 /// For every other base it uses `bits(base)` where `log2(base)` would be exact, so
 /// it overestimates by up to a factor of two for small bases — `2^100` is predicted
 /// at 200 bits and occupies 101. A guard that errs toward refusing is the right
 /// direction to err in, and the discrepancy only matters within a factor of two of
 /// the budget.
 #[must_use]
-pub fn predicted_power_bits(base: &Number, exponent_magnitude: u64) -> u128 {
+pub fn predicted_power_bits(base: &Number, exponent_magnitude: &BigUint) -> Option<u128> {
     let base_bits = size_in_bits(base);
     if base_bits <= 1 {
-        return 1;
+        return Some(1);
     }
-    u128::from(base_bits) * u128::from(exponent_magnitude)
+    Some(u128::from(base_bits) * u128::from(exponent_magnitude.to_u64()?))
 }
 
 #[cfg(test)]
@@ -145,7 +154,10 @@ mod tests {
     #[test]
     fn test_power_prediction_multiplies_base_size_by_exponent() {
         let ten = Number::NaturalNumber(BigInt::from(10));
-        assert_eq!(predicted_power_bits(&ten, 100), 400);
+        assert_eq!(
+            predicted_power_bits(&ten, &BigUint::from(100_u32)),
+            Some(400)
+        );
     }
 
     #[test]
@@ -153,13 +165,29 @@ mod tests {
         // 1^n, 0^n and (-1)^n all have magnitude 0 or 1 no matter how large n is,
         // so a huge exponent must not inflate the prediction: base_bits.max(1) *
         // exponent_magnitude would otherwise turn a free computation into a refusal.
+        // The second exponent does not fit in a u64, which pins down that the
+        // degenerate test runs before the narrowing rather than after it.
+        let beyond_u64 = BigUint::from(u64::MAX) + BigUint::from(1_u32);
         for base in [
             Number::NaturalNumber(BigInt::from(1)),
             Number::NaturalNumber(BigInt::from(0)),
             Number::NaturalNumber(BigInt::from(-1)),
         ] {
-            assert_eq!(predicted_power_bits(&base, 10_000_000), 1);
+            assert_eq!(
+                predicted_power_bits(&base, &BigUint::from(10_000_000_u32)),
+                Some(1)
+            );
+            assert_eq!(predicted_power_bits(&base, &beyond_u64), Some(1));
         }
+    }
+
+    #[test]
+    fn test_power_prediction_declines_an_exponent_that_does_not_fit() {
+        // A base that actually grows plus an exponent beyond u64 has no usable
+        // prediction: the caller must refuse rather than guess.
+        let two = Number::NaturalNumber(BigInt::from(2));
+        let beyond_u64 = BigUint::from(u64::MAX) + BigUint::from(1_u32);
+        assert_eq!(predicted_power_bits(&two, &beyond_u64), None);
     }
 
     #[test]

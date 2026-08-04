@@ -579,6 +579,33 @@ fn test_degenerate_power_bases_are_not_refused() {
     resolve_natural!("1^10000000", 1);
     resolve_natural!("0^10000000", 0);
     resolve_natural!("(-1)^10000000", 1); // even exponent
+
+    // The same argument holds for an exponent too large to fit in a u64. Testing
+    // the base's magnitude only *after* that conversion refused this one with
+    // "the exponent is too large to evaluate under any size limit", which is
+    // factually wrong for a base of magnitude 1: 1^n is 1 under every limit.
+    resolve_natural!("1^99999999999999999999", 1);
+    resolve_natural!("0^99999999999999999999", 0);
+}
+
+#[test]
+fn test_an_oversized_literal_is_refused() {
+    // max_value_bits is documented as bounding the size of any intermediate or
+    // final result. A literal pushed straight onto the stack is one of those, so
+    // the budget has to apply to it as well, whatever produced it.
+    let session = Session::with_limits(Limits { max_value_bits: 32 });
+    let mut resolver = session.process("99999999999999999999");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+    assert!(err.contains("size limit"), "message was: {err}");
+
+    // A literal inside the budget is untouched, so the guard is not simply
+    // refusing everything.
+    let mut inside = session.process("123+1");
+    assert_eq!(
+        inside.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(124))
+    );
 }
 
 #[test]
@@ -681,6 +708,24 @@ fn test_unbalanced_closing_bracket_is_diagnosed() {
     let mut resolver = session.process("1+2)");
     let err = resolver.resolve().unwrap_err().to_string();
     assert!(err.contains("Unbalanced brackets"), "message was: {err}");
+}
+
+#[test]
+fn test_unbalanced_opening_bracket_is_diagnosed() {
+    // The same condition class as the test above, and it used to get the generic
+    // "malformed expression" message instead of the named one. "max(1,2" is the
+    // sharper case: the bracket never closes, so the arity check on the closing
+    // bracket never ran at all.
+    let session = Session::init();
+    for expr in ["(1+2", "max(1,2"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains("Unbalanced brackets"),
+            "{expr} reported: {err}"
+        );
+        assert!(!err.contains("malformed"), "{expr} reported: {err}");
+    }
 }
 
 #[test]
