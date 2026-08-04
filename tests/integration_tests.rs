@@ -208,9 +208,13 @@ fn test_session_set() {
     let session = Session::init();
     session.set("x", 4);
     let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-    assert_eq!(
-        resolver.resolve().unwrap(),
-        Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+    let result = resolver.resolve().unwrap();
+    assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
+    // Cross-variant equality would accept DecimalNumber(-2/1) above, so the
+    // variant has to be asserted separately for this to notice a regression.
+    assert!(
+        matches!(result, Number::NaturalNumber(_)),
+        "produced {result:?}, expected a NaturalNumber"
     );
 }
 
@@ -315,9 +319,14 @@ fn test_large_integer_division_and_negative_power_do_not_panic() {
     );
 
     let mut resolver = session.process("(10^100)^-1 * 10^100");
-    assert_eq!(
-        resolver.resolve().unwrap(),
-        Number::DecimalNumber(num_rational::BigRational::from_integer(BigInt::from(1)))
+    let result = resolver.resolve().unwrap();
+    assert_eq!(result, Number::NaturalNumber(BigInt::from(1)));
+    // A reciprocal multiplied back out lands exactly on 1, which is integral:
+    // the variant is the whole point here, and cross-variant equality would let
+    // DecimalNumber(1/1) through the assertion above.
+    assert!(
+        matches!(result, Number::NaturalNumber(_)),
+        "produced {result:?}, expected a NaturalNumber"
     );
 }
 
@@ -552,7 +561,11 @@ fn test_growth_through_multiplication_is_caught() {
         max_value_bits: 4000,
     });
     let mut resolver = session.process("x=2^2000; x*x");
-    assert!(resolver.resolve().is_err(), "the product needs 4001 bits");
+    let err = resolver.resolve().unwrap_err().to_string();
+    // "occupies" is the post-hoc wording; a prediction says "would need". Asserting
+    // the wording is what makes the paragraph above a claim the test checks rather
+    // than a comment asking to be believed.
+    assert!(err.contains("occupies"), "message was: {err}");
 }
 
 #[test]

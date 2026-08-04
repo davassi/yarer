@@ -129,14 +129,19 @@ mod tests {
     use super::*;
     use crate::token::Number;
 
-    /// Test for the session initialization and basic expression processing
+    /// Asserts both the value and the variant. Cross-variant equality means a
+    /// value-only assertion cannot tell `NaturalNumber(-5)` from
+    /// `DecimalNumber(-5/1)`, so only the `matches!` makes this sensitive to the
+    /// canonicalisation invariant it is here to protect.
     #[test]
     fn test_session() {
         let session = Session::init();
         let mut resolver: RpnResolver = session.process("1+2*3/(4-5)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(num_rational::BigRational::from_float(-5.0).unwrap())
+        let result = resolver.resolve().unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(-5)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "produced {result:?}, expected a NaturalNumber"
         );
     }
 
@@ -146,9 +151,11 @@ mod tests {
         let session = Session::init();
         session.set("x", 4);
         let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+        let result = resolver.resolve().unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "produced {result:?}, expected a NaturalNumber"
         );
     }
 

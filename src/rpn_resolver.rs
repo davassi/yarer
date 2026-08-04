@@ -723,25 +723,22 @@ mod tests {
         assert!(resolver2.resolve().is_err());
     }
 
+    /// `max` and `min` of integers return integers, and the enum tag has to say
+    /// so. Asserting the value alone is not enough: cross-variant equality makes
+    /// `NaturalNumber(2) == DecimalNumber(2/1)`, so a value-only assertion passes
+    /// whichever variant comes back. That is exactly how this test used to read
+    /// as "max returns a decimal" and stay green under either behaviour.
     #[test]
     fn test_max_min() {
         let session = Session::init();
-        let mut resolver = session.process("max(1,2)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(BigRational::from_float(2.0).unwrap())
-        );
-
-        let mut resolver = session.process("min(1,2)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(BigRational::from_float(1.0).unwrap())
-        );
-
-        let mut resolver = session.process("min(max(1,2),3)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(BigRational::from_float(2.0).unwrap())
-        );
+        for (expr, expected) in [("max(1,2)", 2), ("min(1,2)", 1), ("min(max(1,2),3)", 2)] {
+            let mut resolver = session.process(expr);
+            let result = resolver.resolve().unwrap();
+            assert_eq!(result, Number::NaturalNumber(BigInt::from(expected)));
+            assert!(
+                matches!(result, Number::NaturalNumber(_)),
+                "{expr} produced {result:?}, expected a NaturalNumber"
+            );
+        }
     }
 }
