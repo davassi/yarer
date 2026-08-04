@@ -622,6 +622,39 @@ fn test_an_oversized_literal_is_refused() {
 }
 
 #[test]
+fn test_an_oversized_variable_is_refused() {
+    // Same hole as the literal, one match arm over. Bounding untrusted input is
+    // the whole reason to call with_limits, and setf is a way in that does not
+    // pass through any of the checked operators: 1e308 is stored as a ~1024-bit
+    // integer, and reading it back needs no arithmetic at all.
+    let session = Session::with_limits(Limits { max_value_bits: 64 });
+    session.setf("x", 1e308);
+
+    // Bare "x" is the case no other guard can catch: the value is pushed and
+    // returned without a single operator running over it.
+    let mut resolver = session.process("x");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+    assert!(err.contains("size limit"), "message was: {err}");
+
+    // A variable inside the budget still reads back normally.
+    session.set("y", 7);
+    let mut inside = session.process("y*2");
+    assert_eq!(
+        inside.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(14))
+    );
+
+    // An undefined variable still resolves to zero. That is deliberate, and a
+    // size check on the variable push must not turn it into an error.
+    let mut undefined = session.process("z+1");
+    assert_eq!(
+        undefined.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(1))
+    );
+}
+
+#[test]
 fn test_wrong_arity_is_diagnosed_by_name() {
     let session = Session::init();
     for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {

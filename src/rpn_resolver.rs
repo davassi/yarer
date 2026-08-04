@@ -244,10 +244,17 @@ impl RpnResolver<'_> {
                     let var_name = v.to_lowercase();
                     debug!("Heap {:?}", self.local_heap);
                     let heap = self.local_heap.borrow();
+                    // An undefined variable reads as zero, deliberately.
                     let n = heap
                         .get(&var_name)
                         .cloned()
                         .unwrap_or_else(|| Number::NaturalNumber(BigInt::zero()));
+                    // Same reasoning as the operand arm above: a variable is a
+                    // value on the stack like any other. `set`/`setf` put values
+                    // into the heap without passing through any checked operator,
+                    // so without this an expression that only reads a variable
+                    // returns it however large it is.
+                    limits::check_size(&n, limits)?;
                     result_stack.push_back(n);
                     var_stack.push_back(Some(var_name));
                 }
@@ -401,9 +408,21 @@ impl RpnResolver<'_> {
                             _ => postfix_stack.push_back(token),
                         }
                     }
-                    if !found_open {
-                        return Err(anyhow!(MALFORMED_ERR));
-                    }
+                    // `bracket_stack` and `operators_stack` gain and lose open
+                    // brackets together: the `Bracket(Open)` arm pushes to both
+                    // with nothing between them that can fail, this arm is the
+                    // only one that removes an open bracket from
+                    // `operators_stack` and it removes exactly one per frame
+                    // popped, the `Comma` arm stops at an open bracket without
+                    // popping it, the `Operator` arm breaks on anything that is
+                    // not an operator or a function, and the `SemiColon` arm
+                    // refuses a non-empty `bracket_stack` before it drains.
+                    // Popping a frame above therefore guarantees a matching open
+                    // bracket is still below us here.
+                    debug_assert!(
+                        found_open,
+                        "a popped bracket frame must have a matching '(' in the operator stack"
+                    );
                 }
 
                 Token::Comma => {
@@ -431,9 +450,15 @@ impl RpnResolver<'_> {
                         postfix_stack
                             .push_back(operators_stack.pop().expect("It should not happen."));
                     }
-                    if !found_open {
-                        return Err(anyhow!(MALFORMED_ERR));
-                    }
+                    // Same lockstep invariant as the closing-bracket arm above,
+                    // reached here through `bracket_stack.last_mut()` having
+                    // yielded a frame: an enclosing frame exists, so its open
+                    // bracket is still on `operators_stack`. This arm only peeks
+                    // at that bracket, so it also leaves the two in step.
+                    debug_assert!(
+                        found_open,
+                        "a comma inside a bracket frame must find that frame's '(' in the operator stack"
+                    );
                 }
 
                 Token::SemiColon => {

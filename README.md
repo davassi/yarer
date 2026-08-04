@@ -18,9 +18,9 @@ Example of usage of the library:
 
 ```rust
       let session = Session::init();
-      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2" 
+      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2"
 
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 ```
 
 All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
@@ -35,7 +35,7 @@ Yarer handles variables and functions. Here is an example:
       let mut resolver = session.process("1/cos(x^2)");
 
       session.set("x",1);
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 ```
 
 and of course, the expression can be re-evaluated if the variable changes.
@@ -43,10 +43,10 @@ and of course, the expression can be re-evaluated if the variable changes.
 ```rust
       //...
       session.set("x",-1);
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 
-      session.set("x",0.001); 
-      println!("The result is {}", resolver.resolve());
+      session.setf("x",0.001);
+      println!("The result is {}", resolver.resolve().unwrap());
       //...
 ```
 
