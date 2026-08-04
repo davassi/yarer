@@ -1,3 +1,4 @@
+use crate::limits::Limits;
 use crate::{rpn_resolver::RpnResolver, token::Number};
 use num_bigint::BigInt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -9,6 +10,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 ///
 pub struct Session {
     variable_heap: Rc<RefCell<HashMap<String, Number>>>,
+    limits: Limits,
 }
 
 const BUILTIN_CONSTANTS: [&str; 5] = ["pi", "e", "tau", "phi", "gamma"];
@@ -28,9 +30,22 @@ impl Session {
     ///
     #[must_use]
     pub fn init() -> Session {
-        // let variable_heap: HashMap<String, Number> = ;
+        Session::with_limits(Limits::default())
+    }
+
+    /// Builds a session whose evaluations are bound by `limits`.
+    ///
+    /// The bound reaches the built-in constants too, and they are wider than
+    /// they look: `pi`, `e`, `tau`, `phi` and `gamma` are `f64`s held exactly as
+    /// rationals, costing numerator bits plus denominator bits — 99 for `pi`, and
+    /// 107 for `gamma`, the widest. A `max_value_bits` under 107 therefore
+    /// rejects a value the caller never supplied. A limit meant to bound
+    /// untrusted input should sit well above that.
+    #[must_use]
+    pub fn with_limits(limits: Limits) -> Session {
         Session {
             variable_heap: Rc::new(RefCell::new(Session::init_local_heap())),
+            limits,
         }
     }
 
@@ -39,7 +54,7 @@ impl Session {
     #[must_use]
     pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'a> {
         let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
-        RpnResolver::parse_with_borrowed_heap(line, clone)
+        RpnResolver::parse_with_borrowed_heap(line, clone, self.limits)
     }
 
     /// Creates a Variables heap (name-value)
@@ -48,31 +63,25 @@ impl Session {
         let mut local_heap: HashMap<String, Number> = HashMap::new();
         local_heap.insert(
             "pi".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::PI).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::PI).unwrap()),
         );
         local_heap.insert(
             "e".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::E).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::E).unwrap()),
         );
         local_heap.insert(
             "tau".to_string(),
-            Number::DecimalNumber(
-                num_rational::BigRational::from_float(std::f64::consts::TAU).unwrap(),
-            ),
+            Number::decimal(num_rational::BigRational::from_float(std::f64::consts::TAU).unwrap()),
         );
         local_heap.insert(
             "phi".to_string(),
-            Number::DecimalNumber(
+            Number::decimal(
                 num_rational::BigRational::from_float((1.0 + 5.0f64.sqrt()) / 2.0).unwrap(),
             ),
         );
         local_heap.insert(
             "gamma".to_string(),
-            Number::DecimalNumber(
+            Number::decimal(
                 num_rational::BigRational::from_float(0.577_215_664_901_532_9_f64).unwrap(),
             ),
         );
@@ -101,7 +110,12 @@ impl Session {
             .insert(key, Number::NaturalNumber(BigInt::from(value)));
     }
 
-    /// Declares and saves a new float variable ([`Number::DecimalNumber`])
+    /// Declares and saves a new variable from an [`f64`].
+    ///
+    /// The value decides the representation, not the setter. The rational is
+    /// built through [`Number::decimal`], so an integral `f64` is stored as a
+    /// [`Number::NaturalNumber`] — `setf("x", 4.0)` stores `4` — and only a
+    /// genuinely fractional value is stored as a [`Number::DecimalNumber`].
     ///
     /// Example
     /// ``
@@ -117,7 +131,7 @@ impl Session {
         if let Some(value) = num_rational::BigRational::from_float(value) {
             self.variable_heap
                 .borrow_mut()
-                .insert(key, Number::DecimalNumber(value));
+                .insert(key, Number::decimal(value));
         }
     }
 }
@@ -127,14 +141,19 @@ mod tests {
     use super::*;
     use crate::token::Number;
 
-    /// Test for the session initialization and basic expression processing
+    /// Asserts both the value and the variant. Cross-variant equality means a
+    /// value-only assertion cannot tell `NaturalNumber(-5)` from
+    /// `DecimalNumber(-5/1)`, so only the `matches!` makes this sensitive to the
+    /// canonicalisation invariant it is here to protect.
     #[test]
     fn test_session() {
         let session = Session::init();
         let mut resolver: RpnResolver = session.process("1+2*3/(4-5)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(num_rational::BigRational::from_float(-5.0).unwrap())
+        let result = resolver.resolve().unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(-5)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "produced {result:?}, expected a NaturalNumber"
         );
     }
 
@@ -144,9 +163,11 @@ mod tests {
         let session = Session::init();
         session.set("x", 4);
         let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-        assert_eq!(
-            resolver.resolve().unwrap(),
-            Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+        let result = resolver.resolve().unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "produced {result:?}, expected a NaturalNumber"
         );
     }
 

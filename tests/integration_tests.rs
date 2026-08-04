@@ -1,4 +1,5 @@
 use num::BigInt;
+use yarer::limits::Limits;
 use yarer::rpn_resolver::*;
 use yarer::session::Session;
 use yarer::token::*;
@@ -14,13 +15,18 @@ macro_rules! resolve {
     };
 }
 
+/// Asserts the numeric value of an expression, within 1e-10.
+///
+/// It deliberately does not assert which `Number` variant came back: under the
+/// canonicalisation invariant an integral result is a `NaturalNumber`, and
+/// which side of that line an expression falls on is asserted once, on purpose,
+/// by `test_integral_results_are_natural_numbers`.
 macro_rules! resolve_decimal {
     ($expr:expr, $expected:expr) => {{
         let session = Session::init();
         let mut resolver = session.process($expr);
         let result = resolver.resolve().unwrap();
-        assert!(matches!(result, Number::DecimalNumber(_)));
-        let res_f: f64 = result.clone().try_into().unwrap();
+        let res_f: f64 = result.try_into().unwrap();
         assert!((res_f - $expected).abs() < 1e-10);
     }};
     () => {
@@ -202,9 +208,13 @@ fn test_session_set() {
     let session = Session::init();
     session.set("x", 4);
     let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-    assert_eq!(
-        resolver.resolve().unwrap(),
-        Number::DecimalNumber(num_rational::BigRational::from_float(-2.0).unwrap())
+    let result = resolver.resolve().unwrap();
+    assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
+    // Cross-variant equality would accept DecimalNumber(-2/1) above, so the
+    // variant has to be asserted separately for this to notice a regression.
+    assert!(
+        matches!(result, Number::NaturalNumber(_)),
+        "produced {result:?}, expected a NaturalNumber"
     );
 }
 
@@ -309,9 +319,14 @@ fn test_large_integer_division_and_negative_power_do_not_panic() {
     );
 
     let mut resolver = session.process("(10^100)^-1 * 10^100");
-    assert_eq!(
-        resolver.resolve().unwrap(),
-        Number::DecimalNumber(num_rational::BigRational::from_integer(BigInt::from(1)))
+    let result = resolver.resolve().unwrap();
+    assert_eq!(result, Number::NaturalNumber(BigInt::from(1)));
+    // A reciprocal multiplied back out lands exactly on 1, which is integral:
+    // the variant is the whole point here, and cross-variant equality would let
+    // DecimalNumber(1/1) through the assertion above.
+    assert!(
+        matches!(result, Number::NaturalNumber(_)),
+        "produced {result:?}, expected a NaturalNumber"
     );
 }
 
@@ -454,4 +469,429 @@ fn test_setf_declares_a_decimal_variable() {
     let mut resolver = session.process("r*2");
     let v: f64 = resolver.resolve().unwrap().try_into().unwrap();
     assert!((v - 5.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_factorial_accepts_integral_results_of_functions() {
+    // These all produced "Factorial is only defined for non-negative integers"
+    // before the Number invariant, because the functions tagged an integral
+    // result as decimal and the factorial branched on the tag.
+    resolve_natural!("abs(-3)!", 6);
+    resolve_natural!("floor(2.5)!", 2);
+    resolve_natural!("max(3,2)!", 6);
+    resolve_natural!("round(2.4)!", 2);
+    resolve_natural!("(6/3)!", 2);
+}
+
+#[test]
+fn test_integral_results_are_natural_numbers() {
+    let session = Session::init();
+    for expr in ["6/3", "floor(3.7)", "exp(0)", "max(1,2)", "sqrt(16)"] {
+        let mut resolver = session.process(expr);
+        let result = resolver.resolve().unwrap();
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "{expr} produced {result:?}, expected a NaturalNumber"
+        );
+    }
+}
+
+#[test]
+fn test_non_integral_results_stay_decimal() {
+    let session = Session::init();
+    for expr in ["1/3", "abs(-2.5)", "2^-3", "sqrt(2)"] {
+        let mut resolver = session.process(expr);
+        let result = resolver.resolve().unwrap();
+        assert!(
+            matches!(result, Number::DecimalNumber(_)),
+            "{expr} produced {result:?}, expected a DecimalNumber"
+        );
+    }
+}
+
+#[test]
+fn test_oversized_factorial_is_refused_not_computed() {
+    // Before the limit this did not return at all. The test is its own alarm:
+    // if the guard stops working, the suite hangs here instead of failing.
+    let session = Session::init();
+    let mut resolver = session.process("999999999!");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("size limit"), "message was: {err}");
+}
+
+#[test]
+fn test_oversized_power_is_refused_not_computed() {
+    let session = Session::init();
+    let mut resolver = session.process("10^100000000");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("size limit"), "message was: {err}");
+}
+
+#[test]
+fn test_legitimate_big_values_still_pass_the_default_limit() {
+    resolve_natural!("2^64", 18_446_744_073_709_551_616_i128);
+    let session = Session::init();
+    let mut resolver = session.process("1000!");
+    // 1000! needs about 8530 bits, comfortably inside the default budget.
+    assert!(resolver.resolve().is_ok());
+}
+
+#[test]
+fn test_the_limit_is_configurable() {
+    let session = Session::with_limits(Limits { max_value_bits: 64 });
+    let mut resolver = session.process("2^100");
+    assert!(
+        resolver.resolve().is_err(),
+        "2^100 needs 101 bits, over a 64-bit budget"
+    );
+
+    let mut small = session.process("2^10");
+    assert!(small.resolve().is_ok());
+}
+
+#[test]
+fn test_growth_through_multiplication_is_caught() {
+    // Budget 4000 is exactly the power's own prediction for this base and
+    // exponent (size_in_bits(2) * 2000 = 2 * 2000 = 4000): the largest value the
+    // predictive power check admits for "2^2000", so a failure here can only come
+    // from the multiplication, not from the power check firing again. 2^2000 is
+    // actually 2001 bits (passes both checks); squaring it needs 4001 bits, over
+    // budget, and only the post-hoc Mul check can catch that.
+    let session = Session::with_limits(Limits {
+        max_value_bits: 4000,
+    });
+    let mut resolver = session.process("x=2^2000; x*x");
+    let err = resolver.resolve().unwrap_err().to_string();
+    // "occupies" is the post-hoc wording; a prediction says "would need". Asserting
+    // the wording is what makes the paragraph above a claim the test checks rather
+    // than a comment asking to be believed.
+    assert!(err.contains("occupies"), "message was: {err}");
+}
+
+#[test]
+fn test_oversized_exponent_reports_its_own_message() {
+    // The exponent itself doesn't fit in a u64 (it's far larger than u64::MAX),
+    // so this must be refused before any size prediction is even attempted - and
+    // with its own message, not the unrelated "Invalid power operation" that
+    // covers a different failure (a non-integer powf conversion).
+    let session = Session::init();
+    let mut resolver = session.process("2^99999999999999999999");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("exponent is too large"), "message was: {err}");
+    assert!(
+        !err.contains("Invalid power operation"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_degenerate_power_bases_are_not_refused() {
+    // 1^n, 0^n and (-1)^n all stay tiny no matter how large n is, and are cheap to
+    // compute (repeated squaring on a magnitude-1 base never grows). A size
+    // prediction that multiplies base bits by the exponent must not refuse these.
+    resolve_natural!("1^10000000", 1);
+    resolve_natural!("0^10000000", 0);
+    resolve_natural!("(-1)^10000000", 1); // even exponent
+
+    // The same argument holds for an exponent too large to fit in a u64. Testing
+    // the base's magnitude only *after* that conversion refused this one with
+    // "the exponent is too large to evaluate under any size limit", which is
+    // factually wrong for a base of magnitude 1: 1^n is 1 under every limit.
+    resolve_natural!("1^99999999999999999999", 1);
+    resolve_natural!("0^99999999999999999999", 0);
+}
+
+#[test]
+fn test_an_oversized_literal_is_refused() {
+    // max_value_bits is documented as bounding the size of any intermediate or
+    // final result. A literal pushed straight onto the stack is one of those, so
+    // the budget has to apply to it as well, whatever produced it.
+    let session = Session::with_limits(Limits { max_value_bits: 32 });
+    let mut resolver = session.process("99999999999999999999");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+    assert!(err.contains("size limit"), "message was: {err}");
+
+    // A literal inside the budget is untouched, so the guard is not simply
+    // refusing everything.
+    let mut inside = session.process("123+1");
+    assert_eq!(
+        inside.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(124))
+    );
+}
+
+#[test]
+fn test_an_oversized_variable_is_refused() {
+    // Same hole as the literal, one match arm over. Bounding untrusted input is
+    // the whole reason to call with_limits, and setf is a way in that does not
+    // pass through any of the checked operators: 1e308 is stored as a ~1024-bit
+    // integer, and reading it back needs no arithmetic at all.
+    let session = Session::with_limits(Limits { max_value_bits: 64 });
+    session.setf("x", 1e308);
+
+    // Bare "x" is the case no other guard can catch: the value is pushed and
+    // returned without a single operator running over it.
+    let mut resolver = session.process("x");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+    assert!(err.contains("size limit"), "message was: {err}");
+
+    // A variable inside the budget still reads back normally.
+    session.set("y", 7);
+    let mut inside = session.process("y*2");
+    assert_eq!(
+        inside.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(14))
+    );
+
+    // An undefined variable still resolves to zero. That is deliberate, and a
+    // size check on the variable push must not turn it into an error.
+    let mut undefined = session.process("z+1");
+    assert_eq!(
+        undefined.resolve().unwrap(),
+        Number::NaturalNumber(BigInt::from(1))
+    );
+}
+
+#[test]
+fn test_a_materialised_power_is_measured_not_just_predicted() {
+    // The size prediction is a pre-filter, not the guarantee, and there are two
+    // ways past it. Neither of these is caught by any predictive check.
+
+    // 1. The powf path never consults the prediction at all: "2^0.5" is a
+    //    non-integer exponent, so it converts to f64 and comes back as a
+    //    rational of roughly 53 + 53 bits.
+    let tight = Session::with_limits(Limits { max_value_bits: 16 });
+    let mut irrational = tight.process("2^0.5");
+    let err = irrational.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+
+    // 2. A negative exponent is predicted on the magnitude of base^|exponent|,
+    //    but the value returned is the reciprocal, whose denominator counts too.
+    //    "2^-1" predicts 2 bits and yields 1/2, which measures 1 + 2 = 3.
+    let two_bits = Session::with_limits(Limits { max_value_bits: 2 });
+    let mut reciprocal = two_bits.process("2^-1");
+    let err = reciprocal.resolve().unwrap_err().to_string();
+    assert!(err.contains("occupies"), "message was: {err}");
+
+    // Three bits is exactly enough, which pins the boundary rather than just
+    // asserting that something was refused.
+    let three_bits = Session::with_limits(Limits { max_value_bits: 3 });
+    let mut fits = three_bits.process("2^-1");
+    assert_eq!(fits.resolve().unwrap().to_string(), "0.5");
+}
+
+#[test]
+fn test_a_function_result_is_measured_like_any_other_value() {
+    // A function result is bounded by construction, since every built-in routes
+    // its argument through f64 -- but bounded is not measured, and the gap is not
+    // academic. While this arm was unchecked it was the one way to get a value
+    // onto the stack that nothing had measured, and the guards downstream assume
+    // their inputs were measured. floor(exp(1))! returned 2 under a 1-bit budget
+    // for exactly that reason: the factorial's predictive guard is a bit short at
+    // n = 2, and 2 is a 2-bit operand that no checked arm would have admitted.
+    let one_bit = Session::with_limits(Limits { max_value_bits: 1 });
+    for expr in ["exp(1)", "floor(exp(1))", "floor(exp(1))!"] {
+        let mut resolver = one_bit.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("occupies"), "{expr} reported: {err}");
+    }
+
+    // Nothing legitimate is refused by this: a function result is f64-bounded, so
+    // it is far below any budget anyone would set on purpose.
+    resolve_natural!("1/cos(0)", 1);
+    resolve_decimal!("sin(1)", 0.841_470_984_807_896_5);
+    resolve_decimal!("9801/(2206*sqrt(2))", 3.141_592_730_013_305_5);
+
+    // NOTE for whoever reads this next: closing this arm makes the factorial's
+    // own post-hoc check unreachable, since every route to an operand now
+    // measures it first. That check stays anyway -- n = 2 is the only value up to
+    // 60000 where the prediction falls short, which is an empirical bound and not
+    // a proof -- but it is now shadowed, and a test claiming to exercise it would
+    // really be exercising this arm. That is why this test asserts the function
+    // arm and says so, rather than keeping the old factorial framing green.
+
+    // The predictive refusal must survive: 999999999! has to stay a fast "no",
+    // not become a computation that is measured afterwards.
+    let default = Session::init();
+    let mut huge = default.process("999999999!");
+    let err = huge.resolve().unwrap_err().to_string();
+    assert!(err.contains("would need"), "message was: {err}");
+}
+
+#[test]
+fn test_a_tiny_budget_rejects_the_builtin_constants() {
+    // The constants are f64s held exactly as rationals, so they are wide:
+    // numerator bits plus denominator bits, tau is the narrowest at 98 and gamma
+    // the widest at 107 (pi is 884279719003555/281474976710656, 50 + 49 = 99).
+    // A variable is size-checked as it is pushed, so a small budget rejects a
+    // value the caller never supplied. This test exists so the 107-bit floor
+    // quoted by Session::with_limits stays a measured number, not folklore.
+    let below_all = Session::with_limits(Limits { max_value_bits: 97 });
+    for name in ["pi", "e", "tau", "phi", "gamma"] {
+        let mut resolver = below_all.process(name);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("size limit"), "{name} reported: {err}");
+    }
+
+    // 107 is the exact floor, pinned from both sides: one bit under it the
+    // widest constant still does not fit, at it every constant does. Asserting
+    // only the lower bound would pass for any number that happens to be too
+    // small, which is how a figure like this drifts out of date unnoticed.
+    let one_short = Session::with_limits(Limits {
+        max_value_bits: 106,
+    });
+    let mut widest = one_short.process("gamma");
+    assert!(widest.resolve().is_err(), "gamma fits in 106 bits?");
+
+    let exact = Session::with_limits(Limits {
+        max_value_bits: 107,
+    });
+    for name in ["pi", "e", "tau", "phi", "gamma"] {
+        let mut resolver = exact.process(name);
+        assert!(
+            resolver.resolve().is_ok(),
+            "{name} was rejected at 107 bits"
+        );
+    }
+}
+
+#[test]
+fn test_wrong_arity_is_diagnosed_by_name() {
+    let session = Session::init();
+    for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains(&format!("expects {expected}")) && err.contains(&format!("{given} given")),
+            "{expr} reported: {err}"
+        );
+    }
+}
+
+#[test]
+fn test_empty_argument_list_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("max()");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("0 given"), "message was: {err}");
+}
+
+#[test]
+fn test_comma_outside_a_function_call_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("(1,2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("function call"), "message was: {err}");
+}
+
+#[test]
+fn test_a_function_name_requires_parentheses() {
+    let session = Session::init();
+    // "sin;" pins down that a pending function cannot survive a ';' statement
+    // boundary either: the mandatory-parenthesis check fires on the very next
+    // token, whatever it is, before the ';' arm ever runs.
+    for expr in ["sin 5", "sqrt 16", "cos", "sin;"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains("must be followed by"),
+            "{expr} reported: {err}"
+        );
+    }
+    // The parenthesised form is untouched.
+    resolve_decimal!("sin(5)", -0.9589242746631385);
+}
+
+#[test]
+fn test_nested_and_multi_argument_calls_still_work() {
+    resolve_natural!("min(max(2,3),max(5,1))", 3);
+    resolve_natural!("max(1+2,3*4)-min(10,5)", 7);
+    resolve_natural!("max(1,(2+3))", 5);
+}
+
+#[test]
+fn test_unclosed_bracket_before_semicolon_is_diagnosed() {
+    // Before the fix, the open bracket's frame survived the ';' unclosed, and
+    // the mismatch surfaced later as a misleading arity error instead of
+    // naming the real problem.
+    let session = Session::init();
+    let mut resolver = session.process("max(1; 2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("before ';'"), "message was: {err}");
+    assert!(
+        !err.contains("expects"),
+        "should not be reported as an arity mismatch: {err}"
+    );
+}
+
+#[test]
+fn test_empty_argument_slot_is_diagnosed() {
+    // A comma with nothing before or after it must be its own diagnosis, not
+    // silently absorbed into the argument count.
+    let session = Session::init();
+    for expr in ["max(,1)", "max(1,)"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(err.contains("empty"), "{expr} reported: {err}");
+    }
+}
+
+#[test]
+fn test_nested_empty_group_does_not_fake_an_argument() {
+    // The inner "()" is empty and must not be counted as content for the
+    // outer call's only argument slot.
+    let session = Session::init();
+    let mut resolver = session.process("sin(())");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(
+        err.contains("expects 1") && err.contains("0 given"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_unbalanced_closing_bracket_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("1+2)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("Unbalanced brackets"), "message was: {err}");
+}
+
+#[test]
+fn test_unbalanced_opening_bracket_is_diagnosed() {
+    // The same condition class as the test above, and it used to get the generic
+    // "malformed expression" message instead of the named one. "max(1,2" is the
+    // sharper case: the bracket never closes, so the arity check on the closing
+    // bracket never ran at all.
+    let session = Session::init();
+    for expr in ["(1+2", "max(1,2"] {
+        let mut resolver = session.process(expr);
+        let err = resolver.resolve().unwrap_err().to_string();
+        assert!(
+            err.contains("Unbalanced brackets"),
+            "{expr} reported: {err}"
+        );
+        assert!(!err.contains("malformed"), "{expr} reported: {err}");
+    }
+}
+
+#[test]
+fn test_single_argument_function_called_empty_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("sin()");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(
+        err.contains("expects 1") && err.contains("0 given"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
+    let session = Session::init();
+    let mut resolver = session.process("max((1,2),3)");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("function call"), "message was: {err}");
 }

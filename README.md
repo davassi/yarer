@@ -18,13 +18,13 @@ Example of usage of the library:
 
 ```rust
       let session = Session::init();
-      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2" 
+      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2"
 
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 ```
 
 All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
-The library returns a natural number or a decimal number if the expression contains a decimal literal (e.g., '2.1+1') or includes a trigonometric function (e.g., 1/cos(x+1)).
+The library returns a `Number`, and the value decides which variant, not the expression that produced it. An integral result always comes back as `Number::NaturalNumber`, whatever it came from — `2.5+2.5` is `5`, `1/cos(0)` is `1`, `6/3` is `2`. `Number::DecimalNumber` appears only when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore has exactly one representation.
 
 ## Variables
 
@@ -35,7 +35,7 @@ Yarer handles variables and functions. Here is an example:
       let mut resolver = session.process("1/cos(x^2)");
 
       session.set("x",1);
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 ```
 
 and of course, the expression can be re-evaluated if the variable changes.
@@ -43,10 +43,10 @@ and of course, the expression can be re-evaluated if the variable changes.
 ```rust
       //...
       session.set("x",-1);
-      println!("The result is {}", resolver.resolve());
+      println!("The result is {}", resolver.resolve().unwrap());
 
-      session.set("x",0.001); 
-      println!("The result is {}", resolver.resolve());
+      session.setf("x",0.001);
+      println!("The result is {}", resolver.resolve().unwrap());
       //...
 ```
 
@@ -175,6 +175,8 @@ There are many examples of processed expressions in the [integration test file](
     Pdf
     Cdf
 ```
+
+Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
 
 ## Built-in Defined Constants
 
