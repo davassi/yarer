@@ -140,9 +140,15 @@ The factorial prediction uses the full Stirling series, `n·log2(n) − n·log2(
 ten bits at the scale this measurement operates at, enough to let a two-term prediction
 admit a value whose actual size is over budget (an earlier pass of this measurement
 caught exactly that — see the note below). With the correction included, the prediction
-matches `lgamma(n+1)/ln(2)` to under a bit, so — like the power prediction, which
-overestimates for the opposite reason — the factorial prediction no longer
-underestimates the size it guards.
+matches `lgamma(n+1)/ln(2)` to within about a bit — a large improvement, but not an
+exact lower bound. The series is still asymptotic, and rounding the estimate up with
+`.ceil()` can still land one bit under the true bit count when the raw estimate falls
+just below an integer: at `n = 2` the estimate is `0.94`, which ceils to `1`, while `2!`
+needs `2` bits. So the remaining exposure is about a bit, not zero — closer to the power
+prediction's behaviour than exact, but not identical to it, since the power prediction's
+one-directional overestimate is structural (it substitutes `bits(base)` for the exact
+`log2(base)`) while this remaining gap is a residual of the asymptotic series and the
+rounding around it.
 
 Walking `n` down from `200000!` (refused, ~3.2 Mibit) against a release build (`cargo
 build --release`) found the boundary the 1 Mibit default admits: `71421!` succeeds

@@ -32,12 +32,25 @@ pub fn size_in_bits(value: &Number) -> u64 {
     }
 }
 
+/// Compares `bits` against the budget, wording the error for whichever of the two
+/// callers below is asking: a value already computed occupies a size, while a
+/// computation not yet run only has a predicted one.
+fn check_bits(bits: u128, limits: Limits, phrase: &str) -> anyhow::Result<()> {
+    if bits > u128::from(limits.max_value_bits) {
+        return Err(anyhow!(
+            "Runtime error: the result {phrase} about {bits} bits, over the size limit of {} bits.",
+            limits.max_value_bits
+        ));
+    }
+    Ok(())
+}
+
 /// Rejects a value that has already been computed and turned out too large.
 ///
 /// # Errors
 /// When the value exceeds `limits.max_value_bits`.
 pub fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
-    check_predicted_size(u128::from(size_in_bits(value)), limits)
+    check_bits(u128::from(size_in_bits(value)), limits, "occupies")
 }
 
 /// Rejects a computation whose result was predicted to be too large, before it runs.
@@ -45,13 +58,7 @@ pub fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
 /// # Errors
 /// When `predicted_bits` exceeds `limits.max_value_bits`.
 pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Result<()> {
-    if predicted_bits > u128::from(limits.max_value_bits) {
-        return Err(anyhow!(
-            "Runtime error: the result would need about {predicted_bits} bits, over the size limit of {} bits.",
-            limits.max_value_bits
-        ));
-    }
-    Ok(())
+    check_bits(predicted_bits, limits, "would need")
 }
 
 /// Predicts the bit length of `n!` without computing it, via Stirling's series:
@@ -60,9 +67,12 @@ pub fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Res
 /// The first two terms alone are optimistic — they omit the `0.5·log2(2πn)` term,
 /// which for `n` in the hundreds of thousands is close to ten bits, enough to let a
 /// prediction land just under a tight budget while the true value lands just over
-/// it. With the correction included this matches `lgamma(n+1)/ln(2)` to under a bit
-/// across tested magnitudes, so — like the power prediction, which overestimates
-/// for the opposite reason — this one no longer underestimates the size it guards.
+/// it. With the correction included this matches `lgamma(n+1)/ln(2)` to within about
+/// a bit, a large improvement, but not an exact lower bound: the series is still
+/// asymptotic, and `.ceil()` of a value just below an integer can still round to one
+/// bit less than the true bit count — at `n = 2` the raw estimate is `0.94`, which
+/// ceils to `1`, while `2!` needs `2` bits. So the remaining exposure is about a bit,
+/// not zero, in either direction.
 ///
 /// This is still an estimate, not an exact count, so the precision lost converting
 /// `n` to `f64` and the truncation converting the rounded-up estimate back to
@@ -89,13 +99,24 @@ pub fn predicted_factorial_bits(n: u64) -> u128 {
 
 /// An upper bound on the bit length of `base^exponent` for an integral exponent.
 ///
-/// It uses `bits(base)` where `log2(base)` would be exact, so it overestimates by
-/// up to a factor of two for small bases — `2^100` is predicted at 200 bits and
-/// occupies 101. A guard that errs toward refusing is the right direction to err in,
-/// and the discrepancy only matters within a factor of two of the budget.
+/// Degenerate bases are special-cased first: when `base`'s magnitude is 0 or 1, so
+/// is the magnitude of any power of it, regardless of how large the exponent is, so
+/// the exponent is irrelevant and no prediction is needed. Without this, `base_bits`
+/// would be clamped up to 1 by `.max(1)` and multiplied by the exponent, turning a
+/// computation that is actually free — `1^10000000` is `1`, computed instantly — into
+/// one refused for needing ten million bits.
+///
+/// For every other base it uses `bits(base)` where `log2(base)` would be exact, so
+/// it overestimates by up to a factor of two for small bases — `2^100` is predicted
+/// at 200 bits and occupies 101. A guard that errs toward refusing is the right
+/// direction to err in, and the discrepancy only matters within a factor of two of
+/// the budget.
 #[must_use]
 pub fn predicted_power_bits(base: &Number, exponent_magnitude: u64) -> u128 {
-    let base_bits = size_in_bits(base).max(1);
+    let base_bits = size_in_bits(base);
+    if base_bits <= 1 {
+        return 1;
+    }
     u128::from(base_bits) * u128::from(exponent_magnitude)
 }
 
@@ -112,19 +133,33 @@ mod tests {
     }
 
     #[test]
-    fn test_factorial_prediction_is_in_the_right_ballpark() {
-        // 1000! is 8529 bits; Stirling must land close and never far under.
-        let predicted = predicted_factorial_bits(1000);
-        assert!(
-            (8000..=9200).contains(&predicted),
-            "predicted {predicted} bits for 1000!"
-        );
+    fn test_factorial_prediction_matches_stirling_with_correction() {
+        // 1000! is 8529 bits (lgamma(1001)/ln(2) = 8529.4); the three-term series
+        // used here predicts 8530. A wide "ballpark" range does not pin this down:
+        // dropping the 0.5*log2(2*pi*n) correction term still predicts 8524, which
+        // is inside almost any range wide enough to be useful, so only an exact
+        // value catches the correction term going missing.
+        assert_eq!(predicted_factorial_bits(1000), 8530);
     }
 
     #[test]
     fn test_power_prediction_multiplies_base_size_by_exponent() {
         let ten = Number::NaturalNumber(BigInt::from(10));
         assert_eq!(predicted_power_bits(&ten, 100), 400);
+    }
+
+    #[test]
+    fn test_power_prediction_ignores_the_exponent_for_degenerate_bases() {
+        // 1^n, 0^n and (-1)^n all have magnitude 0 or 1 no matter how large n is,
+        // so a huge exponent must not inflate the prediction: base_bits.max(1) *
+        // exponent_magnitude would otherwise turn a free computation into a refusal.
+        for base in [
+            Number::NaturalNumber(BigInt::from(1)),
+            Number::NaturalNumber(BigInt::from(0)),
+            Number::NaturalNumber(BigInt::from(-1)),
+        ] {
+            assert_eq!(predicted_power_bits(&base, 10_000_000), 1);
+        }
     }
 
     #[test]

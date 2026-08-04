@@ -33,6 +33,8 @@ pub(crate) static FLOAT_EVAL_TOO_LARGE_ERR: &str =
     "Runtime error: Operand is too large for floating-point evaluation.";
 static POWER_TOO_LARGE_ERR: &str =
     "Runtime error: Power operands are too large for non-integer evaluation.";
+static EXPONENT_TOO_LARGE_ERR: &str =
+    "Runtime error: the exponent is too large to evaluate under any size limit.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -423,7 +425,7 @@ impl RpnResolver<'_> {
 
         let exponent_magnitude = exponent
             .to_u64()
-            .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
+            .ok_or_else(|| anyhow!(EXPONENT_TOO_LARGE_ERR))?;
         limits::check_predicted_size(
             limits::predicted_power_bits(&base, exponent_magnitude),
             limits,

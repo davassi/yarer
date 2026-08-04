@@ -554,3 +554,29 @@ fn test_growth_through_multiplication_is_caught() {
     let mut resolver = session.process("x=2^2000; x*x");
     assert!(resolver.resolve().is_err(), "the product needs 4001 bits");
 }
+
+#[test]
+fn test_oversized_exponent_reports_its_own_message() {
+    // The exponent itself doesn't fit in a u64 (it's far larger than u64::MAX),
+    // so this must be refused before any size prediction is even attempted - and
+    // with its own message, not the unrelated "Invalid power operation" that
+    // covers a different failure (a non-integer powf conversion).
+    let session = Session::init();
+    let mut resolver = session.process("2^99999999999999999999");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("exponent is too large"), "message was: {err}");
+    assert!(
+        !err.contains("Invalid power operation"),
+        "message was: {err}"
+    );
+}
+
+#[test]
+fn test_degenerate_power_bases_are_not_refused() {
+    // 1^n, 0^n and (-1)^n all stay tiny no matter how large n is, and are cheap to
+    // compute (repeated squaring on a magnitude-1 base never grows). A size
+    // prediction that multiplies base bits by the exponent must not refuse these.
+    resolve_natural!("1^10000000", 1);
+    resolve_natural!("0^10000000", 0);
+    resolve_natural!("(-1)^10000000", 1); // even exponent
+}
