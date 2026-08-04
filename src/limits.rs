@@ -13,6 +13,14 @@ use num_traits::ToPrimitive;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     /// The largest value any intermediate or final result may occupy, in bits.
+    ///
+    /// This bounds memory directly and worst-case running time only indirectly,
+    /// and the second relationship is superlinear: a factorial is a loop of `n`
+    /// bignum multiplications, so quadrupling this budget costs roughly twelve
+    /// times the worst-case factorial time. At the 1 Mibit default the largest
+    /// factorial admitted is `71421!`, measured at about 0.43 s in a release
+    /// build. Raise the budget with that ratio in mind rather than in the
+    /// expectation that time scales with it.
     pub max_value_bits: u64,
 }
 

@@ -227,6 +227,35 @@ reuse of `MALFORMED_ERR`:
 The reason is practical: Stage 2 turns conditions into enum variants, and every condition
 that collapses into the generic string today is a variant to excavate tomorrow.
 
+## Declared behaviour changes for 0.3.0
+
+The three changes this stage makes to observable behaviour, gathered in one place so
+a release note can be written from them. There is deliberately no `CHANGELOG.md` yet —
+that is Stage 3 — so they live here in the meantime, phrased to be lifted verbatim.
+
+**Integral results are now returned as `Number::NaturalNumber`.** A result that is
+mathematically a whole number comes back as a natural number whatever produced it:
+`2.5+2.5` is `5`, `1/cos(0)` is `1`, `6/3` is `2`, and `Session::setf("x", 4.0)` stores
+`4` rather than `4.0`. `Number::DecimalNumber` now appears only when the value genuinely
+has a fractional part, so every mathematical value has exactly one representation. Code
+that matched on the variant to decide how to render or convert a result may need
+adjusting; code that compares or converts values is unaffected, since equality and
+ordering compare values across the two variants.
+
+**Results that exceed the size budget are refused instead of computed.** Every
+evaluation is now bounded by `Limits::max_value_bits`, 1 Mibit by default, roughly
+315,000 decimal digits. Expressions such as `999999999!` or `10^100000000` return an
+error immediately instead of running until they exhaust memory; where the size can be
+predicted, the refusal happens before any of the work is done. The bound is
+configurable per session through `Session::with_limits`, and it applies to every value
+on the evaluation stack, literals included.
+
+**A function name must be followed by `(`.** `sin 5` and `sqrt 16` were previously
+accepted and evaluated as `sin(5)` and `sqrt(16)`; they are now parse errors that name
+the function. Argument counts are checked at the same point, so `max(1)` and `sin(1,2)`
+report the function, the expected count and the given count, rather than failing later
+as a generic malformed expression.
+
 ## Work order
 
 `D → A → B → C`, deliberately:

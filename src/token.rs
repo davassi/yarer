@@ -9,6 +9,18 @@ use std::{
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
 /// or a [`BigRational`] rational number [`Number::DecimalNumber`]
 ///
+/// # Invariant
+///
+/// A [`Number::DecimalNumber`] never holds a denominator of 1. A value that is
+/// mathematically a whole number is always a [`Number::NaturalNumber`], so every
+/// mathematical value has exactly one representation and the two variants never
+/// describe the same number.
+///
+/// [`Number::decimal`] is the constructor that maintains this, degrading an
+/// integral rational to [`Number::NaturalNumber`]; everything inside the crate
+/// builds decimals through it. Both variants are nevertheless publicly
+/// constructible, so code that builds a [`Number::DecimalNumber`] directly is
+/// responsible for upholding the rule itself — prefer [`Number::decimal`].
 #[derive(Debug, Clone)]
 pub enum Number {
     /// an Integer [BigInt]

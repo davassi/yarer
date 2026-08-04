@@ -17,7 +17,12 @@
 //!  ```
 //!
 //! All that's needed is to create a new instance of the [`RpnResolver`] and hand over the expression to be analysed.
-//! The library just returns a variant natural number, or a decimal number if one exists in the expression (i.e '2.1+1') or there's a trigonometric function (i.e. 1/cos(x+1)).
+//! The library returns a [`Number`](crate::token::Number), and the value decides which variant, not the
+//! expression that produced it. An integral result always comes back as
+//! [`Number::NaturalNumber`](crate::token::Number::NaturalNumber), whatever it came from — `2.5+2.5` is `5`,
+//! `1/cos(0)` is `1`, `6/3` is `2`. [`Number::DecimalNumber`](crate::token::Number::DecimalNumber) appears only
+//! when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore
+//! has exactly one representation.
 //!
 //! Yarer can handle also variables and functions. Here an example:
 //!

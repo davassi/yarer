@@ -103,7 +103,12 @@ impl Session {
             .insert(key, Number::NaturalNumber(BigInt::from(value)));
     }
 
-    /// Declares and saves a new float variable ([`Number::DecimalNumber`])
+    /// Declares and saves a new variable from an [`f64`].
+    ///
+    /// The value decides the representation, not the setter. The rational is
+    /// built through [`Number::decimal`], so an integral `f64` is stored as a
+    /// [`Number::NaturalNumber`] — `setf("x", 4.0)` stores `4` — and only a
+    /// genuinely fractional value is stored as a [`Number::DecimalNumber`].
     ///
     /// Example
     /// ``

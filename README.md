@@ -24,7 +24,7 @@ Example of usage of the library:
 ```
 
 All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
-The library returns a natural number or a decimal number if the expression contains a decimal literal (e.g., '2.1+1') or includes a trigonometric function (e.g., 1/cos(x+1)).
+The library returns a `Number`, and the value decides which variant, not the expression that produced it. An integral result always comes back as `Number::NaturalNumber`, whatever it came from — `2.5+2.5` is `5`, `1/cos(0)` is `1`, `6/3` is `2`. `Number::DecimalNumber` appears only when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore has exactly one representation.
 
 ## Variables
 
