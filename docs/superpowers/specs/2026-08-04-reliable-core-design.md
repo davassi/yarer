@@ -126,15 +126,38 @@ no existing signature changes.
 Limits are **on by default**. An opt-in limit leaves the default configuration
 non-terminating, which is precisely the state this stage exists to remove.
 
-**The 1 Mibit default is provisional and must be chosen from a measurement.** A bit
-budget bounds memory directly and running time only indirectly: `n!` is not one
-multiplication but a loop of `n` bignum multiplications, so cost grows faster than the
-size of the result. A limit calibrated on memory alone can still admit a computation
-taking several seconds, which inside a service is the same availability problem in a
-quieter form. Before the stage is done, the worst case at the limit — the slowest
-expression that the limit still accepts — is timed, and the default is lowered until
-that worst case stays comfortably below one second on ordinary hardware. The measured
-figure and the expression used to obtain it are recorded here.
+**The 1 Mibit default was measured, not guessed.** A bit budget bounds memory directly
+and running time only indirectly: `n!` is not one multiplication but a loop of `n`
+bignum multiplications, so cost grows faster than the size of the result. A limit
+calibrated on memory alone can still admit a computation taking several seconds, which
+inside a service is the same availability problem in a quieter form. `power_integer`
+uses repeated squaring — `O(log exponent)` multiplications — so for a fixed bit budget
+the factorial is the more expensive of the two predictive checks; it dominates the
+worst case. Walking `n` down from `200000!` (refused, ~3.2 Mibit) against a release
+build (`cargo build --release`) found the boundary the 1 Mibit default admits: `71422!`
+succeeds (predicted 1_048_574 bits), while `71423!` is refused (predicted 1_048_591
+bits). Timing the admitted boundary case,
+```
+time (printf '71422!\nquit\n' | ./target/release/yarer -q)
+```
+took ~0.53–0.56s across three runs, comfortably below one second on ordinary hardware.
+For comparison, the boundary power case, `2^524288` (the largest exponent whose
+predicted 1_048_576 bits still fits), took ~0.05s — confirming the factorial, not the
+power, sets the worst case. Since the worst case the default admits already stays well
+under the one-second budget, `max_value_bits` keeps its `1 << 20` value; no lowering
+was needed.
+
+One imprecision surfaced by this measurement and worth recording rather than hiding:
+`71422!`'s *actual* bit length, computed independently, is 1_048_584 — 8 bits over the
+nominal budget, and above the 1_048_574 the guard predicted. The simplified Stirling
+form used here (`n·log2 n − n·log2 e`) omits the `+0.5·log2(2πn)` correction term, so it
+slightly underestimates for every `n`; the gap is a few bits and grows only as `log n`,
+invisible except within a handful of bits of the boundary, which is exactly where this
+measurement landed. Unlike the power check — documented above to overestimate, and so
+err toward refusing — the factorial check is not guaranteed conservative in the same
+direction. The practical exposure is a fixed, tiny number of bits, not a scaling one,
+so it does not change the timing conclusion above; it is noted here as a known gap
+rather than silently glossed over.
 
 One consequence to accept knowingly: for `+ − × ÷` the check happens after the fact,
 so an operation whose operands are each just under the limit allocates the oversized

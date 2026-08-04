@@ -1,4 +1,5 @@
 use crate::functions::{decimal_from_f64, number_to_f64};
+use crate::limits::{self, Limits};
 use crate::{
     functions,
     parser::Parser,
@@ -43,6 +44,7 @@ pub struct RpnResolver<'a> {
     rpn_expr: VecDeque<Token<'a>>,
     local_heap: Rc<RefCell<HashMap<String, Number>>>,
     build_error: Option<String>,
+    limits: Limits,
 }
 
 impl RpnResolver<'_> {
@@ -51,6 +53,7 @@ impl RpnResolver<'_> {
     pub fn parse_with_borrowed_heap<'a>(
         exp: &'a str,
         borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
+        limits: Limits,
     ) -> RpnResolver<'a> {
         let heap_for_parse = Rc::clone(&borrowed_heap);
         match Parser::parse(exp).and_then(|tokenised_expr| {
@@ -60,11 +63,13 @@ impl RpnResolver<'_> {
                 rpn_expr,
                 local_heap,
                 build_error: None,
+                limits,
             },
             Err(err) => RpnResolver {
                 rpn_expr: VecDeque::new(),
                 local_heap: borrowed_heap,
                 build_error: Some(err.to_string()),
+                limits,
             },
         }
     }
@@ -78,6 +83,7 @@ impl RpnResolver<'_> {
 
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
+        let limits = self.limits;
 
         let mut result_stack: VecDeque<Number> = VecDeque::new();
         let mut var_stack: VecDeque<Option<String>> = VecDeque::new();
@@ -111,26 +117,34 @@ impl RpnResolver<'_> {
 
                     match op {
                         Operator::Add => {
-                            result_stack.push_back(left_value + right_value);
+                            let value = left_value + right_value;
+                            limits::check_size(&value, limits)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Sub => {
-                            result_stack.push_back(left_value - right_value);
+                            let value = left_value - right_value;
+                            limits::check_size(&value, limits)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Mul => {
-                            result_stack.push_back(left_value * right_value);
+                            let value = left_value * right_value;
+                            limits::check_size(&value, limits)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Div => {
                             if right_value == zero {
                                 return Err(anyhow!(DIVISION_ZERO_ERR));
                             }
-                            result_stack.push_back(left_value / right_value);
+                            let value = left_value / right_value;
+                            limits::check_size(&value, limits)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Pow => {
-                            result_stack.push_back(Self::power(left_value, right_value)?);
+                            result_stack.push_back(Self::power(left_value, right_value, limits)?);
                             var_stack.push_back(None);
                         }
                         Operator::Eql => {
@@ -160,6 +174,10 @@ impl RpnResolver<'_> {
                             let n = n.to_u64().ok_or_else(|| {
                                 anyhow!("Runtime Error: Factorial operand is too large")
                             })?;
+                            limits::check_predicted_size(
+                                limits::predicted_factorial_bits(n),
+                                limits,
+                            )?;
                             let res = Self::factorial_helper(n.into());
                             result_stack.push_back(Number::NaturalNumber(res.into()));
                             var_stack.push_back(None);
@@ -382,9 +400,9 @@ impl RpnResolver<'_> {
         acc
     }
 
-    fn power(left_value: Number, right_value: Number) -> anyhow::Result<Number> {
+    fn power(left_value: Number, right_value: Number, limits: Limits) -> anyhow::Result<Number> {
         if let Some(exponent) = right_value.as_integer() {
-            return Self::power_integer(left_value, exponent);
+            return Self::power_integer(left_value, exponent, limits);
         }
 
         let base = number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
@@ -392,7 +410,7 @@ impl RpnResolver<'_> {
         decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)
     }
 
-    fn power_integer(base: Number, exponent: BigInt) -> anyhow::Result<Number> {
+    fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> anyhow::Result<Number> {
         if exponent.is_zero() {
             return Ok(Number::NaturalNumber(BigInt::one()));
         }
@@ -402,6 +420,14 @@ impl RpnResolver<'_> {
         let exponent = magnitude
             .to_biguint()
             .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
+
+        let exponent_magnitude = exponent
+            .to_u64()
+            .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
+        limits::check_predicted_size(
+            limits::predicted_power_bits(&base, exponent_magnitude),
+            limits,
+        )?;
 
         match base {
             Number::NaturalNumber(base) => {
@@ -534,6 +560,7 @@ mod tests {
             ]),
             local_heap: Rc::new(RefCell::new(HashMap::new())),
             build_error: None,
+            limits: Limits::default(),
         };
         assert_eq!(
             resolver.resolve().unwrap(),

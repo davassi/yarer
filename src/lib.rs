@@ -114,6 +114,8 @@
 //! ```
 /// Built-in function evaluation
 mod functions;
+/// Evaluation limits
+pub mod limits;
 /// Parser
 pub mod parser;
 /// `RpnResolver`

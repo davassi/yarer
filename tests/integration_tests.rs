@@ -1,4 +1,5 @@
 use num::BigInt;
+use yarer::limits::Limits;
 use yarer::rpn_resolver::*;
 use yarer::session::Session;
 use yarer::token::*;
@@ -497,4 +498,55 @@ fn test_non_integral_results_stay_decimal() {
             "{expr} produced {result:?}, expected a DecimalNumber"
         );
     }
+}
+
+#[test]
+fn test_oversized_factorial_is_refused_not_computed() {
+    // Before the limit this did not return at all. The test is its own alarm:
+    // if the guard stops working, the suite hangs here instead of failing.
+    let session = Session::init();
+    let mut resolver = session.process("999999999!");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("size limit"), "message was: {err}");
+}
+
+#[test]
+fn test_oversized_power_is_refused_not_computed() {
+    let session = Session::init();
+    let mut resolver = session.process("10^100000000");
+    let err = resolver.resolve().unwrap_err().to_string();
+    assert!(err.contains("size limit"), "message was: {err}");
+}
+
+#[test]
+fn test_legitimate_big_values_still_pass_the_default_limit() {
+    resolve_natural!("2^64", 18_446_744_073_709_551_616_i128);
+    let session = Session::init();
+    let mut resolver = session.process("1000!");
+    // 1000! needs about 8530 bits, comfortably inside the default budget.
+    assert!(resolver.resolve().is_ok());
+}
+
+#[test]
+fn test_the_limit_is_configurable() {
+    let session = Session::with_limits(Limits { max_value_bits: 64 });
+    let mut resolver = session.process("2^100");
+    assert!(
+        resolver.resolve().is_err(),
+        "2^100 needs 101 bits, over a 64-bit budget"
+    );
+
+    let mut small = session.process("2^10");
+    assert!(small.resolve().is_ok());
+}
+
+#[test]
+fn test_growth_through_multiplication_is_caught() {
+    // 2^3000 occupies 3001 bits and is admitted; squaring it needs 6001, which
+    // is not. Each step is individually under budget only until it is not.
+    let session = Session::with_limits(Limits {
+        max_value_bits: 4096,
+    });
+    let mut resolver = session.process("x=2^3000; x*x");
+    assert!(resolver.resolve().is_err(), "the product needs 6001 bits");
 }

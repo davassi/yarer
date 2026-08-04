@@ -1,3 +1,4 @@
+use crate::limits::Limits;
 use crate::{rpn_resolver::RpnResolver, token::Number};
 use num_bigint::BigInt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -9,6 +10,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 ///
 pub struct Session {
     variable_heap: Rc<RefCell<HashMap<String, Number>>>,
+    limits: Limits,
 }
 
 const BUILTIN_CONSTANTS: [&str; 5] = ["pi", "e", "tau", "phi", "gamma"];
@@ -28,9 +30,15 @@ impl Session {
     ///
     #[must_use]
     pub fn init() -> Session {
-        // let variable_heap: HashMap<String, Number> = ;
+        Session::with_limits(Limits::default())
+    }
+
+    /// Builds a session whose evaluations are bound by `limits`.
+    #[must_use]
+    pub fn with_limits(limits: Limits) -> Session {
         Session {
             variable_heap: Rc::new(RefCell::new(Session::init_local_heap())),
+            limits,
         }
     }
 
@@ -39,7 +47,7 @@ impl Session {
     #[must_use]
     pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'a> {
         let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
-        RpnResolver::parse_with_borrowed_heap(line, clone)
+        RpnResolver::parse_with_borrowed_heap(line, clone, self.limits)
     }
 
     /// Creates a Variables heap (name-value)
