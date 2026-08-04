@@ -112,6 +112,8 @@
 //! Pdf
 //! Cdf
 //! ```
+/// Built-in function evaluation
+mod functions;
 /// Parser
 pub mod parser;
 /// `RpnResolver`

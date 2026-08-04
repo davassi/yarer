@@ -1,12 +1,13 @@
+use crate::functions::{decimal_from_f64, number_to_f64};
 use crate::{
+    functions,
     parser::Parser,
     session::Session,
-    token::{self, MathFunction, Number, Operator, Token},
+    token::{self, Number, Operator, Token},
 };
 use anyhow::anyhow;
 use log::debug;
-use num::{Integer, Signed};
-use statrs::distribution::{Continuous, ContinuousCDF, Normal};
+use num::Integer;
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
@@ -18,15 +19,16 @@ use num::{BigInt, BigUint, One, Zero};
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 
-static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
+pub(crate) static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
 static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
 static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
 static FACTORIAL_NATURAL_ERR: &str =
     "Runtime error: Factorial is only defined for non-negative integers.";
 static BUILTIN_CONSTANT_ERR: &str = "Runtime error: Built-in constants are read-only.";
-static INVALID_FUNCTION_RESULT_ERR: &str = "Runtime error: Function result is not a real number.";
+pub(crate) static INVALID_FUNCTION_RESULT_ERR: &str =
+    "Runtime error: Function result is not a real number.";
 static INVALID_POWER_ERR: &str = "Runtime error: Invalid power operation.";
-static FLOAT_EVAL_TOO_LARGE_ERR: &str =
+pub(crate) static FLOAT_EVAL_TOO_LARGE_ERR: &str =
     "Runtime error: Operand is too large for floating-point evaluation.";
 static POWER_TOO_LARGE_ERR: &str =
     "Runtime error: Power operands are too large for non-integer evaluation.";
@@ -191,109 +193,7 @@ impl RpnResolver<'_> {
                     ))?;
                     var_stack.pop_back();
 
-                    let result = match fun {
-                        MathFunction::Sin => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sin(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Cos => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.cos(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Tan => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.tan(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::ASin => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.asin(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::ACos => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.acos(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::ATan => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.atan(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Ln => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.ln(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Log => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.log10(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Abs => Self::to_decimal_number(match value {
-                            Number::NaturalNumber(v) => Number::NaturalNumber(v.abs()),
-                            Number::DecimalNumber(v) => Number::DecimalNumber(v.abs()),
-                        }),
-                        MathFunction::Max => {
-                            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
-                                "{} {}",
-                                MALFORMED_ERR,
-                                "Wrong number of parameters for function Max"
-                            ))?;
-                            var_stack.pop_back();
-                            Self::to_decimal_number(if value >= value2 { value } else { value2 })
-                        }
-                        MathFunction::Min => {
-                            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
-                                "{} {}",
-                                MALFORMED_ERR,
-                                "Wrong number of parameters for function Min"
-                            ))?;
-                            var_stack.pop_back();
-                            Self::to_decimal_number(if value <= value2 { value } else { value2 })
-                        }
-                        MathFunction::Sqrt => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sqrt(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::Floor => {
-                            let value = Self::number_to_rational(value);
-                            Self::to_decimal_number(Number::NaturalNumber(
-                                value.numer().div_floor(value.denom()),
-                            ))
-                        }
-                        MathFunction::Ceil => {
-                            let value = Self::number_to_rational(value);
-                            Self::to_decimal_number(Number::NaturalNumber(
-                                value.numer().div_ceil(value.denom()),
-                            ))
-                        }
-                        MathFunction::Round => {
-                            let value = Self::number_to_rational(value);
-                            let denom = value.denom().clone();
-                            let doubled_numer = value.numer().clone() * BigInt::from(2_u8);
-                            let doubled_denom = denom.clone() * BigInt::from(2_u8);
-                            let rounded = if doubled_numer >= BigInt::zero() {
-                                (doubled_numer + denom).div_floor(&doubled_denom)
-                            } else {
-                                (doubled_numer - denom).div_ceil(&doubled_denom)
-                            };
-                            Self::to_decimal_number(Number::NaturalNumber(rounded))
-                        }
-                        MathFunction::Pdf => {
-                            let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
-                            Self::decimal_from_f64(
-                                normal.pdf(Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
-                                INVALID_FUNCTION_RESULT_ERR,
-                            )?
-                        }
-                        MathFunction::Cdf => {
-                            let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
-                            Self::decimal_from_f64(
-                                normal.cdf(Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
-                                INVALID_FUNCTION_RESULT_ERR,
-                            )?
-                        }
-                        MathFunction::Exp => Self::decimal_from_f64(
-                            Self::number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.exp(),
-                            INVALID_FUNCTION_RESULT_ERR,
-                        )?,
-                        MathFunction::None => return Err(anyhow!("This should never happen!")),
-                    };
+                    let result = functions::eval(*fun, value, &mut result_stack, &mut var_stack)?;
                     result_stack.push_back(result);
                     var_stack.push_back(None);
                 }
@@ -485,37 +385,6 @@ impl RpnResolver<'_> {
         acc
     }
 
-    fn number_to_f64(value: &Number, error_message: &'static str) -> anyhow::Result<f64> {
-        match value {
-            Number::NaturalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
-            Number::DecimalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
-        }
-    }
-
-    fn decimal_from_f64(value: f64, error_message: &'static str) -> anyhow::Result<Number> {
-        if !value.is_finite() {
-            return Err(anyhow!(error_message));
-        }
-
-        BigRational::from_float(value)
-            .map(Number::DecimalNumber)
-            .ok_or_else(|| anyhow!(error_message))
-    }
-
-    fn number_to_rational(value: Number) -> BigRational {
-        match value {
-            Number::NaturalNumber(v) => BigRational::from_integer(v),
-            Number::DecimalNumber(v) => v,
-        }
-    }
-
-    fn to_decimal_number(value: Number) -> Number {
-        match value {
-            Number::NaturalNumber(v) => Number::DecimalNumber(BigRational::from_integer(v)),
-            Number::DecimalNumber(v) => Number::DecimalNumber(v),
-        }
-    }
-
     fn integer_exponent(value: &Number) -> Option<BigInt> {
         match value {
             Number::NaturalNumber(v) => Some(v.clone()),
@@ -529,9 +398,9 @@ impl RpnResolver<'_> {
             return Self::power_integer(left_value, exponent);
         }
 
-        let base = Self::number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
-        let exponent = Self::number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
-        Self::decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)
+        let base = number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
+        let exponent = number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
+        decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)
     }
 
     fn power_integer(base: Number, exponent: BigInt) -> anyhow::Result<Number> {
