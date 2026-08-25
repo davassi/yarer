@@ -489,6 +489,18 @@ fn test_parse_rejects_an_expression_with_no_tokens() {
 
 /// The unary minus keeps the position of the '-' it replaces, so an error
 /// reported against it later points at something the user actually typed.
+/// '×' is two bytes and one column. Every other test in this module uses pure
+/// ASCII, where the byte offset and the char offset are the same number, so
+/// none of them would notice if these spans started being counted in chars —
+/// while every caret in the crate would silently shift on any expression
+/// containing '×' or '÷'.
+#[test]
+fn test_spans_are_byte_offsets_not_char_offsets() {
+    let tokens = Parser::parse("2×3").unwrap();
+    let spans: Vec<(usize, usize)> = tokens.iter().map(|t| (t.span.start, t.span.end)).collect();
+    assert_eq!(spans, vec![(0, 1), (1, 3), (3, 4)]);
+}
+
 #[test]
 fn test_the_unary_minus_keeps_its_position() {
     let tokens = Parser::parse("-5").unwrap();
