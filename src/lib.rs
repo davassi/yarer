@@ -119,6 +119,8 @@
 //! ```
 //!
 //! Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
+/// Typed errors
+pub mod error;
 /// Built-in function evaluation
 mod functions;
 /// Evaluation limits
@@ -129,5 +131,9 @@ pub mod parser;
 pub mod rpn_resolver;
 /// Session
 pub mod session;
+mod span;
 /// Token
 pub mod token;
+
+pub use error::{Error, EvalError, ParseError};
+pub use span::Span;
