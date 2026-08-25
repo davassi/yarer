@@ -1,9 +1,8 @@
 //! Evaluation of the built-in mathematical functions, together with the
 //! numeric conversions they rely on.
 //!
-//! Split out of [`crate::rpn_resolver`], which owns the shunting-yard
-//! translation and the evaluation loop; this module owns what happens when
-//! that loop meets a [`MathFunction`].
+//! Split out of [`crate::expression`], which owns the evaluation loop; this
+//! module owns what happens when that loop meets a [`MathFunction`].
 
 use crate::error::EvalError;
 use crate::token::{MathFunction, Number};
@@ -20,7 +19,7 @@ use std::collections::VecDeque;
 /// caller popped the top of the stack and postfix order puts the second argument
 /// there. What this function pops from `result_stack` is therefore the *first*
 /// argument, keeping `var_stack` in step. Both stacks belong to the evaluation
-/// loop in [`crate::rpn_resolver::RpnResolver::resolve`].
+/// loop in [`crate::expression::Expression::eval_with`].
 pub(crate) fn eval(
     fun: MathFunction,
     value: Number,

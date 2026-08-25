@@ -1,4 +1,6 @@
-use crate::error::EvalError;
+//! Compiled expressions, and the loop that evaluates them.
+
+use crate::error::{EvalError, ParseError};
 use crate::functions::{decimal_from_f64, number_to_f64};
 use crate::limits::{self, Limits};
 use crate::{
@@ -10,83 +12,67 @@ use crate::{
     token::{Number, Operator, Token},
     validate,
 };
-use anyhow::anyhow;
 use log::debug;
 use num::Integer;
-use std::{
-    cell::RefCell,
-    collections::{HashMap, VecDeque},
-    rc::Rc,
-};
+use std::collections::VecDeque;
 
 use num::{BigInt, BigUint, One, Zero};
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 
-/// The main [`RpnResolver`] contains the core logic of Yarer
-/// for parsing and evaluating a math expression.
+/// A compiled expression: the token sequence in postfix order, ready to be
+/// evaluated as often as wanted, against any [`Session`].
 ///
-/// It holds the tokenised expression (by the [`Parser`]) and
-/// a heap of local variables borrowed from a [`Session`]
-///
-pub struct RpnResolver<'a> {
-    rpn_expr: VecDeque<Spanned<Token<'a>>>,
-    local_heap: Rc<RefCell<HashMap<String, Number>>>,
-    build_error: Option<String>,
-    limits: Limits,
+/// The lifetime is the source text's. Compilation is a pure function of that
+/// text — it consults no session and touches no variable heap — so one
+/// `Expression` can be evaluated against several sessions, and under several
+/// budgets.
+pub struct Expression<'a> {
+    rpn: VecDeque<Spanned<Token<'a>>>,
 }
 
-impl RpnResolver<'_> {
-    /// Generates a new [`RpnResolver`] instance with borrowed heap
+impl<'a> Expression<'a> {
+    /// Compiles `source` into an expression.
     ///
-    pub fn parse_with_borrowed_heap<'a>(
-        exp: &'a str,
-        borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
-        limits: Limits,
-    ) -> RpnResolver<'a> {
-        match Parser::parse(exp)
-            .and_then(|tokens| validate::validate(&tokens, exp))
-            .and_then(|validated| shunting::to_rpn(&validated))
-        {
-            Ok(rpn_expr) => RpnResolver {
-                rpn_expr,
-                local_heap: borrowed_heap,
-                build_error: None,
-                limits,
-            },
-            Err(err) => RpnResolver {
-                rpn_expr: VecDeque::new(),
-                local_heap: borrowed_heap,
-                build_error: Some(err.to_string()),
-                limits,
-            },
-        }
+    /// # Errors
+    /// Any [`ParseError`]: the text does not tokenise, the token sequence is
+    /// not a well-formed expression, or the brackets do not balance.
+    pub fn compile(source: &'a str) -> Result<Self, ParseError> {
+        let tokens = Parser::parse(source)?;
+        let validated = validate::validate(&tokens, source)?;
+        Ok(Self {
+            rpn: shunting::to_rpn(&validated)?,
+        })
     }
 
-    /// This method evaluates the rpn expression stack
+    /// Evaluates against `session`, under the session's own limits.
     ///
-    pub fn resolve(&mut self) -> anyhow::Result<Number> {
-        if let Some(build_error) = &self.build_error {
-            return Err(anyhow!(build_error.clone()));
-        }
-
-        self.eval_inner().map_err(anyhow::Error::from)
+    /// # Errors
+    /// Any [`EvalError`]: a division by zero, a value over the size budget, an
+    /// assignment to a built-in constant, and so on.
+    pub fn eval(&self, session: &Session) -> Result<Number, EvalError> {
+        self.eval_with(session, session.limits())
     }
 
-    /// The evaluation loop. Kept separate from [`Self::resolve`] so its errors
-    /// can be typed as [`EvalError`] rather than boxed into `anyhow` from the
-    /// first line: `resolve` is the only place that still needs the wider,
-    /// stringly-typed boundary.
-    fn eval_inner(&mut self) -> Result<Number, EvalError> {
+    /// Evaluates against `session`, under `limits` instead of the session's.
+    ///
+    /// Use this to run untrusted input under a tighter budget than trusted
+    /// input, against the same variables. Mind the floor the built-in constants
+    /// impose: `pi`, `e`, `tau`, `phi` and `gamma` are `f64`s held exactly as
+    /// rationals and cost up to 107 bits, so a budget below that refuses a
+    /// value the caller never supplied.
+    ///
+    /// # Errors
+    /// As [`Expression::eval`].
+    pub fn eval_with(&self, session: &Session, limits: Limits) -> Result<Number, EvalError> {
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
-        let limits = self.limits;
 
         let mut result_stack: VecDeque<Number> = VecDeque::new();
         let mut var_stack: VecDeque<Option<String>> = VecDeque::new();
         let mut last_result: Option<Number> = None;
 
-        for t in &self.rpn_expr {
+        for t in &self.rpn {
             // Errors raised inside `limits.rs` and `functions.rs` know nothing
             // of positions — this closure is how the loop stamps them with the
             // token it was holding when it called out.
@@ -158,15 +144,10 @@ impl RpnResolver<'_> {
                         }
                         Operator::Eql => {
                             if let Some(var) = left_var {
-                                if Session::is_constant_name(&var) {
-                                    return Err(EvalError::ReadOnlyConstant {
-                                        name: var,
-                                        span: Some(t.span),
-                                    });
-                                }
-                                self.local_heap
-                                    .borrow_mut()
-                                    .insert(var.clone(), right_value.clone());
+                                // `assign` decides the refusal, here and for
+                                // `set`/`setf` alike; the loop only supplies the
+                                // position the refusal happened at.
+                                session.assign(&var, right_value.clone()).map_err(at)?;
 
                                 result_stack.push_back(right_value);
                                 var_stack.push_back(None);
@@ -214,13 +195,11 @@ impl RpnResolver<'_> {
                 }
                 Token::Variable(v) => {
                     let var_name = v.to_lowercase();
-                    debug!("Heap {:?}", self.local_heap);
-                    let heap = self.local_heap.borrow();
                     // An undefined variable reads as zero, deliberately.
-                    let n = heap
-                        .get(&var_name)
-                        .cloned()
+                    let n = session
+                        .lookup(&var_name)
                         .unwrap_or_else(|| Number::NaturalNumber(BigInt::zero()));
+                    debug!("Variable '{var_name}' read as {n:?}");
                     // Same reasoning as the operand arm above: a variable is a
                     // value on the stack like any other. `set`/`setf` put values
                     // into the heap without passing through any checked operator,
@@ -412,7 +391,7 @@ mod tests {
     #[test]
     fn test_factorial() {
         assert_eq!(
-            RpnResolver::factorial_helper(BigUint::from(5u8)),
+            Expression::factorial_helper(BigUint::from(5u8)),
             BigUint::from(120u16)
         );
     }
@@ -423,8 +402,8 @@ mod tests {
         // exercises evaluation, not span propagation — so an arbitrary
         // placeholder span is used throughout.
         let no_span = Span::new(0, 0);
-        let mut resolver = RpnResolver {
-            rpn_expr: VecDeque::from(vec![
+        let expr = Expression {
+            rpn: VecDeque::from(vec![
                 Spanned::new(
                     Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
                     no_span,
@@ -435,12 +414,9 @@ mod tests {
                 ),
                 Spanned::new(Token::Operator(Operator::Add), no_span),
             ]),
-            local_heap: Rc::new(RefCell::new(HashMap::new())),
-            build_error: None,
-            limits: Limits::default(),
         };
         assert_eq!(
-            resolver.resolve().unwrap(),
+            expr.eval(&Session::init()).unwrap(),
             Number::NaturalNumber(BigInt::from(3u8))
         );
     }
@@ -448,10 +424,10 @@ mod tests {
     #[test]
     fn test_invalid_factorial() {
         let session = Session::init();
-        let mut resolver = session.process("(-1)!");
-        assert!(resolver.resolve().is_err());
-        let mut resolver2 = session.process("1.5!");
-        assert!(resolver2.resolve().is_err());
+        let expr = Expression::compile("(-1)!").unwrap();
+        assert!(expr.eval(&session).is_err());
+        let expr2 = Expression::compile("1.5!").unwrap();
+        assert!(expr2.eval(&session).is_err());
     }
 
     /// `max` and `min` of integers return integers, and the enum tag has to say
@@ -463,8 +439,7 @@ mod tests {
     fn test_max_min() {
         let session = Session::init();
         for (expr, expected) in [("max(1,2)", 2), ("min(1,2)", 1), ("min(max(1,2),3)", 2)] {
-            let mut resolver = session.process(expr);
-            let result = resolver.resolve().unwrap();
+            let result = Expression::compile(expr).unwrap().eval(&session).unwrap();
             assert_eq!(result, Number::NaturalNumber(BigInt::from(expected)));
             assert!(
                 matches!(result, Number::NaturalNumber(_)),

@@ -1,10 +1,12 @@
+use crate::error::EvalError;
 use crate::limits::Limits;
-use crate::{rpn_resolver::RpnResolver, token::Number};
+use crate::token::Number;
 use num_bigint::BigInt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
-/// that is borrowed to all the [`RpnResolver`] instances built using [`process()`]
+/// that every [`Expression`](crate::expression::Expression) evaluated against it
+/// reads and writes.
 ///
 /// Example
 ///
@@ -19,13 +21,14 @@ impl Session {
     /// Default builder constructor without any arguments
     ///
     /// # Examples
-    ///   
+    ///
     /// ```
-    /// #    use yarer::{rpn_resolver::RpnResolver, session::Session};
+    /// #    use yarer::{expression::Expression, session::Session};
     ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
-    ///      let mut session = Session::init();
-    ///      let mut resolver: RpnResolver = session.process(&exp);
+    ///      let session = Session::init();
+    ///      let expr = Expression::compile(exp).unwrap();
+    ///      let result = expr.eval(&session).unwrap();
     ///  ```
     ///
     #[must_use]
@@ -49,12 +52,32 @@ impl Session {
         }
     }
 
-    /// The [`RpnResolver`] single line builder. It needs the math expression to process
-    ///
+    /// The limits every [`Expression::eval`](crate::expression::Expression::eval)
+    /// against this session uses.
     #[must_use]
-    pub fn process<'a>(&'a self, line: &'a str) -> RpnResolver<'a> {
-        let clone = Rc::clone(&self.variable_heap); // clones the Rc pointer, not the whole heap!
-        RpnResolver::parse_with_borrowed_heap(line, clone, self.limits)
+    pub fn limits(&self) -> Limits {
+        self.limits
+    }
+
+    /// The value of `name`, or [`None`] if it has never been set.
+    pub(crate) fn lookup(&self, name: &str) -> Option<Number> {
+        self.variable_heap.borrow().get(name).cloned()
+    }
+
+    /// Writes `value` into the heap, refusing the built-in constants.
+    ///
+    /// This is the one place that refusal is decided. `set`, `setf` and the
+    /// evaluator's assignment operator all come through here.
+    ///
+    /// # Errors
+    /// [`EvalError::ReadOnlyConstant`] when `name` is a built-in constant.
+    pub(crate) fn assign(&self, name: &str, value: Number) -> Result<(), EvalError> {
+        let name = name.to_lowercase();
+        if Session::is_constant_name(&name) {
+            return Err(EvalError::ReadOnlyConstant { name, span: None });
+        }
+        self.variable_heap.borrow_mut().insert(name, value);
+        Ok(())
     }
 
     /// Creates a Variables heap (name-value)
@@ -100,14 +123,9 @@ impl Session {
     /// ``
     ///
     pub fn set(&self, key: &str, value: i64) {
-        let key = key.to_lowercase();
-        if Self::is_constant_name(&key) {
-            return;
-        }
-
-        self.variable_heap
-            .borrow_mut()
-            .insert(key, Number::NaturalNumber(BigInt::from(value)));
+        // A refusal is swallowed here only until Task 8, which turns `set` and
+        // `setf` into `Result`-returning functions. `assign` already decides it.
+        let _ = self.assign(key, Number::NaturalNumber(BigInt::from(value)));
     }
 
     /// Declares and saves a new variable from an [`f64`].
@@ -123,15 +141,9 @@ impl Session {
     /// ``
     ///
     pub fn setf(&self, key: &str, value: f64) {
-        let key = key.to_lowercase();
-        if Self::is_constant_name(&key) {
-            return;
-        }
-
         if let Some(value) = num_rational::BigRational::from_float(value) {
-            self.variable_heap
-                .borrow_mut()
-                .insert(key, Number::decimal(value));
+            // Swallowed until Task 8, as in `set` above.
+            let _ = self.assign(key, Number::decimal(value));
         }
     }
 }
@@ -139,7 +151,14 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::Expression;
     use crate::token::Number;
+
+    /// Compiles and evaluates in one step, for the tests below that care about
+    /// the value and not about which of the two steps produced it.
+    fn eval(session: &Session, source: &str) -> Number {
+        Expression::compile(source).unwrap().eval(session).unwrap()
+    }
 
     /// Asserts both the value and the variant. Cross-variant equality means a
     /// value-only assertion cannot tell `NaturalNumber(-5)` from
@@ -148,8 +167,7 @@ mod tests {
     #[test]
     fn test_session() {
         let session = Session::init();
-        let mut resolver: RpnResolver = session.process("1+2*3/(4-5)");
-        let result = resolver.resolve().unwrap();
+        let result = eval(&session, "1+2*3/(4-5)");
         assert_eq!(result, Number::NaturalNumber(BigInt::from(-5)));
         assert!(
             matches!(result, Number::NaturalNumber(_)),
@@ -162,8 +180,7 @@ mod tests {
     fn test_session_set() {
         let session = Session::init();
         session.set("x", 4);
-        let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-        let result = resolver.resolve().unwrap();
+        let result = eval(&session, "x+2*3/(4-5)");
         assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
         assert!(
             matches!(result, Number::NaturalNumber(_)),
@@ -176,9 +193,8 @@ mod tests {
     fn test_session_setf() {
         let session = Session::init();
         session.setf("x", 4.5);
-        let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
         assert_eq!(
-            resolver.resolve().unwrap(),
+            eval(&session, "x+2*3/(4-5)"),
             Number::DecimalNumber(num_rational::BigRational::from_float(-1.5).unwrap())
         );
     }
@@ -187,9 +203,8 @@ mod tests {
     #[test]
     fn test_session_default_vars() {
         let session = Session::init();
-        let mut resolver: RpnResolver = session.process("pi + e");
         assert_eq!(
-            resolver.resolve().unwrap(),
+            eval(&session, "pi + e"),
             Number::DecimalNumber(
                 num_rational::BigRational::from_float(std::f64::consts::PI).unwrap()
                     + num_rational::BigRational::from_float(std::f64::consts::E).unwrap()
@@ -201,9 +216,8 @@ mod tests {
     #[test]
     fn test_session_tau() {
         let session = Session::init();
-        let mut resolver: RpnResolver = session.process("tau / 2");
         assert_eq!(
-            resolver.resolve().unwrap(),
+            eval(&session, "tau / 2"),
             Number::DecimalNumber(
                 num_rational::BigRational::from_float(std::f64::consts::TAU / 2.0).unwrap(),
             )

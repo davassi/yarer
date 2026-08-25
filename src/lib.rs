@@ -6,17 +6,17 @@
 //! # Example of usage of the library:
 //!
 //!  ```
-//!     use yarer::{rpn_resolver::RpnResolver, session::Session, token::Number};
+//!     use yarer::{expression::Expression, session::Session, token::Number};
 //!
 //!     let exp = "((10 + 5) - 3 * ( 9 / 3 )) + 2";
 //!     let session = Session::init();
-//!     let mut resolver: RpnResolver = session.process(&exp);
+//!     let expr = Expression::compile(exp).unwrap();
 //!
-//!     let result: Number = resolver.resolve().unwrap();
+//!     let result: Number = expr.eval(&session).unwrap();
 //!     println!("The result of {} is {}", exp, result);
 //!  ```
 //!
-//! All that's needed is to create a new instance of the [`RpnResolver`] and hand over the expression to be analysed.
+//! All that's needed is to compile the expression into an [`Expression`](crate::expression::Expression) and evaluate it against a [`Session`](crate::session::Session).
 //! The library returns a [`Number`](crate::token::Number), and the value decides which variant, not the
 //! expression that produced it. An integral result always comes back as
 //! [`Number::NaturalNumber`](crate::token::Number::NaturalNumber), whatever it came from — `2.5+2.5` is `5`,
@@ -27,37 +27,37 @@
 //! Yarer can handle also variables and functions. Here an example:
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session};
+//! # use yarer::{expression::Expression, session::Session};
 //!
 //! let session: Session = Session::init();
-//! let mut resolver: RpnResolver = session.process("1/cos(x^2)");
+//! let expr = Expression::compile("1/cos(x^2)").unwrap();
 //! session.set("x",1);
 //!
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
 //!
 //! and of course, the expression can be re-evaluated if the variable changes.
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session};
+//! # use yarer::{expression::Expression, session::Session};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
+//! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
 //! session.set("x",-1);
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //!
 //! session.setf("x",0.001);
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
 //!
 //! The result can be simply converted into a i32 or a f64 (if decimal) simply with
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session, token::Number};
+//! # use yarer::{expression::Expression, session::Session, token::Number};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
+//! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
-//! let result: Number = resolver.resolve().unwrap();
+//! let result: Number = expr.eval(&session).unwrap();
 //!
 //! let int : i32 = result.clone().try_into().unwrap();
 //! // or
@@ -121,14 +121,14 @@
 //! Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
 /// Typed errors
 pub mod error;
+/// Compiled expressions
+pub mod expression;
 /// Built-in function evaluation
 mod functions;
 /// Evaluation limits
 pub mod limits;
 /// Parser
 pub mod parser;
-/// `RpnResolver`
-pub mod rpn_resolver;
 /// Session
 pub mod session;
 mod shunting;

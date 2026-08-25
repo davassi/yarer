@@ -1,14 +1,51 @@
 use num::BigInt;
+use yarer::expression::Expression;
 use yarer::limits::Limits;
-use yarer::rpn_resolver::*;
 use yarer::session::Session;
 use yarer::token::*;
+use yarer::{EvalError, ParseError};
+
+#[test]
+fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
+    assert!(matches!(
+        Expression::compile("1+"),
+        Err(ParseError::ExpectedValue { .. })
+    ));
+}
+
+#[test]
+fn test_a_compiled_expression_survives_a_change_of_variable() {
+    let session = Session::init();
+    session.set("x", 2);
+    let expr = Expression::compile("x*3").expect("compiles");
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::from(6))
+    );
+    session.set("x", 5);
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::from(15))
+    );
+}
+
+#[test]
+fn test_the_size_limit_reports_which_check_refused_the_value() {
+    let session = Session::with_limits(Limits {
+        max_value_bits: 128,
+    });
+    let expr = Expression::compile("2^10000").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ComputationTooLarge { .. })
+    ));
+}
 
 macro_rules! resolve {
     ($expr:expr, $expected:expr) => {{
         let session = Session::init();
-        let mut resolver = session.process($expr);
-        assert_eq!(resolver.resolve().unwrap(), $expected);
+        let expr = Expression::compile($expr).unwrap();
+        assert_eq!(expr.eval(&session).unwrap(), $expected);
     }};
     () => {
         panic!("Expected a valid result, but got an invalid expression.");
@@ -24,8 +61,8 @@ macro_rules! resolve {
 macro_rules! resolve_decimal {
     ($expr:expr, $expected:expr) => {{
         let session = Session::init();
-        let mut resolver = session.process($expr);
-        let result = resolver.resolve().unwrap();
+        let expr = Expression::compile($expr).unwrap();
+        let result = expr.eval(&session).unwrap();
         let res_f: f64 = result.try_into().unwrap();
         assert!((res_f - $expected).abs() < 1e-10);
     }};
@@ -43,15 +80,35 @@ macro_rules! resolve_natural {
     };
 }
 
+/// Asserts that an expression fails, at whichever of the two steps owns the
+/// failure: a malformed expression is refused by `compile`, a bad value by
+/// `eval`. Succeeding at both is the only outcome this rejects.
 macro_rules! resolve_err {
     ($expr:expr) => {{
         let session = Session::init();
-        let mut resolver = session.process($expr);
-        assert!(resolver.resolve().is_err());
+        match Expression::compile($expr) {
+            Err(_) => {}
+            Ok(expr) => assert!(
+                expr.eval(&session).is_err(),
+                "{} was expected to fail and did not",
+                $expr
+            ),
+        }
     }};
     () => {
         panic!("Expected an error, but got a valid result.")
     };
+}
+
+/// The [`ParseError`] that `source` fails to compile with.
+///
+/// `Result::unwrap_err` needs the `Ok` type to be `Debug`, and a compiled
+/// `Expression` is not, so this is how a compile failure is unwrapped.
+fn compile_err(source: &str) -> ParseError {
+    match Expression::compile(source) {
+        Err(err) => err,
+        Ok(_) => panic!("{source} was expected not to compile"),
+    }
 }
 
 #[test]
@@ -174,12 +231,12 @@ fn test_expressions() {
 #[test]
 fn test_programmatic() {
     let session: Session = Session::init();
-    let mut resolver: RpnResolver = session.process("x ^ 2");
+    let expr = Expression::compile("x ^ 2").unwrap();
 
     for i in 1..=64 {
         session.set("x", i);
 
-        let result: Number = resolver.resolve().unwrap();
+        let result: Number = expr.eval(&session).unwrap();
 
         println!("{}^2={}", i, result);
         assert!(result == Number::NaturalNumber(BigInt::from(i * i)));
@@ -190,12 +247,12 @@ fn test_programmatic() {
 fn test_sharing_session() {
     let session = Session::init();
 
-    let mut res = session.process("x ^ 2");
-    let mut res2 = session.process("x! - (x-1)!");
+    let res = Expression::compile("x ^ 2").unwrap();
+    let res2 = Expression::compile("x! - (x-1)!").unwrap();
 
     session.set("x", 10);
 
-    if let (Ok(a), Ok(b)) = (res.resolve(), res2.resolve()) {
+    if let (Ok(a), Ok(b)) = (res.eval(&session), res2.eval(&session)) {
         assert!(a == Number::NaturalNumber(BigInt::from(100)));
 
         let b: i64 = b.try_into().unwrap();
@@ -207,8 +264,8 @@ fn test_sharing_session() {
 fn test_session_set() {
     let session = Session::init();
     session.set("x", 4);
-    let mut resolver: RpnResolver = session.process("x+2*3/(4-5)");
-    let result = resolver.resolve().unwrap();
+    let expr = Expression::compile("x+2*3/(4-5)").unwrap();
+    let result = expr.eval(&session).unwrap();
     assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
     // Cross-variant equality would accept DecimalNumber(-2/1) above, so the
     // variant has to be asserted separately for this to notice a regression.
@@ -221,19 +278,19 @@ fn test_session_set() {
 #[test]
 fn test_factorial_invalid_operand() {
     let session = Session::init();
-    let mut resolver = session.process("(-1)!");
-    assert!(resolver.resolve().is_err());
+    let expr = Expression::compile("(-1)!").unwrap();
+    assert!(expr.eval(&session).is_err());
 
-    let mut resolver = session.process("2.5!");
-    assert!(resolver.resolve().is_err());
+    let expr = Expression::compile("2.5!").unwrap();
+    assert!(expr.eval(&session).is_err());
 }
 
 #[test]
 fn test_chained_expressions() {
     let session = Session::init();
-    let mut resolver = session.process("x=2; y=3; x*y");
+    let expr = Expression::compile("x=2; y=3; x*y").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(6))
     );
 }
@@ -241,9 +298,9 @@ fn test_chained_expressions() {
 #[test]
 fn test_chained_without_assignment() {
     let session = Session::init();
-    let mut resolver = session.process("1+2; 3+4");
+    let expr = Expression::compile("1+2; 3+4").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(7))
     );
 }
@@ -252,9 +309,9 @@ fn test_chained_without_assignment() {
 fn test_trailing_semicolon_returns_last_value() {
     // A trailing ';' must return the last completed segment's value, not error.
     let session = Session::init();
-    let mut resolver = session.process("x=2;");
+    let expr = Expression::compile("x=2;").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(2))
     );
 }
@@ -264,12 +321,12 @@ fn test_trailing_semicolon_does_not_error_after_assignment() {
     // The assignment side-effect and the reported result must agree: a successful
     // assignment must not be reported as a malformed-expression error.
     let session = Session::init();
-    let mut resolver = session.process("a=5;");
-    assert!(resolver.resolve().is_ok());
+    let expr = Expression::compile("a=5;").unwrap();
+    assert!(expr.eval(&session).is_ok());
 
-    let mut reader = session.process("a");
+    let reader = Expression::compile("a").unwrap();
     assert_eq!(
-        reader.resolve().unwrap(),
+        reader.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(5))
     );
 }
@@ -278,9 +335,10 @@ fn test_trailing_semicolon_does_not_error_after_assignment() {
 fn test_malformed_segment_in_chain_is_rejected() {
     // A malformed segment ('1 2' is two adjacent operands) must not be silently
     // discarded by the following ';'.
-    let session = Session::init();
-    let mut resolver = session.process("1 2; 3");
-    assert!(resolver.resolve().is_err());
+    assert!(matches!(
+        Expression::compile("1 2; 3"),
+        Err(ParseError::ExpectedOperator { .. })
+    ));
 }
 
 #[test]
@@ -299,9 +357,9 @@ fn test_unicode_operators_work() {
 #[test]
 fn test_decimal_literals_remain_exact() {
     let session = Session::init();
-    let mut resolver = session.process("0.1+0.2");
+    let expr = Expression::compile("0.1+0.2").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::DecimalNumber(num_rational::BigRational::new(
             BigInt::from(3),
             BigInt::from(10)
@@ -312,14 +370,14 @@ fn test_decimal_literals_remain_exact() {
 #[test]
 fn test_large_integer_division_and_negative_power_do_not_panic() {
     let session = Session::init();
-    let mut resolver = session.process("(10^100)/2");
+    let expr = Expression::compile("(10^100)/2").unwrap();
     assert_eq!(
-        format!("{}", resolver.resolve().unwrap()),
+        format!("{}", expr.eval(&session).unwrap()),
         format!("5{}", "0".repeat(99))
     );
 
-    let mut resolver = session.process("(10^100)^-1 * 10^100");
-    let result = resolver.resolve().unwrap();
+    let expr = Expression::compile("(10^100)^-1 * 10^100").unwrap();
+    let result = expr.eval(&session).unwrap();
     assert_eq!(result, Number::NaturalNumber(BigInt::from(1)));
     // A reciprocal multiplied back out lands exactly on 1, which is integral:
     // the variant is the whole point here, and cross-variant equality would let
@@ -335,12 +393,17 @@ fn test_builtin_constants_are_read_only() {
     let session = Session::init();
     session.set("pi", 0);
 
-    let mut resolver = session.process("pi");
-    let pi: f64 = resolver.resolve().unwrap().try_into().unwrap();
+    let expr = Expression::compile("pi").unwrap();
+    let pi: f64 = expr.eval(&session).unwrap().try_into().unwrap();
     assert!((pi - std::f64::consts::PI).abs() < 1e-10);
 
-    let mut resolver = session.process("pi=0");
-    assert!(resolver.resolve().is_err());
+    // Assignment now refuses through Session::assign, the one place the refusal
+    // is decided; the variant is what says the refusal was that one.
+    let expr = Expression::compile("pi=0").unwrap();
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ReadOnlyConstant { .. })
+    ));
 }
 
 #[test]
@@ -394,9 +457,9 @@ fn test_domain_errors_are_rejected() {
 #[test]
 fn test_variable_names_are_case_insensitive() {
     let session = Session::init();
-    let mut resolver = session.process("X=7; x");
+    let expr = Expression::compile("X=7; x").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(7))
     );
 }
@@ -404,15 +467,15 @@ fn test_variable_names_are_case_insensitive() {
 #[test]
 fn test_chained_assignment_sets_all_variables() {
     let session = Session::init();
-    let mut resolver = session.process("x=y=5");
+    let expr = Expression::compile("x=y=5").unwrap();
     assert_eq!(
-        resolver.resolve().unwrap(),
+        expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(5))
     );
 
-    let mut reader = session.process("x+y");
+    let reader = Expression::compile("x+y").unwrap();
     assert_eq!(
-        reader.resolve().unwrap(),
+        reader.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(10))
     );
 }
@@ -421,8 +484,8 @@ fn test_chained_assignment_sets_all_variables() {
 fn test_large_result_to_i64_returns_error_not_panic() {
     // 2^200 vastly exceeds i64: the public TryFrom must report an error.
     let session = Session::init();
-    let mut resolver = session.process("2^200");
-    let n = resolver.resolve().unwrap();
+    let expr = Expression::compile("2^200").unwrap();
+    let n = expr.eval(&session).unwrap();
     assert!(i64::try_from(n).is_err());
 }
 
@@ -455,9 +518,9 @@ fn test_large_factorial_is_exact() {
 #[test]
 fn test_large_power_is_exact() {
     let session = Session::init();
-    let mut resolver = session.process("2^100");
+    let expr = Expression::compile("2^100").unwrap();
     assert_eq!(
-        format!("{}", resolver.resolve().unwrap()),
+        format!("{}", expr.eval(&session).unwrap()),
         "1267650600228229401496703205376"
     );
 }
@@ -466,8 +529,8 @@ fn test_large_power_is_exact() {
 fn test_setf_declares_a_decimal_variable() {
     let session = Session::init();
     session.setf("r", 2.5);
-    let mut resolver = session.process("r*2");
-    let v: f64 = resolver.resolve().unwrap().try_into().unwrap();
+    let expr = Expression::compile("r*2").unwrap();
+    let v: f64 = expr.eval(&session).unwrap().try_into().unwrap();
     assert!((v - 5.0).abs() < 1e-10);
 }
 
@@ -487,8 +550,7 @@ fn test_factorial_accepts_integral_results_of_functions() {
 fn test_integral_results_are_natural_numbers() {
     let session = Session::init();
     for expr in ["6/3", "floor(3.7)", "exp(0)", "max(1,2)", "sqrt(16)"] {
-        let mut resolver = session.process(expr);
-        let result = resolver.resolve().unwrap();
+        let result = Expression::compile(expr).unwrap().eval(&session).unwrap();
         assert!(
             matches!(result, Number::NaturalNumber(_)),
             "{expr} produced {result:?}, expected a NaturalNumber"
@@ -500,8 +562,7 @@ fn test_integral_results_are_natural_numbers() {
 fn test_non_integral_results_stay_decimal() {
     let session = Session::init();
     for expr in ["1/3", "abs(-2.5)", "2^-3", "sqrt(2)"] {
-        let mut resolver = session.process(expr);
-        let result = resolver.resolve().unwrap();
+        let result = Expression::compile(expr).unwrap().eval(&session).unwrap();
         assert!(
             matches!(result, Number::DecimalNumber(_)),
             "{expr} produced {result:?}, expected a DecimalNumber"
@@ -514,39 +575,46 @@ fn test_oversized_factorial_is_refused_not_computed() {
     // Before the limit this did not return at all. The test is its own alarm:
     // if the guard stops working, the suite hangs here instead of failing.
     let session = Session::init();
-    let mut resolver = session.process("999999999!");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("size limit"), "message was: {err}");
+    let expr = Expression::compile("999999999!").unwrap();
+    // "size limit" was the wording the two size errors share, so the assertion
+    // stays as wide as it was: refused by the budget, measured or predicted.
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ValueTooLarge { .. } | EvalError::ComputationTooLarge { .. })
+    ));
 }
 
 #[test]
 fn test_oversized_power_is_refused_not_computed() {
     let session = Session::init();
-    let mut resolver = session.process("10^100000000");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("size limit"), "message was: {err}");
+    let expr = Expression::compile("10^100000000").unwrap();
+    // As above: either size error satisfies what "size limit" used to say.
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ValueTooLarge { .. } | EvalError::ComputationTooLarge { .. })
+    ));
 }
 
 #[test]
 fn test_legitimate_big_values_still_pass_the_default_limit() {
     resolve_natural!("2^64", 18_446_744_073_709_551_616_i128);
     let session = Session::init();
-    let mut resolver = session.process("1000!");
+    let expr = Expression::compile("1000!").unwrap();
     // 1000! needs about 8530 bits, comfortably inside the default budget.
-    assert!(resolver.resolve().is_ok());
+    assert!(expr.eval(&session).is_ok());
 }
 
 #[test]
 fn test_the_limit_is_configurable() {
     let session = Session::with_limits(Limits { max_value_bits: 64 });
-    let mut resolver = session.process("2^100");
+    let expr = Expression::compile("2^100").unwrap();
     assert!(
-        resolver.resolve().is_err(),
+        expr.eval(&session).is_err(),
         "2^100 needs 101 bits, over a 64-bit budget"
     );
 
-    let mut small = session.process("2^10");
-    assert!(small.resolve().is_ok());
+    let small = Expression::compile("2^10").unwrap();
+    assert!(small.eval(&session).is_ok());
 }
 
 #[test]
@@ -560,28 +628,29 @@ fn test_growth_through_multiplication_is_caught() {
     let session = Session::with_limits(Limits {
         max_value_bits: 4000,
     });
-    let mut resolver = session.process("x=2^2000; x*x");
-    let err = resolver.resolve().unwrap_err().to_string();
-    // "occupies" is the post-hoc wording; a prediction says "would need". Asserting
-    // the wording is what makes the paragraph above a claim the test checks rather
-    // than a comment asking to be believed.
-    assert!(err.contains("occupies"), "message was: {err}");
+    let expr = Expression::compile("x=2^2000; x*x").unwrap();
+    // ValueTooLarge is the post-hoc measurement; a prediction reports
+    // ComputationTooLarge. Asserting which one is what makes the paragraph above
+    // a claim the test checks rather than a comment asking to be believed.
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 }
 
 #[test]
 fn test_oversized_exponent_reports_its_own_message() {
     // The exponent itself doesn't fit in a u64 (it's far larger than u64::MAX),
     // so this must be refused before any size prediction is even attempted - and
-    // with its own message, not the unrelated "invalid power operation" that
-    // covers a different failure (a non-integer powf conversion).
+    // as its own condition, not the unrelated InvalidPower that covers a
+    // different failure (a non-integer powf conversion). One variant is not the
+    // other, so the assertion below carries that too.
     let session = Session::init();
-    let mut resolver = session.process("2^99999999999999999999");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("exponent is too large"), "message was: {err}");
-    assert!(
-        !err.contains("invalid power operation"),
-        "message was: {err}"
-    );
+    let expr = Expression::compile("2^99999999999999999999").unwrap();
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ExponentTooLarge { .. })
+    ));
 }
 
 #[test]
@@ -607,16 +676,17 @@ fn test_an_oversized_literal_is_refused() {
     // final result. A literal pushed straight onto the stack is one of those, so
     // the budget has to apply to it as well, whatever produced it.
     let session = Session::with_limits(Limits { max_value_bits: 32 });
-    let mut resolver = session.process("99999999999999999999");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("occupies"), "message was: {err}");
-    assert!(err.contains("size limit"), "message was: {err}");
+    let expr = Expression::compile("99999999999999999999").unwrap();
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 
     // A literal inside the budget is untouched, so the guard is not simply
     // refusing everything.
-    let mut inside = session.process("123+1");
+    let inside = Expression::compile("123+1").unwrap();
     assert_eq!(
-        inside.resolve().unwrap(),
+        inside.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(124))
     );
 }
@@ -632,24 +702,25 @@ fn test_an_oversized_variable_is_refused() {
 
     // Bare "x" is the case no other guard can catch: the value is pushed and
     // returned without a single operator running over it.
-    let mut resolver = session.process("x");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("occupies"), "message was: {err}");
-    assert!(err.contains("size limit"), "message was: {err}");
+    let expr = Expression::compile("x").unwrap();
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 
     // A variable inside the budget still reads back normally.
     session.set("y", 7);
-    let mut inside = session.process("y*2");
+    let inside = Expression::compile("y*2").unwrap();
     assert_eq!(
-        inside.resolve().unwrap(),
+        inside.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(14))
     );
 
     // An undefined variable still resolves to zero. That is deliberate, and a
     // size check on the variable push must not turn it into an error.
-    let mut undefined = session.process("z+1");
+    let undefined = Expression::compile("z+1").unwrap();
     assert_eq!(
-        undefined.resolve().unwrap(),
+        undefined.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(1))
     );
 }
@@ -663,23 +734,27 @@ fn test_a_materialised_power_is_measured_not_just_predicted() {
     //    non-integer exponent, so it converts to f64 and comes back as a
     //    rational of roughly 53 + 53 bits.
     let tight = Session::with_limits(Limits { max_value_bits: 16 });
-    let mut irrational = tight.process("2^0.5");
-    let err = irrational.resolve().unwrap_err().to_string();
-    assert!(err.contains("occupies"), "message was: {err}");
+    let irrational = Expression::compile("2^0.5").unwrap();
+    assert!(matches!(
+        irrational.eval(&tight),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 
     // 2. A negative exponent is predicted on the magnitude of base^|exponent|,
     //    but the value returned is the reciprocal, whose denominator counts too.
     //    "2^-1" predicts 2 bits and yields 1/2, which measures 1 + 2 = 3.
     let two_bits = Session::with_limits(Limits { max_value_bits: 2 });
-    let mut reciprocal = two_bits.process("2^-1");
-    let err = reciprocal.resolve().unwrap_err().to_string();
-    assert!(err.contains("occupies"), "message was: {err}");
+    let reciprocal = Expression::compile("2^-1").unwrap();
+    assert!(matches!(
+        reciprocal.eval(&two_bits),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 
     // Three bits is exactly enough, which pins the boundary rather than just
     // asserting that something was refused.
     let three_bits = Session::with_limits(Limits { max_value_bits: 3 });
-    let mut fits = three_bits.process("2^-1");
-    assert_eq!(fits.resolve().unwrap().to_string(), "0.5");
+    let fits = Expression::compile("2^-1").unwrap();
+    assert_eq!(fits.eval(&three_bits).unwrap().to_string(), "0.5");
 }
 
 #[test]
@@ -693,9 +768,12 @@ fn test_a_function_result_is_measured_like_any_other_value() {
     // n = 2, and 2 is a 2-bit operand that no checked arm would have admitted.
     let one_bit = Session::with_limits(Limits { max_value_bits: 1 });
     for expr in ["exp(1)", "floor(exp(1))", "floor(exp(1))!"] {
-        let mut resolver = one_bit.process(expr);
-        let err = resolver.resolve().unwrap_err().to_string();
-        assert!(err.contains("occupies"), "{expr} reported: {err}");
+        let compiled = Expression::compile(expr).unwrap();
+        let err = compiled.eval(&one_bit).unwrap_err();
+        assert!(
+            matches!(err, EvalError::ValueTooLarge { .. }),
+            "{expr} reported: {err:?}"
+        );
     }
 
     // Nothing legitimate is refused by this: a function result is f64-bounded, so
@@ -715,9 +793,11 @@ fn test_a_function_result_is_measured_like_any_other_value() {
     // The predictive refusal must survive: 999999999! has to stay a fast "no",
     // not become a computation that is measured afterwards.
     let default = Session::init();
-    let mut huge = default.process("999999999!");
-    let err = huge.resolve().unwrap_err().to_string();
-    assert!(err.contains("would need"), "message was: {err}");
+    let huge = Expression::compile("999999999!").unwrap();
+    assert!(matches!(
+        huge.eval(&default),
+        Err(EvalError::ComputationTooLarge { .. })
+    ));
 }
 
 #[test]
@@ -730,9 +810,17 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
     // quoted by Session::with_limits stays a measured number, not folklore.
     let below_all = Session::with_limits(Limits { max_value_bits: 97 });
     for name in ["pi", "e", "tau", "phi", "gamma"] {
-        let mut resolver = below_all.process(name);
-        let err = resolver.resolve().unwrap_err().to_string();
-        assert!(err.contains("size limit"), "{name} reported: {err}");
+        let err = Expression::compile(name)
+            .unwrap()
+            .eval(&below_all)
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                EvalError::ValueTooLarge { .. } | EvalError::ComputationTooLarge { .. }
+            ),
+            "{name} reported: {err:?}"
+        );
     }
 
     // 107 is the exact floor, pinned from both sides: one bit under it the
@@ -742,16 +830,16 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
     let one_short = Session::with_limits(Limits {
         max_value_bits: 106,
     });
-    let mut widest = one_short.process("gamma");
-    assert!(widest.resolve().is_err(), "gamma fits in 106 bits?");
+    let widest = Expression::compile("gamma").unwrap();
+    assert!(widest.eval(&one_short).is_err(), "gamma fits in 106 bits?");
 
     let exact = Session::with_limits(Limits {
         max_value_bits: 107,
     });
     for name in ["pi", "e", "tau", "phi", "gamma"] {
-        let mut resolver = exact.process(name);
+        let compiled = Expression::compile(name).unwrap();
         assert!(
-            resolver.resolve().is_ok(),
+            compiled.eval(&exact).is_ok(),
             "{name} was rejected at 107 bits"
         );
     }
@@ -759,45 +847,44 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
 
 #[test]
 fn test_wrong_arity_is_diagnosed_by_name() {
-    let session = Session::init();
     for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {
-        let mut resolver = session.process(expr);
-        let err = resolver.resolve().unwrap_err().to_string();
+        let err = compile_err(expr);
         assert!(
-            err.contains(&format!("expects {expected}")) && err.contains(&format!("{given} given")),
-            "{expr} reported: {err}"
+            matches!(err, ParseError::WrongArity { expected: e, given: g, .. }
+                     if e == expected && g == given),
+            "{expr} reported: {err:?}"
         );
     }
 }
 
 #[test]
 fn test_empty_argument_list_is_diagnosed() {
-    let session = Session::init();
-    let mut resolver = session.process("max()");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("0 given"), "message was: {err}");
+    let err = compile_err("max()");
+    assert!(
+        matches!(err, ParseError::WrongArity { given: 0, .. }),
+        "reported: {err:?}"
+    );
 }
 
 #[test]
 fn test_comma_outside_a_function_call_is_diagnosed() {
-    let session = Session::init();
-    let mut resolver = session.process("1,2");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("function call"), "message was: {err}");
+    let err = compile_err("1,2");
+    assert!(
+        matches!(err, ParseError::CommaOutsideCall { .. }),
+        "reported: {err:?}"
+    );
 }
 
 #[test]
 fn test_a_function_name_requires_parentheses() {
-    let session = Session::init();
     // "sin;" pins down that a pending function cannot survive a ';' statement
     // boundary either: the mandatory-parenthesis check fires on the very next
     // token, whatever it is, before the ';' arm ever runs.
     for expr in ["sin 5", "sqrt 16", "cos", "sin;"] {
-        let mut resolver = session.process(expr);
-        let err = resolver.resolve().unwrap_err().to_string();
+        let err = compile_err(expr);
         assert!(
-            err.contains("must be followed by"),
-            "{expr} reported: {err}"
+            matches!(err, ParseError::FunctionRequiresParentheses { .. }),
+            "{expr} reported: {err:?}"
         );
     }
     // The parenthesised form is untouched.
@@ -816,13 +903,12 @@ fn test_unclosed_bracket_before_semicolon_is_diagnosed() {
     // Before the fix, the open bracket's frame survived the ';' unclosed, and
     // the mismatch surfaced later as a misleading arity error instead of
     // naming the real problem.
-    let session = Session::init();
-    let mut resolver = session.process("max(1; 2)");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("before ';'"), "message was: {err}");
+    // The variant also carries what the old message assertion said it was not:
+    // a WrongArity is not a BracketUnclosedAtSemicolon.
+    let err = compile_err("max(1; 2)");
     assert!(
-        !err.contains("expects"),
-        "should not be reported as an arity mismatch: {err}"
+        matches!(err, ParseError::BracketUnclosedAtSemicolon { .. }),
+        "reported: {err:?}"
     );
 }
 
@@ -830,11 +916,12 @@ fn test_unclosed_bracket_before_semicolon_is_diagnosed() {
 fn test_empty_argument_slot_is_diagnosed() {
     // A comma with nothing before or after it must be its own diagnosis, not
     // silently absorbed into the argument count.
-    let session = Session::init();
     for expr in ["max(,1)", "max(1,)"] {
-        let mut resolver = session.process(expr);
-        let err = resolver.resolve().unwrap_err().to_string();
-        assert!(err.contains("empty"), "{expr} reported: {err}");
+        let err = compile_err(expr);
+        assert!(
+            matches!(err, ParseError::EmptyArgument { .. }),
+            "{expr} reported: {err:?}"
+        );
     }
 }
 
@@ -842,21 +929,20 @@ fn test_empty_argument_slot_is_diagnosed() {
 fn test_nested_empty_group_does_not_fake_an_argument() {
     // The inner "()" is empty and must not be counted as content for the
     // outer call's only argument slot.
-    let session = Session::init();
-    let mut resolver = session.process("sin(())");
-    let err = resolver.resolve().unwrap_err().to_string();
+    let err = compile_err("sin(())");
     assert!(
-        err.contains("empty brackets are not a value"),
-        "message was: {err}"
+        matches!(err, ParseError::EmptyGroup { .. }),
+        "reported: {err:?}"
     );
 }
 
 #[test]
 fn test_unbalanced_closing_bracket_is_diagnosed() {
-    let session = Session::init();
-    let mut resolver = session.process("1+2)");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("unbalanced brackets"), "message was: {err}");
+    let err = compile_err("1+2)");
+    assert!(
+        matches!(err, ParseError::UnbalancedBracket { .. }),
+        "reported: {err:?}"
+    );
 }
 
 #[test]
@@ -865,33 +951,38 @@ fn test_unbalanced_opening_bracket_is_diagnosed() {
     // "malformed expression" message instead of the named one. "max(1,2" is the
     // sharper case: the bracket never closes, so the arity check on the closing
     // bracket never ran at all.
-    let session = Session::init();
+    // The variant carries the negative claim too: UnbalancedBracket is not
+    // ParseError::Malformed.
     for expr in ["(1+2", "max(1,2"] {
-        let mut resolver = session.process(expr);
-        let err = resolver.resolve().unwrap_err().to_string();
+        let err = compile_err(expr);
         assert!(
-            err.contains("unbalanced brackets"),
-            "{expr} reported: {err}"
+            matches!(err, ParseError::UnbalancedBracket { .. }),
+            "{expr} reported: {err:?}"
         );
-        assert!(!err.contains("malformed"), "{expr} reported: {err}");
     }
 }
 
 #[test]
 fn test_single_argument_function_called_empty_is_diagnosed() {
-    let session = Session::init();
-    let mut resolver = session.process("sin()");
-    let err = resolver.resolve().unwrap_err().to_string();
+    let err = compile_err("sin()");
     assert!(
-        err.contains("expects 1") && err.contains("0 given"),
-        "message was: {err}"
+        matches!(
+            err,
+            ParseError::WrongArity {
+                expected: 1,
+                given: 0,
+                ..
+            }
+        ),
+        "reported: {err:?}"
     );
 }
 
 #[test]
 fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
-    let session = Session::init();
-    let mut resolver = session.process("max((1,2),3)");
-    let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("brackets group a value"), "message was: {err}");
+    let err = compile_err("max((1,2),3)");
+    assert!(
+        matches!(err, ParseError::CommaInPlainBracket { .. }),
+        "reported: {err:?}"
+    );
 }
