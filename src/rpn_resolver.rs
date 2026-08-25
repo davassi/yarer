@@ -4,6 +4,7 @@ use crate::{
     functions,
     parser::Parser,
     session::Session,
+    span::Spanned,
     token::{self, MathFunction, Number, Operator, Token},
 };
 use anyhow::anyhow;
@@ -102,9 +103,11 @@ impl RpnResolver<'_> {
         limits: Limits,
     ) -> RpnResolver<'a> {
         let heap_for_parse = Rc::clone(&borrowed_heap);
-        match Parser::parse(exp).and_then(|tokenised_expr| {
-            RpnResolver::reverse_polish_notation(&tokenised_expr, heap_for_parse)
-        }) {
+        match Parser::parse(exp)
+            .map_err(anyhow::Error::from)
+            .and_then(|tokenised_expr| {
+                RpnResolver::reverse_polish_notation(&tokenised_expr, heap_for_parse)
+            }) {
             Ok((rpn_expr, local_heap)) => RpnResolver {
                 rpn_expr,
                 local_heap,
@@ -329,7 +332,7 @@ impl RpnResolver<'_> {
     ///     "3 * 4 + 5 * 6" becomes "3 4 * 5 6 * +"
     /// ``
     fn reverse_polish_notation<'a>(
-        infix_stack: &[Token<'a>],
+        infix_stack: &[Spanned<Token<'a>>],
         local_heap: Rc<RefCell<HashMap<String, Number>>>,
     ) -> anyhow::Result<(VecDeque<Token<'a>>, Rc<RefCell<HashMap<String, Number>>>)> {
         /*  Create an empty stack for keeping operators. Create an empty list for output. */
@@ -342,7 +345,7 @@ impl RpnResolver<'_> {
         /* Scan the infix expression from left to right. */
         for t in infix_stack {
             if let Some(fun) = pending_function {
-                if !matches!(t, Token::Bracket(token::Bracket::Open)) {
+                if !matches!(t.node, Token::Bracket(token::Bracket::Open)) {
                     return Err(function_requires_parentheses_err(fun));
                 }
             }
@@ -352,15 +355,15 @@ impl RpnResolver<'_> {
             // empty, e.g. the inner `()` in `sin(())`), so marking is deferred
             // to the moment its matching close confirms the group was non-empty.
             // See the `Token::Bracket(Close)` arm below.
-            if !matches!(t, Token::Comma | Token::Bracket(_)) {
+            if !matches!(t.node, Token::Comma | Token::Bracket(_)) {
                 if let Some(frame) = bracket_stack.last_mut() {
                     frame.has_content = true;
                 }
             }
 
-            match *t {
+            match t.node {
                 /* If the token is an operand, add it to the output list. */
-                Token::Operand(_) => postfix_stack.push_back(t.clone()),
+                Token::Operand(_) => postfix_stack.push_back(t.node.clone()),
 
                 /* If the token is a left parenthesis, push it on the stack. */
                 Token::Bracket(token::Bracket::Open) => {
@@ -369,7 +372,7 @@ impl RpnResolver<'_> {
                         commas: 0,
                         has_content: false,
                     });
-                    operators_stack.push(t.clone());
+                    operators_stack.push(t.node.clone());
                 }
 
                 /* If the token is a right parenthesis:
@@ -507,7 +510,7 @@ impl RpnResolver<'_> {
                 }
 
                 Token::Operator(_op) => {
-                    let op1: Token<'_> = t.clone();
+                    let op1: Token<'_> = t.node.clone();
 
                     while !operators_stack.is_empty() {
                         let op2: &Token = operators_stack.last().unwrap();
@@ -534,18 +537,18 @@ impl RpnResolver<'_> {
 
                 Token::Function(f) => {
                     pending_function = Some(f);
-                    operators_stack.push(t.clone());
+                    operators_stack.push(t.node.clone());
                 }
 
                 /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
                 Token::Variable(s) => {
-                    postfix_stack.push_back(t.clone());
+                    postfix_stack.push_back(t.node.clone());
                     seen_variables.push(s.to_lowercase());
                 }
             }
             debug!(
                 "Inspecting... {} - OUT {} - OP - {}",
-                *t,
+                t.node,
                 DisplayThisDeque(&postfix_stack),
                 DisplayThatVec(&operators_stack)
             );
@@ -729,16 +732,27 @@ mod tests {
     use super::*;
     use crate::{
         session::Session,
+        span::Span,
         token::{Number, Operator},
     };
     use num_bigint::{BigInt, BigUint};
 
     #[test]
     fn test_reverse_polish_notation() {
-        let a: Vec<Token> = vec![
-            Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
-            Token::Operator(Operator::Add),
-            Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
+        // The spans on the input tokens are irrelevant to this test — it
+        // exercises the shunting-yard logic, not span propagation — so an
+        // arbitrary placeholder span is used throughout.
+        let no_span = Span::new(0, 0);
+        let a: Vec<Spanned<Token>> = vec![
+            Spanned::new(
+                Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
+                no_span,
+            ),
+            Spanned::new(Token::Operator(Operator::Add), no_span),
+            Spanned::new(
+                Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
+                no_span,
+            ),
         ];
         let b: Vec<Token> = vec![
             Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),

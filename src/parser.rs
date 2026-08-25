@@ -1,7 +1,7 @@
-use crate::rpn_resolver::MALFORMED_ERR;
+use crate::error::ParseError;
+use crate::span::{Span, Spanned};
 use crate::token::{self, Operator, Token};
 
-use anyhow::{anyhow, Result};
 use log::debug;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -18,23 +18,24 @@ static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
 });
 
 impl Parser {
-    /// Parses and splits a &str into a vec of &str with
-    /// the help of [`EXPRESSION_REGEX`] and then wraps in tokens the &str chunks
-    ///
-    pub fn parse(expr: &str) -> Result<Vec<Token<'_>>> {
-        let mut vex: Vec<Token<'_>> = Vec::new();
+    /// Splits `expr` into tokens, each carrying the byte range it came from.
+    pub(crate) fn parse(expr: &str) -> Result<Vec<Spanned<Token<'_>>>, ParseError> {
+        let mut vex: Vec<Spanned<Token<'_>>> = Vec::new();
         let mut cursor = 0;
 
         for m in EXPRESSION_REGEX.find_iter(expr) {
             Self::validate_gap(expr, cursor, m.start())?;
-            vex.push(Token::tokenize(m.as_str()).ok_or_else(|| anyhow!(MALFORMED_ERR))?);
+            vex.push(Spanned::new(
+                Token::tokenize(m.as_str()),
+                Span::new(m.start(), m.end()),
+            ));
             cursor = m.end();
         }
 
         Self::validate_gap(expr, cursor, expr.len())?;
 
         if vex.is_empty() {
-            return Err(anyhow!(MALFORMED_ERR));
+            return Err(ParseError::EmptyExpression);
         }
 
         Ok(Self::mod_unary_operators(&vex))
@@ -42,14 +43,14 @@ impl Parser {
 
     /// Finds out all the unary operators that are present in the expression
     ///
-    fn mod_unary_operators<'a>(v: &[Token<'a>]) -> Vec<Token<'a>> {
-        let mut mod_vec: Vec<Token> = Vec::new();
+    fn mod_unary_operators<'a>(v: &[Spanned<Token<'a>>]) -> Vec<Spanned<Token<'a>>> {
+        let mut mod_vec: Vec<Spanned<Token<'a>>> = Vec::new();
         let mut expect_operand_next = true;
 
         for token in v {
-            debug!("{}", token);
+            debug!("{}", token.node);
 
-            match &token {
+            match &token.node {
                 Token::Operand(_) | Token::Variable(_) | Token::Operator(Operator::Fac) => {
                     expect_operand_next = false;
                 }
@@ -63,7 +64,10 @@ impl Parser {
                             }
                             token::Operator::Sub => {
                                 // an unary - is a special right-associative op with the highest precedence
-                                mod_vec.push(token::Token::Operator(token::Operator::Une));
+                                mod_vec.push(Spanned::new(
+                                    token::Token::Operator(token::Operator::Une),
+                                    token.span,
+                                ));
                                 continue;
                             }
                             _ => (),
@@ -81,13 +85,19 @@ impl Parser {
         mod_vec
     }
 
-    fn validate_gap(expr: &str, start: usize, end: usize) -> Result<()> {
+    fn validate_gap(expr: &str, start: usize, end: usize) -> Result<(), ParseError> {
         let gap = &expr[start..end];
         if gap.chars().all(char::is_whitespace) {
             return Ok(());
         }
-
-        Err(anyhow!("Parse Error: Unexpected token '{}'.", gap.trim()))
+        // The span covers the trimmed text, not the surrounding whitespace, so
+        // the caret sits under the offending characters themselves.
+        let leading = gap.len() - gap.trim_start().len();
+        let trimmed = gap.trim();
+        Err(ParseError::UnexpectedCharacter {
+            text: trimmed.to_string(),
+            span: Span::new(start + leading, start + leading + trimmed.len()),
+        })
     }
 }
 
@@ -100,8 +110,12 @@ mod tests {
     #[test]
     fn test_parse_valid() {
         assert_eq!(
-            Parser::parse("1+2*3/(4-5)").unwrap(),
-            (vec![
+            Parser::parse("1+2*3/(4-5)")
+                .unwrap()
+                .into_iter()
+                .map(|t| t.node)
+                .collect::<Vec<_>>(),
+            vec![
                 Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
                 Token::Operator(Operator::Add),
                 Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
@@ -113,7 +127,7 @@ mod tests {
                 Token::Operator(Operator::Sub),
                 Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
                 Token::Bracket(Bracket::Close),
-            ])
+            ]
         );
     }
 
@@ -123,21 +137,64 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_records_the_span_of_every_token() {
+        let tokens = Parser::parse("1 + 23").unwrap();
+        let spans: Vec<(usize, usize)> =
+            tokens.iter().map(|t| (t.span.start, t.span.end)).collect();
+        assert_eq!(spans, vec![(0, 1), (2, 3), (4, 6)]);
+    }
+
+    #[test]
+    fn test_parse_reports_an_unexpected_character_with_its_position() {
+        assert_eq!(
+            Parser::parse("1@2"),
+            Err(ParseError::UnexpectedCharacter {
+                text: "@".to_string(),
+                span: Span::new(1, 2),
+            })
+        );
+    }
+
+    #[test]
+    fn test_parse_rejects_an_expression_with_no_tokens() {
+        assert_eq!(Parser::parse("   "), Err(ParseError::EmptyExpression));
+    }
+
+    /// The unary minus keeps the position of the '-' it replaces, so an error
+    /// reported against it later points at something the user actually typed.
+    #[test]
+    fn test_the_unary_minus_keeps_its_position() {
+        let tokens = Parser::parse("-5").unwrap();
+        assert_eq!(tokens[0].node, Token::Operator(Operator::Une));
+        assert_eq!(tokens[0].span, Span::new(0, 1));
+    }
+
+    #[test]
     fn test_multiple_unary_ops2() {
         // -(+(-5*-5)) to #((#5*#5))
 
+        // The spans carried on the input tokens are irrelevant to this test —
+        // it exercises the unary-marking logic, not span propagation — so an
+        // arbitrary placeholder span is used throughout.
+        let no_span = Span::new(0, 0);
         let input = vec![
-            Token::Operator(Operator::Sub),
-            Token::Bracket(Bracket::Open),
-            Token::Operator(Operator::Add),
-            Token::Bracket(Bracket::Open),
-            Token::Operator(Operator::Sub),
-            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-            Token::Operator(Operator::Mul),
-            Token::Operator(Operator::Sub),
-            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-            Token::Bracket(Bracket::Close),
-            Token::Bracket(Bracket::Close),
+            Spanned::new(Token::Operator(Operator::Sub), no_span),
+            Spanned::new(Token::Bracket(Bracket::Open), no_span),
+            Spanned::new(Token::Operator(Operator::Add), no_span),
+            Spanned::new(Token::Bracket(Bracket::Open), no_span),
+            Spanned::new(Token::Operator(Operator::Sub), no_span),
+            Spanned::new(
+                Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
+                no_span,
+            ),
+            Spanned::new(Token::Operator(Operator::Mul), no_span),
+            Spanned::new(Token::Operator(Operator::Sub), no_span),
+            Spanned::new(
+                Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
+                no_span,
+            ),
+            Spanned::new(Token::Bracket(Bracket::Close), no_span),
+            Spanned::new(Token::Bracket(Bracket::Close), no_span),
         ];
 
         let expected = vec![
@@ -153,7 +210,10 @@ mod tests {
             Token::Bracket(Bracket::Close),
         ];
 
-        let result = Parser::mod_unary_operators(&input);
+        let result: Vec<Token> = Parser::mod_unary_operators(&input)
+            .into_iter()
+            .map(|t| t.node)
+            .collect();
         assert_eq!(result, expected);
     }
 }

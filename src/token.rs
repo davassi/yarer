@@ -248,33 +248,32 @@ impl Token<'_> {
     /// "x"   -> [`Token::Variable`]
     ///
     #[must_use]
-    pub fn tokenize(t: &str) -> Option<Token<'_>> {
-        match t.chars().next() {
-            Some(s) => match s {
+    pub(crate) fn tokenize(t: &str) -> Token<'_> {
+        if let Some(s) = t.chars().next() {
+            match s {
                 c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=' | '×' | '÷') => {
-                    return Some(Token::from_operator(c).unwrap())
+                    return Token::from_operator(c).unwrap()
                 }
-                b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
-                ',' => return Some(Token::Comma),
-                ';' => return Some(Token::SemiColon),
+                b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
+                ',' => return Token::Comma,
+                ';' => return Token::SemiColon,
                 _ => (), // continue the flow
-            },
-            None => return None,
+            }
         }
 
         if let Ok(v) = t.parse::<BigInt>() {
-            return Some(Token::Operand(Number::NaturalNumber(v)));
+            return Token::Operand(Number::NaturalNumber(v));
         }
 
         if let Some(v) = parse_decimal_literal(t) {
-            return Some(Token::Operand(Number::decimal(v)));
+            return Token::Operand(Number::decimal(v));
         }
 
         if let Some(fun) = Token::get_some(t) {
-            return Some(Token::Function(fun));
+            return Token::Function(fun);
         }
 
-        Some(Token::Variable(t))
+        Token::Variable(t)
     }
 
     /// Founding out the priority and the associative precedence of an operator
@@ -632,17 +631,17 @@ mod tests {
     #[test]
     fn test_tokenise_operators() {
         let v = vec!["1", "+", "2.1"];
-        assert_eq!(Token::tokenize(v[1]), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize(v[1]), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize(v[0]),
-            Some(Token::Operand(Number::NaturalNumber(One::one())))
+            Token::Operand(Number::NaturalNumber(One::one()))
         );
         assert_eq!(
             Token::tokenize(v[2]),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(21),
                 BigInt::from(10)
-            ))))
+            )))
         );
     }
 
@@ -687,36 +686,36 @@ mod tests {
 
     #[test]
     fn test_tokenize_valid() {
-        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
+            Token::Operand(Number::NaturalNumber(BigInt::from(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(157),
                 BigInt::from(50)
-            ))))
+            )))
         );
-        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 
     #[test]
     fn test_tokenize_vec_valid() {
-        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
+            Token::Operand(Number::NaturalNumber(BigInt::from(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(157),
                 BigInt::from(50)
-            ))))
+            )))
         );
-        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 
     #[test]
@@ -801,30 +800,25 @@ mod tests {
 
     #[test]
     fn test_tokenize_edge_cases() {
-        assert_eq!(Token::tokenize(""), None);
-        assert_eq!(Token::tokenize("["), Some(Token::Bracket(Bracket::Open)));
-        assert_eq!(Token::tokenize("]"), Some(Token::Bracket(Bracket::Close)));
-        assert_eq!(Token::tokenize(";"), Some(Token::SemiColon));
-        assert_eq!(Token::tokenize(","), Some(Token::Comma));
-        assert_eq!(Token::tokenize("×"), Some(Token::Operator(Operator::Mul)));
-        assert_eq!(Token::tokenize("÷"), Some(Token::Operator(Operator::Div)));
-        assert_eq!(Token::tokenize("foo"), Some(Token::Variable("foo")));
+        // The regex feeding `tokenize` never produces an empty match, so this
+        // is unreachable in the real pipeline; the total function still needs
+        // a defined answer, and an empty chunk falls through to a variable
+        // with an empty name.
+        assert_eq!(Token::tokenize(""), Token::Variable(""));
+        assert_eq!(Token::tokenize("["), Token::Bracket(Bracket::Open));
+        assert_eq!(Token::tokenize("]"), Token::Bracket(Bracket::Close));
+        assert_eq!(Token::tokenize(";"), Token::SemiColon);
+        assert_eq!(Token::tokenize(","), Token::Comma);
+        assert_eq!(Token::tokenize("×"), Token::Operator(Operator::Mul));
+        assert_eq!(Token::tokenize("÷"), Token::Operator(Operator::Div));
+        assert_eq!(Token::tokenize("foo"), Token::Variable("foo"));
     }
 
     #[test]
     fn test_tokenize_functions_are_case_insensitive() {
-        assert_eq!(
-            Token::tokenize("SIN"),
-            Some(Token::Function(MathFunction::Sin))
-        );
-        assert_eq!(
-            Token::tokenize("Cos"),
-            Some(Token::Function(MathFunction::Cos))
-        );
-        assert_eq!(
-            Token::tokenize("log10"),
-            Some(Token::Function(MathFunction::Log))
-        );
+        assert_eq!(Token::tokenize("SIN"), Token::Function(MathFunction::Sin));
+        assert_eq!(Token::tokenize("Cos"), Token::Function(MathFunction::Cos));
+        assert_eq!(Token::tokenize("log10"), Token::Function(MathFunction::Log));
     }
 
     #[test]
