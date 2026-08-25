@@ -105,7 +105,7 @@ pub enum Token<'a> {
 
 /// The [`MathFunction`] enum. It represents a common math function.
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MathFunction {
     /// Trigonometric Sine
     Sin,

@@ -17,7 +17,7 @@ use crate::token::MathFunction;
 /// exception: [`ParseError::Malformed`] names no token — it is the structural
 /// fallback for a condition the validation pass is supposed to have made
 /// unreachable.
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ParseError {
     /// Text that is not part of any token, e.g. the `@` in `1@2`.
