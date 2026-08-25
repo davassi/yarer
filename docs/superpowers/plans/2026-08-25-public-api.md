@@ -1459,6 +1459,26 @@ Expected: all green, including every `err.contains(...)` assertion in
 Task 1 to keep "occupies" and "would need". If one of those fails, the message
 drifted; fix the message, not the test. They are converted to variants in Task 6.
 
+**One assertion goes vacuous in this task and must be repaired here, not in
+Task 6.** `tests/integration_tests.rs:582` reads
+
+```rust
+assert!(!err.contains("Invalid power operation"), "message was: {err}");
+```
+
+and guards a real distinction: an exponent too large to narrow must report
+itself rather than borrowing the unrelated non-integer-power message. The new
+message is lower case, so from this task onward that assertion cannot fail
+whatever the code does — it would keep passing even if the exponent error
+*were* replaced by the power error, which is the one thing it exists to catch.
+Lower-case the expected substring. Every other negative assertion in the file
+survives the rewrite unharmed: `!contains("malformed")` at :876 and
+`!contains("expects")` at :824 both still match their new messages, verified.
+
+A test that cannot fail is worse than a missing test: it reports coverage that
+is not there. This is the same pattern the register records from Stage 1, and
+it arrives here as a side effect of a decision made two tasks earlier.
+
 - [ ] **Step 8: Commit**
 
 ```bash
