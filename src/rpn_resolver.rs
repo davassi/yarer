@@ -4,8 +4,10 @@ use crate::{
     functions,
     parser::Parser,
     session::Session,
+    shunting,
     span::Spanned,
-    token::{self, MathFunction, Number, Operator, Token},
+    token::{Number, Operator, Token},
+    validate,
 };
 use anyhow::anyhow;
 use log::debug;
@@ -13,7 +15,6 @@ use num::Integer;
 use std::{
     cell::RefCell,
     collections::{HashMap, VecDeque},
-    fmt::Display,
     rc::Rc,
 };
 
@@ -36,12 +37,6 @@ static POWER_TOO_LARGE_ERR: &str =
     "Runtime error: Power operands are too large for non-integer evaluation.";
 static EXPONENT_TOO_LARGE_ERR: &str =
     "Runtime error: the exponent is too large to evaluate under any size limit.";
-static COMMA_OUTSIDE_CALL_ERR: &str =
-    "Parse Error: ',' is only valid between the arguments of a function call.";
-static UNBALANCED_BRACKET_ERR: &str = "Parse Error: Unbalanced brackets.";
-static EMPTY_ARGUMENT_ERR: &str = "Parse Error: A function argument cannot be empty.";
-static BRACKET_UNCLOSED_AT_SEMICOLON_ERR: &str =
-    "Parse Error: A bracket must be closed before ';'.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -50,48 +45,10 @@ static BRACKET_UNCLOSED_AT_SEMICOLON_ERR: &str =
 /// a heap of local variables borrowed from a [`Session`]
 ///
 pub struct RpnResolver<'a> {
-    rpn_expr: VecDeque<Token<'a>>,
+    rpn_expr: VecDeque<Spanned<Token<'a>>>,
     local_heap: Rc<RefCell<HashMap<String, Number>>>,
     build_error: Option<String>,
     limits: Limits,
-}
-
-/// One entry per open bracket, recording whether that bracket opens a function
-/// call and how many arguments it has seen so far.
-struct BracketFrame {
-    function: Option<MathFunction>,
-    /// Number of `,` separators seen so far in this bracket.
-    commas: usize,
-    /// Whether the *current* argument slot — since the bracket opened, or
-    /// since the last `,` — has seen any content. Reset after each `,` so an
-    /// empty slot (`max(,1)`, `max(1,)`) is caught exactly where it occurs,
-    /// rather than being silently absorbed into the overall argument count.
-    has_content: bool,
-}
-
-impl BracketFrame {
-    /// An empty pair of brackets carries zero arguments; otherwise there is one
-    /// more argument than there are separators. This is only accurate once
-    /// every slot has been confirmed non-empty, which the caller enforces at
-    /// each `,` and at the closing bracket before trusting this count.
-    fn argument_count(&self) -> usize {
-        if self.has_content {
-            self.commas + 1
-        } else {
-            0
-        }
-    }
-}
-
-/// The error reported when a function name is not immediately followed by an
-/// opening bracket. Built in one place because the check itself runs at two
-/// points: mid-scan, against whatever token follows the function name, and
-/// once more at end of input, for a function name with nothing after it at all.
-fn function_requires_parentheses_err(fun: MathFunction) -> anyhow::Error {
-    anyhow!(
-        "Parse Error: Function '{}' must be followed by '('.",
-        fun.to_string().to_lowercase()
-    )
 }
 
 impl RpnResolver<'_> {
@@ -102,16 +59,13 @@ impl RpnResolver<'_> {
         borrowed_heap: Rc<RefCell<HashMap<String, Number>>>,
         limits: Limits,
     ) -> RpnResolver<'a> {
-        let heap_for_parse = Rc::clone(&borrowed_heap);
         match Parser::parse(exp)
-            .and_then(|tokens| crate::validate::validate(&tokens, exp))
-            .map_err(anyhow::Error::from)
-            .and_then(|tokenised_expr| {
-                RpnResolver::reverse_polish_notation(&tokenised_expr, heap_for_parse)
-            }) {
-            Ok((rpn_expr, local_heap)) => RpnResolver {
+            .and_then(|tokens| validate::validate(&tokens, exp))
+            .and_then(|validated| shunting::to_rpn(&validated))
+        {
+            Ok(rpn_expr) => RpnResolver {
                 rpn_expr,
-                local_heap,
+                local_heap: borrowed_heap,
                 build_error: None,
                 limits,
             },
@@ -140,7 +94,7 @@ impl RpnResolver<'_> {
         let mut last_result: Option<Number> = None;
 
         for t in &self.rpn_expr {
-            match t {
+            match &t.node {
                 Token::Operand(n) => {
                     // The budget is documented as bounding every intermediate and
                     // final result, so it has to hold for a value that arrives as a
@@ -326,272 +280,6 @@ impl RpnResolver<'_> {
         result_stack.pop_back().ok_or(anyhow!("{}", MALFORMED_ERR))
     }
 
-    /// Transforming an infix notation to Reverse Polish Notation (RPN)
-    ///
-    /// Example
-    /// ``
-    ///     "3 * 4 + 5 * 6" becomes "3 4 * 5 6 * +"
-    /// ``
-    fn reverse_polish_notation<'a>(
-        infix_stack: &[Spanned<Token<'a>>],
-        local_heap: Rc<RefCell<HashMap<String, Number>>>,
-    ) -> anyhow::Result<(VecDeque<Token<'a>>, Rc<RefCell<HashMap<String, Number>>>)> {
-        /*  Create an empty stack for keeping operators. Create an empty list for output. */
-        let mut operators_stack: Vec<Token> = Vec::new();
-        let mut postfix_stack: VecDeque<Token> = VecDeque::new();
-        let mut seen_variables: Vec<String> = Vec::new();
-        let mut bracket_stack: Vec<BracketFrame> = Vec::new();
-        let mut pending_function: Option<MathFunction> = None;
-
-        /* Scan the infix expression from left to right. */
-        for t in infix_stack {
-            if let Some(fun) = pending_function {
-                if !matches!(t.node, Token::Bracket(token::Bracket::Open)) {
-                    return Err(function_requires_parentheses_err(fun));
-                }
-            }
-
-            // Both brackets are excluded here: an opening bracket has not yet
-            // proven it contributes a value (the group it opens might turn out
-            // empty, e.g. the inner `()` in `sin(())`), so marking is deferred
-            // to the moment its matching close confirms the group was non-empty.
-            // See the `Token::Bracket(Close)` arm below.
-            if !matches!(t.node, Token::Comma | Token::Bracket(_)) {
-                if let Some(frame) = bracket_stack.last_mut() {
-                    frame.has_content = true;
-                }
-            }
-
-            match t.node {
-                /* If the token is an operand, add it to the output list. */
-                Token::Operand(_) => postfix_stack.push_back(t.node.clone()),
-
-                /* If the token is a left parenthesis, push it on the stack. */
-                Token::Bracket(token::Bracket::Open) => {
-                    bracket_stack.push(BracketFrame {
-                        function: pending_function.take(),
-                        commas: 0,
-                        has_content: false,
-                    });
-                    operators_stack.push(t.node.clone());
-                }
-
-                /* If the token is a right parenthesis:
-                Pop the stack and add operators to the output list until you encounter a left parenthesis.
-                Pop the left parenthesis from the stack but do not add it to the output list.*/
-                Token::Bracket(token::Bracket::Close) => {
-                    let frame = bracket_stack
-                        .pop()
-                        .ok_or_else(|| anyhow!(UNBALANCED_BRACKET_ERR))?;
-                    // A trailing separator (`max(1,)`) leaves the final slot
-                    // empty; catch it here rather than letting it silently
-                    // shrink the argument count by one.
-                    if frame.commas > 0 && !frame.has_content {
-                        return Err(anyhow!(EMPTY_ARGUMENT_ERR));
-                    }
-                    if let Some(fun) = frame.function {
-                        let given = frame.argument_count();
-                        let expected = usize::from(fun.arity());
-                        if given != expected {
-                            return Err(anyhow!(
-                                "Parse Error: Function '{}' expects {} argument(s), {} given.",
-                                fun.to_string().to_lowercase(),
-                                expected,
-                                given
-                            ));
-                        }
-                    }
-                    // This bracket produced a value: let the enclosing slot (if
-                    // any) know, now that the group is confirmed non-empty
-                    // rather than merely opened. An empty group like the inner
-                    // `()` in `sin(())` must not count as content for the slot
-                    // that contains it.
-                    if frame.has_content {
-                        if let Some(outer) = bracket_stack.last_mut() {
-                            outer.has_content = true;
-                        }
-                    }
-
-                    let mut found_open = false;
-                    while let Some(token) = operators_stack.pop() {
-                        match token {
-                            Token::Bracket(token::Bracket::Open) => {
-                                found_open = true;
-                                // If the token is a left parenthesis, pop it from the stack
-                                if let Some(Token::Function(_)) = operators_stack.last() {
-                                    postfix_stack.push_back(
-                                        operators_stack.pop().expect("It should not happen."),
-                                    );
-                                }
-                                break;
-                            } // discards left parenthesis
-                            _ => postfix_stack.push_back(token),
-                        }
-                    }
-                    // `bracket_stack` and `operators_stack` gain and lose open
-                    // brackets together: the `Bracket(Open)` arm pushes to both
-                    // with nothing between them that can fail, this arm is the
-                    // only one that removes an open bracket from
-                    // `operators_stack` and it removes exactly one per frame
-                    // popped, the `Comma` arm stops at an open bracket without
-                    // popping it, the `Operator` arm breaks on anything that is
-                    // not an operator or a function, and the `SemiColon` arm
-                    // refuses a non-empty `bracket_stack` before it drains.
-                    // Popping a frame above therefore guarantees a matching open
-                    // bracket is still below us here, so this branch is
-                    // unreachable and no test can cover it. It stays anyway,
-                    // because the loop above has by then drained the operator
-                    // stack into the output in exactly the order the normal
-                    // end-of-expression drain uses: the postfix sequence is still
-                    // evaluable, so falling through would not raise an error, it
-                    // would return a number computed with the bracket grouping
-                    // dissolved — `2*(3+4)` as `2 3 * 4 +`, which is 10 rather
-                    // than 14. Note also that the last clause above is doing real
-                    // work: the `SemiColon` guard is what keeps the two stacks in
-                    // step, and relaxing it makes this reachable again.
-                    if !found_open {
-                        return Err(anyhow!(MALFORMED_ERR));
-                    }
-                }
-
-                Token::Comma => {
-                    let frame = bracket_stack
-                        .last_mut()
-                        .ok_or_else(|| anyhow!(COMMA_OUTSIDE_CALL_ERR))?;
-                    if frame.function.is_none() {
-                        return Err(anyhow!(COMMA_OUTSIDE_CALL_ERR));
-                    }
-                    // The slot that ends here (since the open bracket or the
-                    // previous ',') must not be empty, e.g. the first slot in
-                    // `max(,1)`.
-                    if !frame.has_content {
-                        return Err(anyhow!(EMPTY_ARGUMENT_ERR));
-                    }
-                    frame.commas += 1;
-                    frame.has_content = false; // a fresh slot starts now
-
-                    let mut found_open = false;
-                    while let Some(token) = operators_stack.last() {
-                        if matches!(token, Token::Bracket(token::Bracket::Open)) {
-                            found_open = true;
-                            break;
-                        }
-                        postfix_stack
-                            .push_back(operators_stack.pop().expect("It should not happen."));
-                    }
-                    // Same lockstep invariant as the closing-bracket arm above,
-                    // reached here through `bracket_stack.last_mut()` having
-                    // yielded a frame: an enclosing frame exists, so its open
-                    // bracket is still on `operators_stack`. This arm only peeks
-                    // at that bracket, so it also leaves the two in step. Also
-                    // unreachable, and kept for the same reason: the loop above
-                    // has already moved the operators into the output, so falling
-                    // through would silently mis-group the arguments rather than
-                    // fail, and the invariant it relies on rests on the
-                    // `SemiColon` guard staying where it is.
-                    if !found_open {
-                        return Err(anyhow!(MALFORMED_ERR));
-                    }
-                }
-
-                Token::SemiColon => {
-                    // A bracket left open across a ';' is a parse error in its
-                    // own right: without this check the frame just lingers
-                    // (out of sync with `operators_stack`, which the loop below
-                    // does drain), and the eventual mismatch on some later
-                    // close surfaces as a confusing arity error instead of
-                    // naming what's actually wrong.
-                    if !bracket_stack.is_empty() {
-                        return Err(anyhow!(BRACKET_UNCLOSED_AT_SEMICOLON_ERR));
-                    }
-                    while let Some(token) = operators_stack.pop() {
-                        postfix_stack.push_back(token);
-                    }
-                    postfix_stack.push_back(Token::SemiColon);
-                }
-
-                Token::Operator(_op) => {
-                    let op1: Token<'_> = t.node.clone();
-
-                    while !operators_stack.is_empty() {
-                        let op2: &Token = operators_stack.last().unwrap();
-                        match op2 {
-                            Token::Operator(_) => {
-                                if Token::compare_operator_priority(op1.clone(), op2.clone()) {
-                                    postfix_stack.push_back(
-                                        operators_stack.pop().expect("It should not happen."),
-                                    );
-                                } else {
-                                    break;
-                                }
-                            }
-                            Token::Function(_) => {
-                                postfix_stack.push_back(
-                                    operators_stack.pop().expect("It should not happen."),
-                                );
-                            }
-                            _ => break,
-                        }
-                    }
-                    operators_stack.push(op1.clone());
-                }
-
-                Token::Function(f) => {
-                    pending_function = Some(f);
-                    operators_stack.push(t.node.clone());
-                }
-
-                /* If the token is a variable, add it to the output list and to the local_heap with a default value*/
-                Token::Variable(s) => {
-                    postfix_stack.push_back(t.node.clone());
-                    seen_variables.push(s.to_lowercase());
-                }
-            }
-            debug!(
-                "Inspecting... {} - OUT {} - OP - {}",
-                t.node,
-                DisplayThisDeque(&postfix_stack),
-                DisplayThatVec(&operators_stack)
-            );
-        }
-
-        if let Some(fun) = pending_function {
-            return Err(function_requires_parentheses_err(fun));
-        }
-
-        // A frame still on the stack is a bracket that was opened and never
-        // closed. That is the same condition class as a stray closing bracket,
-        // so it gets the same named diagnosis rather than falling through to the
-        // generic malformed-expression message below.
-        if !bracket_stack.is_empty() {
-            return Err(anyhow!(UNBALANCED_BRACKET_ERR));
-        }
-
-        /* After all tokens are read, pop remaining operators from the stack and add them to the list. */
-        operators_stack.reverse();
-        for t in &operators_stack {
-            if matches!(t, Token::Bracket(_)) {
-                return Err(anyhow!(MALFORMED_ERR));
-            }
-            postfix_stack.push_back(t.clone());
-        }
-
-        let mut heap = local_heap.borrow_mut();
-        for variable in seen_variables {
-            heap.entry(variable)
-                .or_insert(Number::NaturalNumber(Zero::zero()));
-        }
-        drop(heap);
-
-        debug!(
-            "DEBUG: EOF - OUT {} - OP - {}",
-            DisplayThisDeque(&postfix_stack),
-            DisplayThatVec(&operators_stack)
-        );
-
-        Ok((postfix_stack, local_heap))
-    }
-
     fn factorial_helper(n: BigUint) -> BigUint {
         let mut acc = BigUint::one();
         let mut current = BigUint::one();
@@ -705,29 +393,6 @@ impl RpnResolver<'_> {
     }
 }
 
-struct DisplayThatVec<'a>(&'a Vec<Token<'a>>);
-struct DisplayThisDeque<'a>(&'a VecDeque<Token<'a>>);
-
-impl Display for DisplayThatVec<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.0.iter().map(ToString::to_string).collect::<String>()
-        )
-    }
-}
-
-impl Display for DisplayThisDeque<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.0.iter().map(ToString::to_string).collect::<String>()
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -739,36 +404,6 @@ mod tests {
     use num_bigint::{BigInt, BigUint};
 
     #[test]
-    fn test_reverse_polish_notation() {
-        // The spans on the input tokens are irrelevant to this test — it
-        // exercises the shunting-yard logic, not span propagation — so an
-        // arbitrary placeholder span is used throughout.
-        let no_span = Span::new(0, 0);
-        let a: Vec<Spanned<Token>> = vec![
-            Spanned::new(
-                Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
-                no_span,
-            ),
-            Spanned::new(Token::Operator(Operator::Add), no_span),
-            Spanned::new(
-                Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
-                no_span,
-            ),
-        ];
-        let b: Vec<Token> = vec![
-            Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
-            Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
-            Token::Operator(Operator::Add),
-        ];
-        assert_eq!(
-            RpnResolver::reverse_polish_notation(&a, Rc::new(RefCell::new(HashMap::new())))
-                .unwrap()
-                .0,
-            b
-        );
-    }
-
-    #[test]
     fn test_factorial() {
         assert_eq!(
             RpnResolver::factorial_helper(BigUint::from(5u8)),
@@ -778,11 +413,21 @@ mod tests {
 
     #[test]
     fn test_resolve() {
+        // The spans on the rpn expression are irrelevant to this test — it
+        // exercises evaluation, not span propagation — so an arbitrary
+        // placeholder span is used throughout.
+        let no_span = Span::new(0, 0);
         let mut resolver = RpnResolver {
             rpn_expr: VecDeque::from(vec![
-                Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
-                Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
-                Token::Operator(Operator::Add),
+                Spanned::new(
+                    Token::Operand(Number::NaturalNumber(BigInt::from(1u8))),
+                    no_span,
+                ),
+                Spanned::new(
+                    Token::Operand(Number::NaturalNumber(BigInt::from(2u8))),
+                    no_span,
+                ),
+                Spanned::new(Token::Operator(Operator::Add), no_span),
             ]),
             local_heap: Rc::new(RefCell::new(HashMap::new())),
             build_error: None,
