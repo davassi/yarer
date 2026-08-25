@@ -16,7 +16,12 @@
 - **Never run `git stash` in this repository.** Two user stashes from June 2025 live here and must not be disturbed. If you need a clean tree, use `git worktree`.
 - After any edit, confirm the build actually recompiled: cargo occasionally skips it. If `cargo test` output has no `Compiling yarer` line after a source change, run `cargo clean -p yarer` and try again.
 - Every task ends with `cargo test` green and `cargo fmt --check` clean.
-- Clippy is compared **per lint**, never by counting warnings: run `cargo clean -p yarer` first, then `cargo clippy --all-targets 2>&1 | grep -oP '(?<=\[)clippy::[a-z_]+(?=\])' | sort | uniq -c`. A stable total can hide one regression cancelling one improvement. The baseline at the start of this stage is whatever that command prints on `master`; record it in Task 1 and compare against it, not against a number quoted here.
+- Clippy is compared **per lint**, never by counting warnings: run `cargo clean -p yarer` first, then
+  measure through clippy's JSON output. The human-readable output cannot be counted:
+  it prints a `= note: #[warn(clippy::x)]` line once per lint *kind*, at that lint's
+  first occurrence, so a second offence of the same lint is invisible. Only the JSON
+  carries one record per diagnostic. The command is `cargo clippy --all-targets --message-format=json 2>/dev/null \
+  | grep -oP '"code":"clippy::[a-z_]+"' | sed 's/.*clippy:://; s/"//' | sort | uniq -c | sort -rn`. A stable total can hide one regression cancelling one improvement. The baseline at the start of this stage is whatever that command prints on `master`; record it in Task 1 and compare against it, not against a number quoted here.
 - Do not add dependencies. `thiserror` is already in `Cargo.toml`.
 - `Cargo.toml` stays at version `0.2.0`. The bump to `0.3.0` goes with the release.
 - Commit messages: imperative subject line, no tool attribution of any kind, no `Co-Authored-By` trailer.
@@ -68,7 +73,8 @@ Component A and the renderer of component B. Nothing consumes these types yet, s
 Run and paste the output into the task's commit message:
 
 ```bash
-cargo clean -p yarer && cargo clippy --all-targets 2>&1 | grep -oP '(?<=\[)clippy::[a-z_]+(?=\])' | sort | uniq -c
+cargo clean -p yarer && cargo clippy --all-targets --message-format=json 2>/dev/null \
+  | grep -oP '"code":"clippy::[a-z_]+"' | sed 's/.*clippy:://; s/"//' | sort | uniq -c | sort -rn
 ```
 
 - [ ] **Step 2: Write the failing tests**
@@ -2308,7 +2314,8 @@ Run all of these before opening the pull request:
 cargo clean -p yarer
 cargo test
 cargo fmt --check
-cargo clippy --all-targets 2>&1 | grep -oP '(?<=\[)clippy::[a-z_]+(?=\])' | sort | uniq -c
+cargo clippy --all-targets --message-format=json 2>/dev/null \
+  | grep -oP '"code":"clippy::[a-z_]+"' | sed 's/.*clippy:://; s/"//' | sort | uniq -c | sort -rn
 grep -rn "anyhow" src/ Cargo.toml
 grep -c "contains(" tests/integration_tests.rs
 ```
