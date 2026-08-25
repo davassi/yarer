@@ -42,11 +42,23 @@ pub(crate) fn to_rpn<'a>(
     /* Scan the infix expression from left to right. */
     for t in tokens {
         match t.node {
-            /* If the token is an operand, add it to the output list. */
-            Token::Operand(_) => postfix_stack.push_back(t.clone()),
+            // A variable is an operand in the algorithm's own terms: neither
+            // needs anything done beyond landing in the output in the order
+            // it was read.
+            Token::Operand(_) | Token::Variable(_) => postfix_stack.push_back(t.clone()),
 
-            /* If the token is a left parenthesis, push it on the stack. */
-            Token::Bracket(token::Bracket::Open) => operators_stack.push(t.clone()),
+            // A left bracket and a function name both wait on the operator
+            // stack instead of going straight to the output, and it is the
+            // same closing bracket that releases both: the `Bracket(Close)`
+            // arm below discards the open bracket, and — because a
+            // function's argument list *is* the bracketed group that follows
+            // it — immediately also emits a function found waiting directly
+            // underneath that bracket. Pushing a function here the same way
+            // as a bracket is what makes that single arm able to end the
+            // call.
+            Token::Bracket(token::Bracket::Open) | Token::Function(_) => {
+                operators_stack.push(t.clone());
+            }
 
             /* If the token is a right parenthesis:
             Pop the stack and add operators to the output list until you encounter a left parenthesis.
@@ -57,13 +69,14 @@ pub(crate) fn to_rpn<'a>(
                     match token.node {
                         Token::Bracket(token::Bracket::Open) => {
                             found_open = true;
-                            // If the token is a left parenthesis, pop it from the stack
-                            if let Some(op) = operators_stack.last() {
-                                if matches!(op.node, Token::Function(_)) {
-                                    postfix_stack.push_back(
-                                        operators_stack.pop().expect("It should not happen."),
-                                    );
-                                }
+                            // The open bracket is discarded here; a function
+                            // waiting directly underneath it — pushed the
+                            // same way as this bracket, for exactly this
+                            // reason — is released to the output right after.
+                            if let Some(function) =
+                                operators_stack.pop_if(|op| matches!(op.node, Token::Function(_)))
+                            {
+                                postfix_stack.push_back(function);
                             }
                             break;
                         } // discards left parenthesis
@@ -144,11 +157,6 @@ pub(crate) fn to_rpn<'a>(
                 }
                 operators_stack.push(op1);
             }
-
-            Token::Function(_) => operators_stack.push(t.clone()),
-
-            /* If the token is a variable, add it to the output list. */
-            Token::Variable(_) => postfix_stack.push_back(t.clone()),
         }
         debug!(
             "Inspecting... {} - OUT {} - OP - {}",
@@ -229,6 +237,15 @@ mod tests {
             .collect()
     }
 
+    /// Same helper as `rpn`, but keeping the spans instead of discarding
+    /// them, for the tests below that pin exactly which token a span landed
+    /// on.
+    fn rpn_spanned(source: &str) -> Vec<Spanned<Token<'_>>> {
+        let tokens = Parser::parse(source).expect("tokenises");
+        let validated = validate(&tokens, source).expect("validates");
+        to_rpn(&validated).expect("reorders").into_iter().collect()
+    }
+
     #[test]
     fn test_infix_becomes_postfix() {
         assert_eq!(
@@ -252,11 +269,50 @@ mod tests {
 
     /// The spans travel through to the output, in the order the operators are
     /// applied, so an evaluation error can name the operator that produced it.
+    ///
+    /// "1+2" tokenises as '1'@(0,1) '+'@(1,2) '2'@(2,3). Neither operand is
+    /// ever popped mid-loop — the `+` sits on the operator stack until the
+    /// end-of-expression drain — so this pins the two easy cases: an
+    /// operand's span survives untouched, and the operator that never left
+    /// the stack keeps its own span too.
     #[test]
     fn test_the_output_keeps_the_positions() {
-        let tokens = Parser::parse("1+2").expect("tokenises");
-        let validated = validate(&tokens, "1+2").expect("validates");
-        let out = to_rpn(&validated).expect("reorders");
-        assert_eq!(out[2].span, Span::new(1, 2));
+        let out = rpn_spanned("1+2");
+        assert_eq!(out[0].span, Span::new(0, 1)); // '1'
+        assert_eq!(out[1].span, Span::new(2, 3)); // '2'
+        assert_eq!(out[2].span, Span::new(1, 2)); // '+'
+    }
+
+    /// "1+2+3" tokenises as '1'@(0,1) '+'@(1,2) '2'@(2,3) '+'@(3,4) '3'@(4,5).
+    /// Both '+' have equal precedence and left-associate, so the second '+'
+    /// pops the first out of the `Operator` arm's while loop the moment it
+    /// arrives — the one mid-loop reordering path `test_the_output_keeps_the_positions`
+    /// does not exercise. Expected RPN order, worked by hand from the
+    /// algorithm: 1, 2, +(first, popped mid-loop), 3, +(second, popped by the
+    /// end-of-expression drain).
+    #[test]
+    fn test_a_mid_loop_precedence_pop_keeps_its_span() {
+        let out = rpn_spanned("1+2+3");
+        assert_eq!(out[0].span, Span::new(0, 1)); // '1'
+        assert_eq!(out[1].span, Span::new(2, 3)); // '2'
+        assert_eq!(out[2].span, Span::new(1, 2)); // '+' popped mid-loop
+        assert_eq!(out[3].span, Span::new(4, 5)); // '3'
+        assert_eq!(out[4].span, Span::new(3, 4)); // '+' popped by the final drain
+    }
+
+    /// "(1+2)*3" tokenises as '('@(0,1) '1'@(1,2) '+'@(2,3) '2'@(3,4)
+    /// ')'@(4,5) '*'@(5,6) '3'@(6,7). The '+' never reaches the operator
+    /// arm's own priority loop — it is pushed straight onto an empty stack
+    /// below the open bracket — so its span can only travel through the
+    /// `Bracket(Close)` arm's drain, worked by hand: 1, 2, + (drained by the
+    /// close bracket), 3, * (drained at end of expression).
+    #[test]
+    fn test_a_bracket_close_drain_keeps_its_span() {
+        let out = rpn_spanned("(1+2)*3");
+        assert_eq!(out[0].span, Span::new(1, 2)); // '1'
+        assert_eq!(out[1].span, Span::new(3, 4)); // '2'
+        assert_eq!(out[2].span, Span::new(2, 3)); // '+' drained by ')'
+        assert_eq!(out[3].span, Span::new(6, 7)); // '3'
+        assert_eq!(out[4].span, Span::new(5, 6)); // '*' drained at end
     }
 }
