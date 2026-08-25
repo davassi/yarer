@@ -1015,10 +1015,40 @@ match Parser::parse(exp)
 - [ ] **Step 6: Run the whole suite**
 
 Run: `cargo test`
-Expected: the new tests pass. Some existing tests in `tests/integration_tests.rs`
-that assert `is_err()` still pass — the error simply arrives earlier and reads
-better. **`!5` is the one behaviour change**: if a test asserts it returns 120,
-update it to assert the parse error and note the change in the commit message.
+Expected: the new tests pass, and **five existing integration tests fail**. All
+five are asserting the old wording or the old diagnosis, and each one is updated
+as part of this task. No test that asserts a numeric *value* may change.
+
+1. `test_unbalanced_closing_bracket_is_diagnosed` and
+   `test_unbalanced_opening_bracket_is_diagnosed` assert
+   `contains("Unbalanced brackets")`. The message is lower case now — the
+   capital belonged to the `Parse Error:` prefix that no longer exists. Change
+   the expected substring to `"unbalanced brackets"`.
+
+2. `test_nested_empty_group_does_not_fake_an_argument` feeds `sin(())` and
+   expects `"expects 1"` and `"0 given"`. The inner `()` is now `EmptyGroup`,
+   diagnosed where it occurs instead of being absorbed and re-reported as the
+   outer call's arity. The test's intent survives — the empty group still does
+   not fake an argument — so keep the test and assert
+   `contains("empty brackets are not a value")`.
+
+3. `test_comma_outside_a_function_call_is_diagnosed` feeds `(1,2)` and expects
+   `"function call"`. Those brackets are a plain group, so this is now
+   `CommaInPlainBracket`, whose message deliberately does not say "function
+   call" — saying it was the bug. Give this test the input that really has no
+   call open, `"1,2"`, and keep asserting `"function call"`.
+
+4. `test_comma_inside_nested_plain_group_within_a_call_is_diagnosed` feeds
+   `max((1,2),3)` and expects `"function call"` too. This is the case the tech
+   debt register calls out as a false statement: a call *is* open. Assert
+   `contains("brackets group a value")` instead.
+
+Together, 3 and 4 turn two tests that asserted the same message for two
+different conditions into two tests that pin the difference. That is the whole
+point of splitting the variant.
+
+**`!5` is the one behaviour change with no test to update**: nothing in the
+suite pins it, verified by grep. Note it in the commit message.
 
 - [ ] **Step 7: Commit**
 
