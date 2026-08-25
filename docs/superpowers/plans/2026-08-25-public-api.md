@@ -2146,6 +2146,23 @@ pub use token::{ConversionError, MathFunction, Number};
 result type, the second appears inside `ParseError::WrongArity`, the third
 inside `TryFrom`.
 
+Three one-line repairs from Task 6's review land here, because this is the task
+that owns the public surface:
+
+- **`#[derive(Debug, Clone)]` on `Expression`.** It derives nothing today, which
+  makes `Result<Expression, ParseError>::unwrap_err()` unusable for every
+  downstream caller — the tests needed a helper to work around it. Both fields
+  already derive what is needed. `Debug` on a public type is a Rust API
+  guideline, and this is the type the whole API hangs off.
+- **`Session::is_constant_name` becomes private.** Its only caller is `assign`,
+  in the same file. The `pub(crate)` is a leftover from when the evaluator
+  called it directly, and leaving it advertises a second entry point to the
+  refusal decision Task 6 just made single.
+- **`Session::lookup` lowercases its argument, like `assign` does.** Today it
+  does not, and the only caller pre-lowercases, so nothing is broken — but the
+  two siblings disagree silently, and the next person to add a public `get`
+  inherits the trap.
+
 - [ ] **Step 2: Compile and fix what falls out**
 
 Run: `cargo test`
@@ -2319,6 +2336,31 @@ fn test_a_value_landing_exactly_on_the_budget_is_admitted() {
     ));
 }
 ```
+
+Two more, carried from Task 6's review, where the type system now knows
+something the tests do not:
+
+```rust
+/// `resolve_err!` accepts failure at either step, which is what `is_err()`
+/// meant before `compile` and `eval` were separable. It cannot mean that any
+/// more: these five are evaluation failures, and the test would stay green if
+/// one of them started being refused at compile time instead — a real change
+/// in behaviour that nothing would report.
+#[test]
+fn test_domain_errors_are_rejected() {
+    let session = Session::init();
+    for source in ["ln(0)", "1/0", "0^-1", "sqrt(-1)", "asin(2)"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert!(expr.eval(&session).is_err(), "{source} was accepted");
+    }
+}
+```
+
+Apply the same split to `test_invalid_input_is_rejected`, whose five inputs are
+all *parse* failures: assert that `Expression::compile` refuses each, not that
+the pipeline fails somewhere. And make `test_wrong_arity_is_diagnosed_by_name`
+true to its title — it binds `function` with `..` and never checks it, which the
+old substring assertion did not check either.
 
 And add `"0.5+0.5"`, `"1.5/0.5"` and `"(0.5)^-1"` to the loop in
 `test_integral_results_are_natural_numbers` (`tests/integration_tests.rs:487`).
