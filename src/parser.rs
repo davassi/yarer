@@ -1,8 +1,7 @@
 use crate::error::ParseError;
 use crate::span::{Span, Spanned};
-use crate::token::{self, Operator, Token};
+use crate::token::Token;
 
-use log::debug;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -38,51 +37,7 @@ impl Parser {
             return Err(ParseError::EmptyExpression);
         }
 
-        Ok(Self::mod_unary_operators(&vex))
-    }
-
-    /// Finds out all the unary operators that are present in the expression
-    ///
-    fn mod_unary_operators<'a>(v: &[Spanned<Token<'a>>]) -> Vec<Spanned<Token<'a>>> {
-        let mut mod_vec: Vec<Spanned<Token<'a>>> = Vec::new();
-        let mut expect_operand_next = true;
-
-        for token in v {
-            debug!("{}", token.node);
-
-            match &token.node {
-                Token::Operand(_) | Token::Variable(_) | Token::Operator(Operator::Fac) => {
-                    expect_operand_next = false;
-                }
-                Token::Operator(o) => {
-                    if expect_operand_next {
-                        debug!("-> Unary operator detected");
-                        match o {
-                            token::Operator::Add => {
-                                // an unary + can be simply ignored.
-                                continue;
-                            }
-                            token::Operator::Sub => {
-                                // an unary - is a special right-associative op with the highest precedence
-                                mod_vec.push(Spanned::new(
-                                    token::Token::Operator(token::Operator::Une),
-                                    token.span,
-                                ));
-                                continue;
-                            }
-                            _ => (),
-                        }
-                    }
-                    expect_operand_next = true;
-                }
-                Token::Comma | Token::SemiColon => {
-                    expect_operand_next = true;
-                }
-                _ => (),
-            }
-            mod_vec.push(token.clone());
-        }
-        mod_vec
+        Ok(vex)
     }
 
     fn validate_gap(expr: &str, start: usize, end: usize) -> Result<(), ParseError> {
@@ -171,62 +126,5 @@ mod tests {
         let spans: Vec<(usize, usize)> =
             tokens.iter().map(|t| (t.span.start, t.span.end)).collect();
         assert_eq!(spans, vec![(0, 1), (1, 3), (3, 4)]);
-    }
-
-    /// The unary minus keeps the position of the '-' it replaces, so an error
-    /// reported against it later points at something the user actually typed.
-    #[test]
-    fn test_the_unary_minus_keeps_its_position() {
-        let tokens = Parser::parse("-5").unwrap();
-        assert_eq!(tokens[0].node, Token::Operator(Operator::Une));
-        assert_eq!(tokens[0].span, Span::new(0, 1));
-    }
-
-    #[test]
-    fn test_multiple_unary_ops2() {
-        // -(+(-5*-5)) to #((#5*#5))
-
-        // The spans carried on the input tokens are irrelevant to this test —
-        // it exercises the unary-marking logic, not span propagation — so an
-        // arbitrary placeholder span is used throughout.
-        let no_span = Span::new(0, 0);
-        let input = vec![
-            Spanned::new(Token::Operator(Operator::Sub), no_span),
-            Spanned::new(Token::Bracket(Bracket::Open), no_span),
-            Spanned::new(Token::Operator(Operator::Add), no_span),
-            Spanned::new(Token::Bracket(Bracket::Open), no_span),
-            Spanned::new(Token::Operator(Operator::Sub), no_span),
-            Spanned::new(
-                Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-                no_span,
-            ),
-            Spanned::new(Token::Operator(Operator::Mul), no_span),
-            Spanned::new(Token::Operator(Operator::Sub), no_span),
-            Spanned::new(
-                Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-                no_span,
-            ),
-            Spanned::new(Token::Bracket(Bracket::Close), no_span),
-            Spanned::new(Token::Bracket(Bracket::Close), no_span),
-        ];
-
-        let expected = vec![
-            Token::Operator(Operator::Une),
-            Token::Bracket(Bracket::Open),
-            Token::Bracket(Bracket::Open),
-            Token::Operator(Operator::Une),
-            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-            Token::Operator(Operator::Mul),
-            Token::Operator(Operator::Une),
-            Token::Operand(Number::NaturalNumber(BigInt::from(5u8))),
-            Token::Bracket(Bracket::Close),
-            Token::Bracket(Bracket::Close),
-        ];
-
-        let result: Vec<Token> = Parser::mod_unary_operators(&input)
-            .into_iter()
-            .map(|t| t.node)
-            .collect();
-        assert_eq!(result, expected);
     }
 }

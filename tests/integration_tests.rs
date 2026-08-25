@@ -781,7 +781,7 @@ fn test_empty_argument_list_is_diagnosed() {
 #[test]
 fn test_comma_outside_a_function_call_is_diagnosed() {
     let session = Session::init();
-    let mut resolver = session.process("(1,2)");
+    let mut resolver = session.process("1,2");
     let err = resolver.resolve().unwrap_err().to_string();
     assert!(err.contains("function call"), "message was: {err}");
 }
@@ -846,7 +846,7 @@ fn test_nested_empty_group_does_not_fake_an_argument() {
     let mut resolver = session.process("sin(())");
     let err = resolver.resolve().unwrap_err().to_string();
     assert!(
-        err.contains("expects 1") && err.contains("0 given"),
+        err.contains("empty brackets are not a value"),
         "message was: {err}"
     );
 }
@@ -856,7 +856,7 @@ fn test_unbalanced_closing_bracket_is_diagnosed() {
     let session = Session::init();
     let mut resolver = session.process("1+2)");
     let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("Unbalanced brackets"), "message was: {err}");
+    assert!(err.contains("unbalanced brackets"), "message was: {err}");
 }
 
 #[test]
@@ -870,7 +870,7 @@ fn test_unbalanced_opening_bracket_is_diagnosed() {
         let mut resolver = session.process(expr);
         let err = resolver.resolve().unwrap_err().to_string();
         assert!(
-            err.contains("Unbalanced brackets"),
+            err.contains("unbalanced brackets"),
             "{expr} reported: {err}"
         );
         assert!(!err.contains("malformed"), "{expr} reported: {err}");
@@ -893,5 +893,5 @@ fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
     let session = Session::init();
     let mut resolver = session.process("max((1,2),3)");
     let err = resolver.resolve().unwrap_err().to_string();
-    assert!(err.contains("function call"), "message was: {err}");
+    assert!(err.contains("brackets group a value"), "message was: {err}");
 }

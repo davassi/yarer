@@ -104,6 +104,7 @@ impl RpnResolver<'_> {
     ) -> RpnResolver<'a> {
         let heap_for_parse = Rc::clone(&borrowed_heap);
         match Parser::parse(exp)
+            .and_then(|tokens| crate::validate::validate(&tokens, exp))
             .map_err(anyhow::Error::from)
             .and_then(|tokenised_expr| {
                 RpnResolver::reverse_polish_notation(&tokenised_expr, heap_for_parse)

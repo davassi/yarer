@@ -134,6 +134,7 @@ pub mod session;
 mod span;
 /// Token
 pub mod token;
+mod validate;
 
 pub use error::{Error, EvalError, ParseError};
 pub use span::Span;
