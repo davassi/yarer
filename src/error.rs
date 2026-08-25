@@ -172,6 +172,36 @@ impl EvalError {
             EvalError::NotFinite { .. } => None,
         }
     }
+
+    /// Fills in where this error happened, unless it already knows.
+    ///
+    /// Errors raised inside `limits.rs` and `functions.rs` carry no position —
+    /// those modules never see a token. The evaluation loop stamps them as they
+    /// pass, which is why neither module has to thread a span through every
+    /// helper it owns.
+    pub(crate) fn at(mut self, span: Span) -> EvalError {
+        match &mut self {
+            EvalError::DivisionByZero { span: slot }
+            | EvalError::ValueTooLarge { span: slot, .. }
+            | EvalError::ComputationTooLarge { span: slot, .. }
+            | EvalError::FactorialNotNatural { span: slot }
+            | EvalError::FactorialOperandTooLarge { span: slot }
+            | EvalError::ExponentTooLarge { span: slot }
+            | EvalError::PowerOperandsTooLarge { span: slot }
+            | EvalError::InvalidPower { span: slot }
+            | EvalError::OperandTooLargeForFloat { span: slot }
+            | EvalError::NotARealNumber { span: slot }
+            | EvalError::ReadOnlyConstant { span: slot, .. }
+            | EvalError::AssignmentTargetMissing { span: slot }
+            | EvalError::Malformed { span: slot } => {
+                if slot.is_none() {
+                    *slot = Some(span);
+                }
+            }
+            EvalError::NotFinite { .. } => {}
+        }
+        self
+    }
 }
 
 impl Error {
@@ -225,6 +255,55 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every variant that can carry a position must actually receive one from
+    /// `at`, or an error raised inside `limits.rs` or `functions.rs` arrives
+    /// positionless and the caret silently disappears for that condition. The
+    /// compiler enforces the same thing — `at` matches without a catch-all arm —
+    /// but only this test says what the behaviour is supposed to be.
+    #[test]
+    fn test_at_stamps_every_variant_that_has_room_for_a_position() {
+        let span = Span::new(4, 5);
+        let carriers = vec![
+            EvalError::DivisionByZero { span: None },
+            EvalError::ValueTooLarge {
+                bits: 1,
+                limit: 1,
+                span: None,
+            },
+            EvalError::ComputationTooLarge {
+                predicted_bits: 1,
+                limit: 1,
+                span: None,
+            },
+            EvalError::FactorialNotNatural { span: None },
+            EvalError::FactorialOperandTooLarge { span: None },
+            EvalError::ExponentTooLarge { span: None },
+            EvalError::PowerOperandsTooLarge { span: None },
+            EvalError::InvalidPower { span: None },
+            EvalError::OperandTooLargeForFloat { span: None },
+            EvalError::NotARealNumber { span: None },
+            EvalError::ReadOnlyConstant {
+                name: "pi".to_string(),
+                span: None,
+            },
+            EvalError::AssignmentTargetMissing { span: None },
+            EvalError::Malformed { span: None },
+        ];
+        for error in carriers {
+            let stamped = error.clone().at(span);
+            assert_eq!(stamped.span(), Some(span), "{error:?} was not stamped");
+        }
+    }
+
+    /// A position already set is the more precise one: an outer frame must not
+    /// overwrite it with its own.
+    #[test]
+    fn test_at_does_not_overwrite_a_position_already_set() {
+        let inner = Span::new(1, 2);
+        let error = EvalError::DivisionByZero { span: Some(inner) };
+        assert_eq!(error.at(Span::new(9, 10)).span(), Some(inner));
+    }
 
     #[test]
     fn test_render_puts_the_caret_under_the_offending_token() {

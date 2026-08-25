@@ -572,14 +572,14 @@ fn test_growth_through_multiplication_is_caught() {
 fn test_oversized_exponent_reports_its_own_message() {
     // The exponent itself doesn't fit in a u64 (it's far larger than u64::MAX),
     // so this must be refused before any size prediction is even attempted - and
-    // with its own message, not the unrelated "Invalid power operation" that
+    // with its own message, not the unrelated "invalid power operation" that
     // covers a different failure (a non-integer powf conversion).
     let session = Session::init();
     let mut resolver = session.process("2^99999999999999999999");
     let err = resolver.resolve().unwrap_err().to_string();
     assert!(err.contains("exponent is too large"), "message was: {err}");
     assert!(
-        !err.contains("Invalid power operation"),
+        !err.contains("invalid power operation"),
         "message was: {err}"
     );
 }

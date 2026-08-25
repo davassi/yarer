@@ -1,3 +1,4 @@
+use crate::error::EvalError;
 use crate::functions::{decimal_from_f64, number_to_f64};
 use crate::limits::{self, Limits};
 use crate::{
@@ -21,22 +22,6 @@ use std::{
 use num::{BigInt, BigUint, One, Zero};
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
-
-pub(crate) static MALFORMED_ERR: &str = "Runtime Error: The mathematical expression is malformed.";
-static DIVISION_ZERO_ERR: &str = "Runtime error: Divide by zero.";
-static NO_VARIABLE_ERR: &str = "Runtime error: No variable has been defined for assignment.";
-static FACTORIAL_NATURAL_ERR: &str =
-    "Runtime error: Factorial is only defined for non-negative integers.";
-static BUILTIN_CONSTANT_ERR: &str = "Runtime error: Built-in constants are read-only.";
-pub(crate) static INVALID_FUNCTION_RESULT_ERR: &str =
-    "Runtime error: Function result is not a real number.";
-static INVALID_POWER_ERR: &str = "Runtime error: Invalid power operation.";
-pub(crate) static FLOAT_EVAL_TOO_LARGE_ERR: &str =
-    "Runtime error: Operand is too large for floating-point evaluation.";
-static POWER_TOO_LARGE_ERR: &str =
-    "Runtime error: Power operands are too large for non-integer evaluation.";
-static EXPONENT_TOO_LARGE_ERR: &str =
-    "Runtime error: the exponent is too large to evaluate under any size limit.";
 
 /// The main [`RpnResolver`] contains the core logic of Yarer
 /// for parsing and evaluating a math expression.
@@ -85,6 +70,14 @@ impl RpnResolver<'_> {
             return Err(anyhow!(build_error.clone()));
         }
 
+        self.eval_inner().map_err(anyhow::Error::from)
+    }
+
+    /// The evaluation loop. Kept separate from [`Self::resolve`] so its errors
+    /// can be typed as [`EvalError`] rather than boxed into `anyhow` from the
+    /// first line: `resolve` is the only place that still needs the wider,
+    /// stringly-typed boundary.
+    fn eval_inner(&mut self) -> Result<Number, EvalError> {
         let zero: Number = Number::NaturalNumber(Zero::zero());
         let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
         let limits = self.limits;
@@ -94,27 +87,32 @@ impl RpnResolver<'_> {
         let mut last_result: Option<Number> = None;
 
         for t in &self.rpn_expr {
+            // Errors raised inside `limits.rs` and `functions.rs` know nothing
+            // of positions — this closure is how the loop stamps them with the
+            // token it was holding when it called out.
+            let at = |e: EvalError| e.at(t.span);
+
             match &t.node {
                 Token::Operand(n) => {
                     // The budget is documented as bounding every intermediate and
                     // final result, so it has to hold for a value that arrives as a
                     // literal too — otherwise a long enough literal is returned
                     // above the limit the caller asked for.
-                    limits::check_size(n, limits)?;
+                    limits::check_size(n, limits).map_err(at)?;
                     result_stack.push_back(n.clone());
                     var_stack.push_back(None);
                 }
                 Token::Operator(op) => {
                     let right_value: Number = result_stack
                         .pop_back()
-                        .ok_or_else(|| anyhow!("{} {}", MALFORMED_ERR, "Invalid Right Operand."))?;
+                        .ok_or(EvalError::Malformed { span: Some(t.span) })?;
 
                     var_stack.pop_back();
 
                     let left_value = if op != &Operator::Une && op != &Operator::Fac {
-                        result_stack.pop_back().ok_or_else(|| {
-                            anyhow!("{} {}", MALFORMED_ERR, "Invalid Left Operand.")
-                        })?
+                        result_stack
+                            .pop_back()
+                            .ok_or(EvalError::Malformed { span: Some(t.span) })?
                     } else {
                         zero.clone()
                     };
@@ -127,39 +125,44 @@ impl RpnResolver<'_> {
                     match op {
                         Operator::Add => {
                             let value = left_value + right_value;
-                            limits::check_size(&value, limits)?;
+                            limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Sub => {
                             let value = left_value - right_value;
-                            limits::check_size(&value, limits)?;
+                            limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Mul => {
                             let value = left_value * right_value;
-                            limits::check_size(&value, limits)?;
+                            limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Div => {
                             if right_value == zero {
-                                return Err(anyhow!(DIVISION_ZERO_ERR));
+                                return Err(EvalError::DivisionByZero { span: Some(t.span) });
                             }
                             let value = left_value / right_value;
-                            limits::check_size(&value, limits)?;
+                            limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                         Operator::Pow => {
-                            result_stack.push_back(Self::power(left_value, right_value, limits)?);
+                            result_stack.push_back(
+                                Self::power(left_value, right_value, limits).map_err(at)?,
+                            );
                             var_stack.push_back(None);
                         }
                         Operator::Eql => {
                             if let Some(var) = left_var {
                                 if Session::is_constant_name(&var) {
-                                    return Err(anyhow!(BUILTIN_CONSTANT_ERR));
+                                    return Err(EvalError::ReadOnlyConstant {
+                                        name: var,
+                                        span: Some(t.span),
+                                    });
                                 }
                                 self.local_heap
                                     .borrow_mut()
@@ -168,7 +171,9 @@ impl RpnResolver<'_> {
                                 result_stack.push_back(right_value);
                                 var_stack.push_back(None);
                             } else {
-                                return Err(anyhow!(NO_VARIABLE_ERR));
+                                return Err(EvalError::AssignmentTargetMissing {
+                                    span: Some(t.span),
+                                });
                             }
                         }
                         Operator::Fac => {
@@ -176,26 +181,27 @@ impl RpnResolver<'_> {
                             // value, not the enum tag: floor(2.5) and 6/3 are integers.
                             let n = right_value
                                 .as_integer()
-                                .ok_or_else(|| anyhow!(FACTORIAL_NATURAL_ERR))?;
+                                .ok_or(EvalError::FactorialNotNatural { span: Some(t.span) })?;
                             if n < BigInt::zero() {
-                                return Err(anyhow!(FACTORIAL_NATURAL_ERR));
+                                return Err(EvalError::FactorialNotNatural { span: Some(t.span) });
                             }
-                            let n = n.to_u64().ok_or_else(|| {
-                                anyhow!("Runtime Error: Factorial operand is too large")
+                            let n = n.to_u64().ok_or(EvalError::FactorialOperandTooLarge {
+                                span: Some(t.span),
                             })?;
                             // Predict first, to refuse `999999999!` in
                             // milliseconds rather than computing it...
                             limits::check_predicted_size(
                                 limits::predicted_factorial_bits(n),
                                 limits,
-                            )?;
+                            )
+                            .map_err(at)?;
                             let res = Self::factorial_helper(n.into());
                             // ...then measure what was actually built, because
                             // the prediction is an asymptotic series rounded up
                             // and is a bit short of the truth at `n = 2`. The
                             // prediction buys the speed; this buys the exactness.
                             let value = Number::NaturalNumber(res.into());
-                            limits::check_size(&value, limits)?;
+                            limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
@@ -220,19 +226,18 @@ impl RpnResolver<'_> {
                     // into the heap without passing through any checked operator,
                     // so without this an expression that only reads a variable
                     // returns it however large it is.
-                    limits::check_size(&n, limits)?;
+                    limits::check_size(&n, limits).map_err(at)?;
                     result_stack.push_back(n);
                     var_stack.push_back(Some(var_name));
                 }
                 Token::Function(fun) => {
-                    let value: Number = result_stack.pop_back().ok_or(anyhow!(
-                        "{} {}",
-                        MALFORMED_ERR,
-                        "Wrong use of function"
-                    ))?;
+                    let value: Number = result_stack
+                        .pop_back()
+                        .ok_or(EvalError::Malformed { span: Some(t.span) })?;
                     var_stack.pop_back();
 
-                    let result = functions::eval(*fun, value, &mut result_stack, &mut var_stack)?;
+                    let result = functions::eval(*fun, value, &mut result_stack, &mut var_stack)
+                        .map_err(at)?;
                     // Every arm that pushes a value checks it. A function result
                     // is bounded by construction — the built-ins all route
                     // through `f64` — but "bounded" is not "checked", and the
@@ -240,7 +245,7 @@ impl RpnResolver<'_> {
                     // feed guards that assume their input was checked, which is
                     // how `floor(exp(1))!` slipped a 2-bit result past a 1-bit
                     // budget through the factorial's predictive guard.
-                    limits::check_size(&result, limits)?;
+                    limits::check_size(&result, limits).map_err(at)?;
                     result_stack.push_back(result);
                     var_stack.push_back(None);
                 }
@@ -250,7 +255,7 @@ impl RpnResolver<'_> {
                     // for the next segment. An empty segment (e.g. a leading ';') is a no-op.
                     if !result_stack.is_empty() {
                         if result_stack.len() != 1 {
-                            return Err(anyhow!(MALFORMED_ERR));
+                            return Err(EvalError::Malformed { span: Some(t.span) });
                         }
                         last_result = result_stack.pop_back();
                     }
@@ -258,11 +263,7 @@ impl RpnResolver<'_> {
                     var_stack.clear();
                 }
                 _ => {
-                    return Err(anyhow!(
-                        "{} Internal Error at line: {}.",
-                        MALFORMED_ERR,
-                        line!()
-                    ))
+                    return Err(EvalError::Malformed { span: Some(t.span) });
                 }
             }
         }
@@ -270,14 +271,16 @@ impl RpnResolver<'_> {
         // A trailing ';' leaves the working stack empty: fall back to the last
         // completed segment's value rather than reporting a spurious error.
         if result_stack.is_empty() {
-            return last_result.ok_or_else(|| anyhow!(MALFORMED_ERR));
+            return last_result.ok_or(EvalError::Malformed { span: None });
         }
 
         if result_stack.len() != 1 || var_stack.len() != 1 {
-            return Err(anyhow!(MALFORMED_ERR));
+            return Err(EvalError::Malformed { span: None });
         }
 
-        result_stack.pop_back().ok_or(anyhow!("{}", MALFORMED_ERR))
+        result_stack
+            .pop_back()
+            .ok_or(EvalError::Malformed { span: None })
     }
 
     fn factorial_helper(n: BigUint) -> BigUint {
@@ -292,13 +295,16 @@ impl RpnResolver<'_> {
         acc
     }
 
-    fn power(left_value: Number, right_value: Number, limits: Limits) -> anyhow::Result<Number> {
+    fn power(left_value: Number, right_value: Number, limits: Limits) -> Result<Number, EvalError> {
         let value = if let Some(exponent) = right_value.as_integer() {
             Self::power_integer(left_value, exponent, limits)?
         } else {
-            let base = number_to_f64(&left_value, POWER_TOO_LARGE_ERR)?;
-            let exponent = number_to_f64(&right_value, POWER_TOO_LARGE_ERR)?;
-            decimal_from_f64(base.powf(exponent), INVALID_POWER_ERR)?
+            let base = number_to_f64(&left_value, EvalError::PowerOperandsTooLarge { span: None })?;
+            let exponent = number_to_f64(
+                &right_value,
+                EvalError::PowerOperandsTooLarge { span: None },
+            )?;
+            decimal_from_f64(base.powf(exponent), EvalError::InvalidPower { span: None })?
         };
 
         // The prediction inside `power_integer` is an optimisation: it buys the
@@ -313,7 +319,7 @@ impl RpnResolver<'_> {
         Ok(value)
     }
 
-    fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> anyhow::Result<Number> {
+    fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> Result<Number, EvalError> {
         if exponent.is_zero() {
             return Ok(Number::NaturalNumber(BigInt::one()));
         }
@@ -322,21 +328,21 @@ impl RpnResolver<'_> {
         let magnitude = if is_negative { -exponent } else { exponent };
         let exponent = magnitude
             .to_biguint()
-            .ok_or_else(|| anyhow!(INVALID_POWER_ERR))?;
+            .ok_or(EvalError::InvalidPower { span: None })?;
 
         // A degenerate base short-circuits inside the prediction, before the
         // exponent's own magnitude is ever consulted, so `1^n` stays evaluable for
         // an `n` no `u64` could hold. Only a base that actually grows can make the
         // exponent unrepresentable, and that is the one case this message fits.
         let predicted_bits = limits::predicted_power_bits(&base, &exponent)
-            .ok_or_else(|| anyhow!(EXPONENT_TOO_LARGE_ERR))?;
+            .ok_or(EvalError::ExponentTooLarge { span: None })?;
         limits::check_predicted_size(predicted_bits, limits)?;
 
         match base {
             Number::NaturalNumber(base) => {
                 if is_negative {
                     if base.is_zero() {
-                        return Err(anyhow!(DIVISION_ZERO_ERR));
+                        return Err(EvalError::DivisionByZero { span: None });
                     }
 
                     let value = Self::pow_big_int(base, exponent);
@@ -347,7 +353,7 @@ impl RpnResolver<'_> {
             }
             Number::DecimalNumber(base) => {
                 if is_negative && base.is_zero() {
-                    return Err(anyhow!(DIVISION_ZERO_ERR));
+                    return Err(EvalError::DivisionByZero { span: None });
                 }
 
                 let value = Self::pow_big_rational(base, exponent);

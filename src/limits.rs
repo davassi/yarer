@@ -19,8 +19,8 @@
 //! Refusing rather than computing under a timeout keeps the decision
 //! deterministic and instantaneous: no threads, no interruption.
 
+use crate::error::EvalError;
 use crate::token::Number;
-use anyhow::anyhow;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
@@ -67,19 +67,6 @@ pub(crate) fn size_in_bits(value: &Number) -> u64 {
     }
 }
 
-/// Compares `bits` against the budget, wording the error for whichever of the two
-/// callers below is asking: a value already computed occupies a size, while a
-/// computation not yet run only has a predicted one.
-fn check_bits(bits: u128, limits: Limits, phrase: &str) -> anyhow::Result<()> {
-    if bits > u128::from(limits.max_value_bits) {
-        return Err(anyhow!(
-            "Runtime error: the result {phrase} about {bits} bits, over the size limit of {} bits.",
-            limits.max_value_bits
-        ));
-    }
-    Ok(())
-}
-
 /// Rejects a value that has already been computed and turned out too large.
 ///
 /// This is the budget's guarantee: it measures the value in hand, so it holds
@@ -88,8 +75,16 @@ fn check_bits(bits: u128, limits: Limits, phrase: &str) -> anyhow::Result<()> {
 ///
 /// # Errors
 /// When the value exceeds `limits.max_value_bits`.
-pub(crate) fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
-    check_bits(u128::from(size_in_bits(value)), limits, "occupies")
+pub(crate) fn check_size(value: &Number, limits: Limits) -> Result<(), EvalError> {
+    let bits = u128::from(size_in_bits(value));
+    if bits > u128::from(limits.max_value_bits) {
+        return Err(EvalError::ValueTooLarge {
+            bits,
+            limit: limits.max_value_bits,
+            span: None,
+        });
+    }
+    Ok(())
 }
 
 /// Rejects a computation whose result was predicted to be too large, before it runs.
@@ -100,8 +95,15 @@ pub(crate) fn check_size(value: &Number, limits: Limits) -> anyhow::Result<()> {
 ///
 /// # Errors
 /// When `predicted_bits` exceeds `limits.max_value_bits`.
-pub(crate) fn check_predicted_size(predicted_bits: u128, limits: Limits) -> anyhow::Result<()> {
-    check_bits(predicted_bits, limits, "would need")
+pub(crate) fn check_predicted_size(predicted_bits: u128, limits: Limits) -> Result<(), EvalError> {
+    if predicted_bits > u128::from(limits.max_value_bits) {
+        return Err(EvalError::ComputationTooLarge {
+            predicted_bits,
+            limit: limits.max_value_bits,
+            span: None,
+        });
+    }
+    Ok(())
 }
 
 /// Predicts the bit length of `n!` without computing it, via Stirling's series:
@@ -262,9 +264,22 @@ mod tests {
     }
 
     #[test]
-    fn test_check_rejects_above_the_budget_and_accepts_at_it() {
+    fn test_the_two_checks_report_two_different_conditions() {
         let limits = Limits { max_value_bits: 64 };
         assert!(check_predicted_size(64, limits).is_ok());
-        assert!(check_predicted_size(65, limits).is_err());
+        assert!(matches!(
+            check_predicted_size(65, limits),
+            Err(EvalError::ComputationTooLarge {
+                predicted_bits: 65,
+                limit: 64,
+                ..
+            })
+        ));
+
+        let big = Number::NaturalNumber(BigInt::from(1u8) << 65);
+        assert!(matches!(
+            check_size(&big, limits),
+            Err(EvalError::ValueTooLarge { limit: 64, .. })
+        ));
     }
 }
