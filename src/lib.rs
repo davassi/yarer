@@ -31,7 +31,7 @@
 //!
 //! let session: Session = Session::init();
 //! let expr = Expression::compile("1/cos(x^2)").unwrap();
-//! session.set("x",1);
+//! session.set("x",1).unwrap();
 //!
 //! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
@@ -43,10 +43,10 @@
 //! # let session: Session = Session::init();
 //! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
-//! session.set("x",-1);
+//! session.set("x",-1).unwrap();
 //! println!("The result is {}", expr.eval(&session).unwrap());
 //!
-//! session.setf("x",0.001);
+//! session.setf("x",0.001).unwrap();
 //! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
 //!

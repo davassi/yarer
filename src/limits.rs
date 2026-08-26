@@ -26,6 +26,7 @@ use num_traits::ToPrimitive;
 
 /// Resource bounds applied while evaluating an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Limits {
     /// The largest value any intermediate or final result may occupy, in bits.
     /// Every value pushed onto the evaluation stack is measured against it,
@@ -55,6 +56,20 @@ impl Default for Limits {
         Limits {
             max_value_bits: 1 << 20,
         }
+    }
+}
+
+impl Limits {
+    /// The same limits with a different size budget.
+    ///
+    /// ```
+    /// # use yarer::limits::Limits;
+    /// let tight = Limits::default().with_max_value_bits(4096);
+    /// ```
+    #[must_use]
+    pub fn with_max_value_bits(mut self, bits: u64) -> Limits {
+        self.max_value_bits = bits;
+        self
     }
 }
 

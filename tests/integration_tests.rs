@@ -16,13 +16,13 @@ fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
 #[test]
 fn test_a_compiled_expression_survives_a_change_of_variable() {
     let session = Session::init();
-    session.set("x", 2);
+    session.set("x", 2).expect("not a constant");
     let expr = Expression::compile("x*3").expect("compiles");
     assert_eq!(
         expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(6))
     );
-    session.set("x", 5);
+    session.set("x", 5).expect("not a constant");
     assert_eq!(
         expr.eval(&session).unwrap(),
         Number::NaturalNumber(BigInt::from(15))
@@ -31,9 +31,7 @@ fn test_a_compiled_expression_survives_a_change_of_variable() {
 
 #[test]
 fn test_the_size_limit_reports_which_check_refused_the_value() {
-    let session = Session::with_limits(Limits {
-        max_value_bits: 128,
-    });
+    let session = Session::with_limits(Limits::default().with_max_value_bits(128));
     let expr = Expression::compile("2^10000").expect("compiles");
     assert!(matches!(
         expr.eval(&session),
@@ -234,7 +232,7 @@ fn test_programmatic() {
     let expr = Expression::compile("x ^ 2").unwrap();
 
     for i in 1..=64 {
-        session.set("x", i);
+        session.set("x", i).expect("not a constant");
 
         let result: Number = expr.eval(&session).unwrap();
 
@@ -250,7 +248,7 @@ fn test_sharing_session() {
     let res = Expression::compile("x ^ 2").unwrap();
     let res2 = Expression::compile("x! - (x-1)!").unwrap();
 
-    session.set("x", 10);
+    session.set("x", 10).expect("not a constant");
 
     if let (Ok(a), Ok(b)) = (res.eval(&session), res2.eval(&session)) {
         assert!(a == Number::NaturalNumber(BigInt::from(100)));
@@ -263,7 +261,7 @@ fn test_sharing_session() {
 #[test]
 fn test_session_set() {
     let session = Session::init();
-    session.set("x", 4);
+    session.set("x", 4).expect("not a constant");
     let expr = Expression::compile("x+2*3/(4-5)").unwrap();
     let result = expr.eval(&session).unwrap();
     assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
@@ -391,7 +389,10 @@ fn test_large_integer_division_and_negative_power_do_not_panic() {
 #[test]
 fn test_builtin_constants_are_read_only() {
     let session = Session::init();
-    session.set("pi", 0);
+    assert!(matches!(
+        session.set("pi", 0),
+        Err(EvalError::ReadOnlyConstant { .. })
+    ));
 
     let expr = Expression::compile("pi").unwrap();
     let pi: f64 = expr.eval(&session).unwrap().try_into().unwrap();
@@ -528,7 +529,7 @@ fn test_large_power_is_exact() {
 #[test]
 fn test_setf_declares_a_decimal_variable() {
     let session = Session::init();
-    session.setf("r", 2.5);
+    session.setf("r", 2.5).expect("not a constant");
     let expr = Expression::compile("r*2").unwrap();
     let v: f64 = expr.eval(&session).unwrap().try_into().unwrap();
     assert!((v - 5.0).abs() < 1e-10);
@@ -606,7 +607,7 @@ fn test_legitimate_big_values_still_pass_the_default_limit() {
 
 #[test]
 fn test_the_limit_is_configurable() {
-    let session = Session::with_limits(Limits { max_value_bits: 64 });
+    let session = Session::with_limits(Limits::default().with_max_value_bits(64));
     let expr = Expression::compile("2^100").unwrap();
     assert!(
         expr.eval(&session).is_err(),
@@ -625,9 +626,7 @@ fn test_growth_through_multiplication_is_caught() {
     // from the multiplication, not from the power check firing again. 2^2000 is
     // actually 2001 bits (passes both checks); squaring it needs 4001 bits, over
     // budget, and only the post-hoc Mul check can catch that.
-    let session = Session::with_limits(Limits {
-        max_value_bits: 4000,
-    });
+    let session = Session::with_limits(Limits::default().with_max_value_bits(4000));
     let expr = Expression::compile("x=2^2000; x*x").unwrap();
     // ValueTooLarge is the post-hoc measurement; a prediction reports
     // ComputationTooLarge. Asserting which one is what makes the paragraph above
@@ -675,7 +674,7 @@ fn test_an_oversized_literal_is_refused() {
     // max_value_bits is documented as bounding the size of any intermediate or
     // final result. A literal pushed straight onto the stack is one of those, so
     // the budget has to apply to it as well, whatever produced it.
-    let session = Session::with_limits(Limits { max_value_bits: 32 });
+    let session = Session::with_limits(Limits::default().with_max_value_bits(32));
     let expr = Expression::compile("99999999999999999999").unwrap();
     assert!(matches!(
         expr.eval(&session),
@@ -697,8 +696,8 @@ fn test_an_oversized_variable_is_refused() {
     // the whole reason to call with_limits, and setf is a way in that does not
     // pass through any of the checked operators: 1e308 is stored as a ~1024-bit
     // integer, and reading it back needs no arithmetic at all.
-    let session = Session::with_limits(Limits { max_value_bits: 64 });
-    session.setf("x", 1e308);
+    let session = Session::with_limits(Limits::default().with_max_value_bits(64));
+    session.setf("x", 1e308).expect("not a constant");
 
     // Bare "x" is the case no other guard can catch: the value is pushed and
     // returned without a single operator running over it.
@@ -709,7 +708,7 @@ fn test_an_oversized_variable_is_refused() {
     ));
 
     // A variable inside the budget still reads back normally.
-    session.set("y", 7);
+    session.set("y", 7).expect("not a constant");
     let inside = Expression::compile("y*2").unwrap();
     assert_eq!(
         inside.eval(&session).unwrap(),
@@ -733,7 +732,7 @@ fn test_a_materialised_power_is_measured_not_just_predicted() {
     // 1. The powf path never consults the prediction at all: "2^0.5" is a
     //    non-integer exponent, so it converts to f64 and comes back as a
     //    rational of roughly 53 + 53 bits.
-    let tight = Session::with_limits(Limits { max_value_bits: 16 });
+    let tight = Session::with_limits(Limits::default().with_max_value_bits(16));
     let irrational = Expression::compile("2^0.5").unwrap();
     assert!(matches!(
         irrational.eval(&tight),
@@ -743,7 +742,7 @@ fn test_a_materialised_power_is_measured_not_just_predicted() {
     // 2. A negative exponent is predicted on the magnitude of base^|exponent|,
     //    but the value returned is the reciprocal, whose denominator counts too.
     //    "2^-1" predicts 2 bits and yields 1/2, which measures 1 + 2 = 3.
-    let two_bits = Session::with_limits(Limits { max_value_bits: 2 });
+    let two_bits = Session::with_limits(Limits::default().with_max_value_bits(2));
     let reciprocal = Expression::compile("2^-1").unwrap();
     assert!(matches!(
         reciprocal.eval(&two_bits),
@@ -752,7 +751,7 @@ fn test_a_materialised_power_is_measured_not_just_predicted() {
 
     // Three bits is exactly enough, which pins the boundary rather than just
     // asserting that something was refused.
-    let three_bits = Session::with_limits(Limits { max_value_bits: 3 });
+    let three_bits = Session::with_limits(Limits::default().with_max_value_bits(3));
     let fits = Expression::compile("2^-1").unwrap();
     assert_eq!(fits.eval(&three_bits).unwrap().to_string(), "0.5");
 }
@@ -766,7 +765,7 @@ fn test_a_function_result_is_measured_like_any_other_value() {
     // their inputs were measured. floor(exp(1))! returned 2 under a 1-bit budget
     // for exactly that reason: the factorial's predictive guard is a bit short at
     // n = 2, and 2 is a 2-bit operand that no checked arm would have admitted.
-    let one_bit = Session::with_limits(Limits { max_value_bits: 1 });
+    let one_bit = Session::with_limits(Limits::default().with_max_value_bits(1));
     for expr in ["exp(1)", "floor(exp(1))", "floor(exp(1))!"] {
         let compiled = Expression::compile(expr).unwrap();
         let err = compiled.eval(&one_bit).unwrap_err();
@@ -808,7 +807,7 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
     // A variable is size-checked as it is pushed, so a small budget rejects a
     // value the caller never supplied. This test exists so the 107-bit floor
     // quoted by Session::with_limits stays a measured number, not folklore.
-    let below_all = Session::with_limits(Limits { max_value_bits: 97 });
+    let below_all = Session::with_limits(Limits::default().with_max_value_bits(97));
     for name in ["pi", "e", "tau", "phi", "gamma"] {
         let err = Expression::compile(name)
             .unwrap()
@@ -827,15 +826,11 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
     // widest constant still does not fit, at it every constant does. Asserting
     // only the lower bound would pass for any number that happens to be too
     // small, which is how a figure like this drifts out of date unnoticed.
-    let one_short = Session::with_limits(Limits {
-        max_value_bits: 106,
-    });
+    let one_short = Session::with_limits(Limits::default().with_max_value_bits(106));
     let widest = Expression::compile("gamma").unwrap();
     assert!(widest.eval(&one_short).is_err(), "gamma fits in 106 bits?");
 
-    let exact = Session::with_limits(Limits {
-        max_value_bits: 107,
-    });
+    let exact = Session::with_limits(Limits::default().with_max_value_bits(107));
     for name in ["pi", "e", "tau", "phi", "gamma"] {
         let compiled = Expression::compile(name).unwrap();
         assert!(
@@ -985,4 +980,45 @@ fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
         matches!(err, ParseError::CommaInPlainBracket { .. }),
         "reported: {err:?}"
     );
+}
+
+#[test]
+fn test_setting_a_built_in_constant_is_refused_out_loud() {
+    let session = Session::init();
+    assert!(matches!(
+        session.set("pi", 3),
+        Err(EvalError::ReadOnlyConstant { .. })
+    ));
+    // And the refusal is real: pi is still pi.
+    let expr = Expression::compile("pi").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session).unwrap(),
+        Number::DecimalNumber(_)
+    ));
+}
+
+#[test]
+fn test_setting_a_variable_to_a_non_number_is_refused_out_loud() {
+    let session = Session::init();
+    assert!(matches!(
+        session.setf("x", f64::NAN),
+        Err(EvalError::NotFinite { .. })
+    ));
+    assert!(matches!(
+        session.setf("x", f64::INFINITY),
+        Err(EvalError::NotFinite { .. })
+    ));
+}
+
+#[test]
+fn test_one_expression_can_be_evaluated_under_two_budgets() {
+    let session = Session::init();
+    let expr = Expression::compile("2^64").expect("compiles");
+    assert!(expr.eval(&session).is_ok());
+    assert!(matches!(
+        expr.eval_with(&session, Limits::default().with_max_value_bits(8)),
+        Err(EvalError::ComputationTooLarge { .. })
+    ));
+    // The session's own budget is untouched by the tighter evaluation.
+    assert!(expr.eval(&session).is_ok());
 }

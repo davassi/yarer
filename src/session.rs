@@ -115,20 +115,20 @@ impl Session {
         BUILTIN_CONSTANTS.contains(&key)
     }
 
-    /// Declares and saves a new integer variable ([`Number::NaturalNumber`])
+    /// Declares or overwrites an integer variable.
     ///
     /// Example
     /// ``
-    ///     session.set("foo", 42);
+    ///     session.set("foo", 42).expect("not a constant");
     /// ``
     ///
-    pub fn set(&self, key: &str, value: i64) {
-        // A refusal is swallowed here only until Task 8, which turns `set` and
-        // `setf` into `Result`-returning functions. `assign` already decides it.
-        let _ = self.assign(key, Number::NaturalNumber(BigInt::from(value)));
+    /// # Errors
+    /// [`EvalError::ReadOnlyConstant`] when `key` names a built-in constant.
+    pub fn set(&self, key: &str, value: i64) -> Result<(), EvalError> {
+        self.assign(key, Number::NaturalNumber(BigInt::from(value)))
     }
 
-    /// Declares and saves a new variable from an [`f64`].
+    /// Declares or overwrites a variable from an [`f64`].
     ///
     /// The value decides the representation, not the setter. The rational is
     /// built through [`Number::decimal`], so an integral `f64` is stored as a
@@ -137,14 +137,16 @@ impl Session {
     ///
     /// Example
     /// ``
-    ///     session.setf("x", 1.5);
+    ///     session.setf("x", 1.5).expect("not a constant");
     /// ``
     ///
-    pub fn setf(&self, key: &str, value: f64) {
-        if let Some(value) = num_rational::BigRational::from_float(value) {
-            // Swallowed until Task 8, as in `set` above.
-            let _ = self.assign(key, Number::decimal(value));
-        }
+    /// # Errors
+    /// [`EvalError::ReadOnlyConstant`] when `key` names a built-in constant, and
+    /// [`EvalError::NotFinite`] for NaN or an infinity — which used to be accepted
+    /// silently and stored nothing.
+    pub fn setf(&self, key: &str, value: f64) -> Result<(), EvalError> {
+        let number = Number::try_from(value).map_err(|_| EvalError::NotFinite { value })?;
+        self.assign(key, number)
     }
 }
 
@@ -179,7 +181,7 @@ mod tests {
     #[test]
     fn test_session_set() {
         let session = Session::init();
-        session.set("x", 4);
+        session.set("x", 4).expect("not a constant");
         let result = eval(&session, "x+2*3/(4-5)");
         assert_eq!(result, Number::NaturalNumber(BigInt::from(-2)));
         assert!(
@@ -192,7 +194,7 @@ mod tests {
     #[test]
     fn test_session_setf() {
         let session = Session::init();
-        session.setf("x", 4.5);
+        session.setf("x", 4.5).expect("not a constant");
         assert_eq!(
             eval(&session, "x+2*3/(4-5)"),
             Number::DecimalNumber(num_rational::BigRational::from_float(-1.5).unwrap())

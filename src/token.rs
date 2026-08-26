@@ -481,7 +481,8 @@ impl PartialOrd for Number {
 
 /// Error returned when a [`Number`] cannot be converted into a fixed-size
 /// numeric type because the value falls outside that type's representable range.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ConversionError {
     /// The value does not fit in the requested target type.
     #[error("value '{value}' is out of range for target type {target}")]
@@ -490,6 +491,12 @@ pub enum ConversionError {
         value: String,
         /// The name of the target type that could not hold the value.
         target: &'static str,
+    },
+    /// The value is NaN or infinite, which has no rational representation.
+    #[error("{value} is not a finite number")]
+    NotFinite {
+        /// The offending value.
+        value: f64,
     },
 }
 
@@ -521,6 +528,20 @@ impl TryFrom<Number> for f64 {
                 value: n.to_string(),
                 target: "f64",
             })
+    }
+}
+
+/// Builds a [`Number`] from an [`f64`], refusing NaN and the infinities.
+///
+/// The value decides the variant, as everywhere else: an integral `f64`
+/// becomes a [`Number::NaturalNumber`].
+impl TryFrom<f64> for Number {
+    type Error = ConversionError;
+
+    fn try_from(value: f64) -> Result<Number, ConversionError> {
+        BigRational::from_float(value)
+            .map(Number::decimal)
+            .ok_or(ConversionError::NotFinite { value })
     }
 }
 
