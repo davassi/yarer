@@ -8,7 +8,7 @@ use crate::{
     parser::Parser,
     session::Session,
     shunting,
-    span::Spanned,
+    span::{Span, Spanned},
     token::{narrow_to_f64, Narrowing, Number, Operator, Token},
     validate,
 };
@@ -73,6 +73,52 @@ fn is_truthy(value: &Number) -> bool {
     value != &Number::NaturalNumber(BigInt::zero())
 }
 
+/// The two stacks the evaluation loop walks.
+///
+/// They are one type because they must stay in lockstep: every value pushed
+/// gets a variable slot beside it, and every pop takes both. That was
+/// maintained by hand at fifteen sites, and an arm that pushed a value without
+/// pushing `None` beside it would have desynchronised the assignment target for
+/// everything after it.
+struct Stacks {
+    values: VecDeque<Number>,
+    vars: VecDeque<Option<String>>,
+}
+
+impl Stacks {
+    fn new() -> Stacks {
+        Stacks {
+            values: VecDeque::new(),
+            vars: VecDeque::new(),
+        }
+    }
+
+    /// Pushes an operator's result: measured against the budget first, and with
+    /// no variable name beside it, because an operator's result is not an
+    /// assignable place.
+    ///
+    /// # Errors
+    /// [`EvalError::ValueTooLarge`] when the result exceeds the budget.
+    fn push_checked(&mut self, value: Number, limits: Limits) -> Result<(), EvalError> {
+        limits::check_size(&value, limits)?;
+        self.values.push_back(value);
+        self.vars.push_back(None);
+        Ok(())
+    }
+
+    /// Pushes a truth as this crate represents it — `1` or `0`, as in GNU bc.
+    ///
+    /// The size check inside is not decoration and is not unreachable: a
+    /// zero-bit budget refuses `0 == 0`, whose operands cost nothing and whose
+    /// answer costs one bit.
+    ///
+    /// # Errors
+    /// As [`Stacks::push_checked`].
+    fn push_truth(&mut self, truth: bool, limits: Limits) -> Result<(), EvalError> {
+        self.push_checked(boolean(truth), limits)
+    }
+}
+
 impl<'a> Expression<'a> {
     /// Compiles `source` into an expression.
     ///
@@ -107,11 +153,7 @@ impl<'a> Expression<'a> {
     /// # Errors
     /// As [`Expression::eval`].
     pub fn eval_with(&self, session: &Session, limits: Limits) -> Result<Number, EvalError> {
-        let zero: Number = Number::NaturalNumber(Zero::zero());
-        let minus_one: Number = Number::NaturalNumber(BigInt::from(-1));
-
-        let mut result_stack: VecDeque<Number> = VecDeque::new();
-        let mut var_stack: VecDeque<Option<String>> = VecDeque::new();
+        let mut stacks = Stacks::new();
         let mut last_result: Option<Number> = None;
 
         for t in &self.rpn {
@@ -127,218 +169,11 @@ impl<'a> Expression<'a> {
                     // literal too — otherwise a long enough literal is returned
                     // above the limit the caller asked for.
                     limits::check_size(n, limits).map_err(at)?;
-                    result_stack.push_back(n.clone());
-                    var_stack.push_back(None);
+                    stacks.values.push_back(n.clone());
+                    stacks.vars.push_back(None);
                 }
                 Token::Operator(op) => {
-                    let right_value: Number = result_stack
-                        .pop_back()
-                        .ok_or(EvalError::Malformed { span: Some(t.span) })?;
-
-                    var_stack.pop_back();
-
-                    let left_value = if op.is_unary() {
-                        zero.clone()
-                    } else {
-                        result_stack
-                            .pop_back()
-                            .ok_or(EvalError::Malformed { span: Some(t.span) })?
-                    };
-                    let left_var = if op.is_unary() {
-                        None
-                    } else {
-                        var_stack.pop_back().unwrap_or(None)
-                    };
-
-                    match op {
-                        Operator::Add => {
-                            let value = left_value + right_value;
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Sub => {
-                            let value = left_value - right_value;
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Mul => {
-                            let value = left_value * right_value;
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Div => {
-                            let value = left_value
-                                .checked_div(&right_value)
-                                .ok_or(EvalError::DivisionByZero { span: Some(t.span) })?;
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Pow => {
-                            result_stack.push_back(
-                                Self::power(left_value, right_value, limits).map_err(at)?,
-                            );
-                            var_stack.push_back(None);
-                        }
-                        Operator::Assign => {
-                            if let Some(var) = left_var {
-                                // `assign` decides the refusal, here and for
-                                // `set`/`setf` alike; the loop only supplies the
-                                // position the refusal happened at.
-                                session.assign(&var, right_value.clone()).map_err(at)?;
-
-                                result_stack.push_back(right_value);
-                                var_stack.push_back(None);
-                            } else {
-                                return Err(EvalError::AssignmentTargetMissing {
-                                    span: Some(t.span),
-                                });
-                            }
-                        }
-                        Operator::Fac => {
-                            // Factorial is defined on non-negative integers. It asks the
-                            // value, not the enum tag: floor(2.5) and 6/3 are integers.
-                            let n = right_value
-                                .as_integer()
-                                .ok_or(EvalError::FactorialNotNatural { span: Some(t.span) })?;
-                            if n < BigInt::zero() {
-                                return Err(EvalError::FactorialNotNatural { span: Some(t.span) });
-                            }
-                            let n = n.to_u64().ok_or(EvalError::FactorialOperandTooLarge {
-                                span: Some(t.span),
-                            })?;
-                            // Predict first, to refuse `999999999!` in
-                            // milliseconds rather than computing it...
-                            limits::check_predicted_size(
-                                limits::predicted_factorial_bits(n),
-                                limits,
-                            )
-                            .map_err(at)?;
-                            let res = Self::factorial_helper(n.into());
-                            // ...then measure what was actually built, because
-                            // the prediction is an asymptotic series rounded up
-                            // and is a bit short of the truth at `n = 2`. The
-                            // prediction buys the speed; this buys the exactness.
-                            let value = Number::NaturalNumber(res.into());
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Une => {
-                            //# unary neg
-                            result_stack.push_back(right_value * minus_one.clone());
-                            var_stack.push_back(None);
-                        }
-                        // The six comparisons, in the order the precedence
-                        // table lists them. Each asks `Number`'s own
-                        // `PartialOrd`, which Stage 1 made agree with
-                        // `PartialEq` by comparing mathematical value rather
-                        // than enum variant — so `2 == 6/3` is true here with
-                        // no code of its own.
-                        //
-                        // Every one of them ends in the same three lines the
-                        // arithmetic arms above end in, including the size
-                        // check — because the rule this crate keeps is that
-                        // every arm which pushes a value checks it.
-                        //
-                        // The design took that check to be unreachable here,
-                        // on the grounds that 1 and 0 occupy one bit. It is
-                        // not: `Limits::with_max_value_bits` has no lower
-                        // bound, so under a zero-bit budget `0 == 0` has two
-                        // operands costing nothing and an answer costing one,
-                        // and this line is what refuses it.
-                        Operator::Less => {
-                            let value = boolean(left_value < right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Greater => {
-                            let value = boolean(left_value > right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::LessEq => {
-                            let value = boolean(left_value <= right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::GreaterEq => {
-                            let value = boolean(left_value >= right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Equal => {
-                            let value = boolean(left_value == right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::NotEqual => {
-                            let value = boolean(left_value != right_value);
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        // The three binary logical operators. Both operands
-                        // are already on the stack when the arm runs, so the
-                        // `&&` below short-circuits nothing: the right-hand
-                        // expression was evaluated before this line was
-                        // reached. That is a property of the stack machine and
-                        // not of this line — `0 and (2^1000000)` evaluates its
-                        // right operand and is refused by the size budget
-                        // rather than answering 0.
-                        Operator::And => {
-                            let value = boolean(is_truthy(&left_value) && is_truthy(&right_value));
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Or => {
-                            let value = boolean(is_truthy(&left_value) || is_truthy(&right_value));
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Xor => {
-                            let value = boolean(is_truthy(&left_value) != is_truthy(&right_value));
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        // Prefix, so the operand is the one `is_unary` left in
-                        // `right_value`; `left_value` is the placeholder zero.
-                        Operator::Not => {
-                            let value = boolean(!is_truthy(&right_value));
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                        Operator::Mod => {
-                            // The zero check is `checked_div`'s, which is the
-                            // one place this crate decides what a division by
-                            // zero is — consolidated there from three copies.
-                            let quotient = left_value
-                                .checked_div(&right_value)
-                                .ok_or(EvalError::DivisionByZero { span: Some(t.span) })?;
-                            // `From<Number> for BigInt` truncates toward zero
-                            // rather than flooring, which is exactly what makes
-                            // `-7 mod 3` be -1 and not 2 — the convention of C,
-                            // Rust, bc and BASIC, every language whose spelling
-                            // this borrows.
-                            let truncated = Number::NaturalNumber(BigInt::from(quotient));
-                            let value = left_value - right_value * truncated;
-                            limits::check_size(&value, limits).map_err(at)?;
-                            result_stack.push_back(value);
-                            var_stack.push_back(None);
-                        }
-                    }
+                    apply_operator(session, *op, t.span, limits, &mut stacks)?;
                 }
                 Token::Variable(v) => {
                     let var_name = v.to_lowercase();
@@ -353,16 +188,17 @@ impl<'a> Expression<'a> {
                     // so without this an expression that only reads a variable
                     // returns it however large it is.
                     limits::check_size(&n, limits).map_err(at)?;
-                    result_stack.push_back(n);
-                    var_stack.push_back(Some(var_name));
+                    stacks.values.push_back(n);
+                    stacks.vars.push_back(Some(var_name));
                 }
                 Token::Function(fun) => {
-                    let value: Number = result_stack
+                    let value: Number = stacks
+                        .values
                         .pop_back()
                         .ok_or(EvalError::Malformed { span: Some(t.span) })?;
-                    var_stack.pop_back();
+                    stacks.vars.pop_back();
 
-                    let result = functions::eval(*fun, value, &mut result_stack, &mut var_stack)
+                    let result = functions::eval(*fun, value, &mut stacks.values, &mut stacks.vars)
                         .map_err(at)?;
                     // Every arm that pushes a value checks it. A function result
                     // is bounded by construction — the built-ins all route
@@ -372,21 +208,21 @@ impl<'a> Expression<'a> {
                     // how `floor(exp(1))!` slipped a 2-bit result past a 1-bit
                     // budget through the factorial's predictive guard.
                     limits::check_size(&result, limits).map_err(at)?;
-                    result_stack.push_back(result);
-                    var_stack.push_back(None);
+                    stacks.values.push_back(result);
+                    stacks.vars.push_back(None);
                 }
                 Token::SemiColon => {
                     // A chained segment just ended. A well-formed segment leaves exactly
                     // one value on the stack; capture it as the running result, then reset
                     // for the next segment. An empty segment (e.g. a leading ';') is a no-op.
-                    if !result_stack.is_empty() {
-                        if result_stack.len() != 1 {
+                    if !stacks.values.is_empty() {
+                        if stacks.values.len() != 1 {
                             return Err(EvalError::Malformed { span: Some(t.span) });
                         }
-                        last_result = result_stack.pop_back();
+                        last_result = stacks.values.pop_back();
                     }
-                    result_stack.clear();
-                    var_stack.clear();
+                    stacks.values.clear();
+                    stacks.vars.clear();
                 }
                 _ => {
                     return Err(EvalError::Malformed { span: Some(t.span) });
@@ -396,128 +232,294 @@ impl<'a> Expression<'a> {
 
         // A trailing ';' leaves the working stack empty: fall back to the last
         // completed segment's value rather than reporting a spurious error.
-        if result_stack.is_empty() {
+        if stacks.values.is_empty() {
             return last_result.ok_or(EvalError::Malformed { span: None });
         }
 
-        if result_stack.len() != 1 || var_stack.len() != 1 {
+        if stacks.values.len() != 1 || stacks.vars.len() != 1 {
             return Err(EvalError::Malformed { span: None });
         }
 
-        result_stack
+        stacks
+            .values
             .pop_back()
             .ok_or(EvalError::Malformed { span: None })
     }
+}
 
-    fn factorial_helper(n: BigUint) -> BigUint {
-        let mut acc = BigUint::one();
-        let mut current = BigUint::one();
+/// Applies one operator to the top of the stacks.
+///
+/// Split out of [`Expression::eval_with`] because that function's job is to
+/// walk the compiled sequence and dispatch by token kind, and this one's is to
+/// know what each operator means. Sixteen arms of the former buried the latter.
+///
+/// # Errors
+/// Any [`EvalError`] an operator can raise: a division by zero, a value over
+/// the budget, an assignment with no target, and so on.
+fn apply_operator(
+    session: &Session,
+    op: Operator,
+    span: Span,
+    limits: Limits,
+    stacks: &mut Stacks,
+) -> Result<(), EvalError> {
+    // Errors raised inside `limits.rs` and `functions.rs` know nothing of
+    // positions — this closure is how the operator stamps them with the token
+    // it was holding when it called out.
+    let at = |e: EvalError| e.at(span);
 
-        while current <= n {
-            acc *= &current;
-            current += BigUint::one();
+    let right_value: Number = stacks
+        .values
+        .pop_back()
+        .ok_or(EvalError::Malformed { span: Some(span) })?;
+    stacks.vars.pop_back();
+
+    let (left_value, left_var) = if op.is_unary() {
+        (Number::NaturalNumber(BigInt::zero()), None)
+    } else {
+        let value = stacks
+            .values
+            .pop_back()
+            .ok_or(EvalError::Malformed { span: Some(span) })?;
+        (value, stacks.vars.pop_back().unwrap_or(None))
+    };
+
+    match op {
+        Operator::Add => stacks
+            .push_checked(left_value + right_value, limits)
+            .map_err(at)?,
+        Operator::Sub => stacks
+            .push_checked(left_value - right_value, limits)
+            .map_err(at)?,
+        Operator::Mul => stacks
+            .push_checked(left_value * right_value, limits)
+            .map_err(at)?,
+        Operator::Div => {
+            let value = left_value
+                .checked_div(&right_value)
+                .ok_or(EvalError::DivisionByZero { span: Some(span) })?;
+            stacks.push_checked(value, limits).map_err(at)?;
         }
+        // `power` applies the budget itself, through a prediction that refuses
+        // `2^100000000` without computing it, so it does not go through
+        // `push_checked`.
+        Operator::Pow => {
+            let value = power(left_value, right_value, limits).map_err(at)?;
+            stacks.values.push_back(value);
+            stacks.vars.push_back(None);
+        }
+        Operator::Assign => {
+            let Some(var) = left_var else {
+                return Err(EvalError::AssignmentTargetMissing { span: Some(span) });
+            };
+            // `assign` decides the refusal, here and for `set`/`setf` alike;
+            // this only supplies the position it happened at.
+            session.assign(&var, right_value.clone()).map_err(at)?;
+            stacks.values.push_back(right_value);
+            stacks.vars.push_back(None);
+        }
+        Operator::Fac => {
+            let value = factorial(&right_value, span, limits)?;
+            stacks.push_checked(value, limits).map_err(at)?;
+        }
+        Operator::Une => stacks
+            .push_checked(
+                right_value * Number::NaturalNumber(BigInt::from(-1)),
+                limits,
+            )
+            .map_err(at)?,
+        // The six comparisons ask `Number`'s own `PartialOrd`, which Stage 1
+        // made agree with `PartialEq` by comparing mathematical value rather
+        // than enum variant — so `2 == 6/3` is true with no code of its own.
+        Operator::Less => stacks
+            .push_truth(left_value < right_value, limits)
+            .map_err(at)?,
+        Operator::Greater => stacks
+            .push_truth(left_value > right_value, limits)
+            .map_err(at)?,
+        Operator::LessEq => stacks
+            .push_truth(left_value <= right_value, limits)
+            .map_err(at)?,
+        Operator::GreaterEq => stacks
+            .push_truth(left_value >= right_value, limits)
+            .map_err(at)?,
+        Operator::Equal => stacks
+            .push_truth(left_value == right_value, limits)
+            .map_err(at)?,
+        Operator::NotEqual => stacks
+            .push_truth(left_value != right_value, limits)
+            .map_err(at)?,
+        // Both operands are already on the stack, so the `&&` below
+        // short-circuits nothing: the right-hand expression was evaluated
+        // before this arm was reached.
+        Operator::And => stacks
+            .push_truth(is_truthy(&left_value) && is_truthy(&right_value), limits)
+            .map_err(at)?,
+        Operator::Or => stacks
+            .push_truth(is_truthy(&left_value) || is_truthy(&right_value), limits)
+            .map_err(at)?,
+        Operator::Xor => stacks
+            .push_truth(is_truthy(&left_value) != is_truthy(&right_value), limits)
+            .map_err(at)?,
+        // Prefix, so the operand is the one `is_unary` left in `right_value`.
+        Operator::Not => stacks
+            .push_truth(!is_truthy(&right_value), limits)
+            .map_err(at)?,
+        Operator::Mod => {
+            // The zero check is `checked_div`'s, the one place this crate
+            // decides what a division by zero is.
+            let quotient = left_value
+                .checked_div(&right_value)
+                .ok_or(EvalError::DivisionByZero { span: Some(span) })?;
+            // `From<Number> for BigInt` truncates toward zero rather than
+            // flooring, which is what makes `-7 mod 3` be -1 and not 2 — the
+            // convention of C, Rust, bc and BASIC.
+            let truncated = Number::NaturalNumber(BigInt::from(quotient));
+            stacks
+                .push_checked(left_value - right_value * truncated, limits)
+                .map_err(at)?;
+        }
+    }
+    Ok(())
+}
 
-        acc
+/// Factorial, defined on non-negative integers.
+///
+/// Predicts the size first, so that `999999999!` is refused in microseconds
+/// rather than computed, and measures the result afterwards, because the
+/// prediction is an asymptotic series rounded up and is a bit short of the
+/// truth at `n = 2`. The prediction buys the speed; the measurement buys the
+/// exactness. Both are load-bearing, and the register records what happened
+/// when one of them was missing.
+///
+/// # Errors
+/// [`EvalError::FactorialNotNatural`], [`EvalError::FactorialOperandTooLarge`],
+/// or [`EvalError::ValueTooLarge`].
+fn factorial(operand: &Number, span: Span, limits: Limits) -> Result<Number, EvalError> {
+    // Factorial is defined on non-negative integers. It asks the value, not the
+    // enum tag: floor(2.5) and 6/3 are integers.
+    let n = operand
+        .as_integer()
+        .ok_or(EvalError::FactorialNotNatural { span: Some(span) })?;
+    if n < BigInt::zero() {
+        return Err(EvalError::FactorialNotNatural { span: Some(span) });
+    }
+    let n = n
+        .to_u64()
+        .ok_or(EvalError::FactorialOperandTooLarge { span: Some(span) })?;
+    limits::check_predicted_size(limits::predicted_factorial_bits(n), limits)
+        .map_err(|e| e.at(span))?;
+    Ok(Number::NaturalNumber(factorial_helper(n.into()).into()))
+}
+
+fn factorial_helper(n: BigUint) -> BigUint {
+    let mut acc = BigUint::one();
+    let mut current = BigUint::one();
+
+    while current <= n {
+        acc *= &current;
+        current += BigUint::one();
     }
 
-    fn power(left_value: Number, right_value: Number, limits: Limits) -> Result<Number, EvalError> {
-        let value = if let Some(exponent) = right_value.as_integer() {
-            Self::power_integer(left_value, exponent, limits)?
-        } else {
-            let base = power_operand_to_f64(&left_value)?;
-            let exponent = power_operand_to_f64(&right_value)?;
-            decimal_from_f64(base.powf(exponent), EvalError::InvalidPower { span: None })?
-        };
+    acc
+}
 
-        // The prediction inside `power_integer` is an optimisation: it buys the
-        // right to refuse `10^100000000` without computing it. It is not the
-        // guarantee, and on two counts it cannot be. It never runs on the `powf`
-        // path at all, and on the integer path it predicts the magnitude of
-        // `base^|exponent|` while a negative exponent returns the reciprocal,
-        // whose denominator `size_in_bits` also counts — `2^-1` predicts 2 bits
-        // and yields `1/2`, which measures 3. Measuring the value we actually
-        // built is what makes the budget exact, on every path.
-        limits::check_size(&value, limits)?;
-        Ok(value)
+fn power(left_value: Number, right_value: Number, limits: Limits) -> Result<Number, EvalError> {
+    let value = if let Some(exponent) = right_value.as_integer() {
+        power_integer(left_value, exponent, limits)?
+    } else {
+        let base = power_operand_to_f64(&left_value)?;
+        let exponent = power_operand_to_f64(&right_value)?;
+        decimal_from_f64(base.powf(exponent), EvalError::InvalidPower { span: None })?
+    };
+
+    // The prediction inside `power_integer` is an optimisation: it buys the
+    // right to refuse `10^100000000` without computing it. It is not the
+    // guarantee, and on two counts it cannot be. It never runs on the `powf`
+    // path at all, and on the integer path it predicts the magnitude of
+    // `base^|exponent|` while a negative exponent returns the reciprocal,
+    // whose denominator `size_in_bits` also counts — `2^-1` predicts 2 bits
+    // and yields `1/2`, which measures 3. Measuring the value we actually
+    // built is what makes the budget exact, on every path.
+    limits::check_size(&value, limits)?;
+    Ok(value)
+}
+
+fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> Result<Number, EvalError> {
+    if exponent.is_zero() {
+        return Ok(Number::NaturalNumber(BigInt::one()));
     }
 
-    fn power_integer(base: Number, exponent: BigInt, limits: Limits) -> Result<Number, EvalError> {
-        if exponent.is_zero() {
-            return Ok(Number::NaturalNumber(BigInt::one()));
-        }
+    let is_negative = exponent < BigInt::zero();
+    let magnitude = if is_negative { -exponent } else { exponent };
+    let exponent = magnitude
+        .to_biguint()
+        .ok_or(EvalError::InvalidPower { span: None })?;
 
-        let is_negative = exponent < BigInt::zero();
-        let magnitude = if is_negative { -exponent } else { exponent };
-        let exponent = magnitude
-            .to_biguint()
-            .ok_or(EvalError::InvalidPower { span: None })?;
+    // A degenerate base short-circuits inside the prediction, before the
+    // exponent's own magnitude is ever consulted, so `1^n` stays evaluable for
+    // an `n` no `u64` could hold. Only a base that actually grows can make the
+    // exponent unrepresentable, and that is the one case this message fits.
+    let predicted_bits = limits::predicted_power_bits(&base, &exponent)
+        .ok_or(EvalError::ExponentTooLarge { span: None })?;
+    limits::check_predicted_size(predicted_bits, limits)?;
 
-        // A degenerate base short-circuits inside the prediction, before the
-        // exponent's own magnitude is ever consulted, so `1^n` stays evaluable for
-        // an `n` no `u64` could hold. Only a base that actually grows can make the
-        // exponent unrepresentable, and that is the one case this message fits.
-        let predicted_bits = limits::predicted_power_bits(&base, &exponent)
-            .ok_or(EvalError::ExponentTooLarge { span: None })?;
-        limits::check_predicted_size(predicted_bits, limits)?;
-
-        match base {
-            Number::NaturalNumber(base) => {
-                let value = Number::NaturalNumber(Self::pow_big_int(base, exponent));
-                if is_negative {
-                    Number::NaturalNumber(BigInt::one())
-                        .checked_div(&value)
-                        .ok_or(EvalError::DivisionByZero { span: None })
-                } else {
-                    Ok(value)
-                }
+    match base {
+        Number::NaturalNumber(base) => {
+            let value = Number::NaturalNumber(pow_big_int(base, exponent));
+            if is_negative {
+                Number::NaturalNumber(BigInt::one())
+                    .checked_div(&value)
+                    .ok_or(EvalError::DivisionByZero { span: None })
+            } else {
+                Ok(value)
             }
-            Number::DecimalNumber(base) => {
-                // `pow_big_rational` accumulates via `*=` on `BigRational`,
-                // which reduces its own result, so `value` is already reduced.
-                let value = Number::decimal_unchecked(Self::pow_big_rational(base, exponent));
-                if is_negative {
-                    Number::NaturalNumber(BigInt::one())
-                        .checked_div(&value)
-                        .ok_or(EvalError::DivisionByZero { span: None })
-                } else {
-                    Ok(value)
-                }
+        }
+        Number::DecimalNumber(base) => {
+            // `pow_big_rational` accumulates via `*=` on `BigRational`,
+            // which reduces its own result, so `value` is already reduced.
+            let value = Number::decimal_unchecked(pow_big_rational(base, exponent));
+            if is_negative {
+                Number::NaturalNumber(BigInt::one())
+                    .checked_div(&value)
+                    .ok_or(EvalError::DivisionByZero { span: None })
+            } else {
+                Ok(value)
             }
         }
     }
+}
 
-    fn pow_big_int(mut base: BigInt, mut exponent: BigUint) -> BigInt {
-        let mut result = BigInt::one();
+fn pow_big_int(mut base: BigInt, mut exponent: BigUint) -> BigInt {
+    let mut result = BigInt::one();
 
-        while !exponent.is_zero() {
-            if exponent.is_odd() {
-                result *= &base;
-            }
-            exponent >>= 1_usize;
-            if !exponent.is_zero() {
-                base = &base * &base;
-            }
+    while !exponent.is_zero() {
+        if exponent.is_odd() {
+            result *= &base;
         }
-
-        result
+        exponent >>= 1_usize;
+        if !exponent.is_zero() {
+            base = &base * &base;
+        }
     }
 
-    fn pow_big_rational(mut base: BigRational, mut exponent: BigUint) -> BigRational {
-        let mut result = BigRational::from_integer(BigInt::one());
+    result
+}
 
-        while !exponent.is_zero() {
-            if exponent.is_odd() {
-                result *= &base;
-            }
-            exponent >>= 1_usize;
-            if !exponent.is_zero() {
-                base = &base * &base;
-            }
+fn pow_big_rational(mut base: BigRational, mut exponent: BigUint) -> BigRational {
+    let mut result = BigRational::from_integer(BigInt::one());
+
+    while !exponent.is_zero() {
+        if exponent.is_odd() {
+            result *= &base;
         }
-
-        result
+        exponent >>= 1_usize;
+        if !exponent.is_zero() {
+            base = &base * &base;
+        }
     }
+
+    result
 }
 
 #[cfg(test)]
@@ -532,10 +534,7 @@ mod tests {
 
     #[test]
     fn test_factorial() {
-        assert_eq!(
-            Expression::factorial_helper(BigUint::from(5u8)),
-            BigUint::from(120u16)
-        );
+        assert_eq!(factorial_helper(BigUint::from(5u8)), BigUint::from(120u16));
     }
 
     #[test]
