@@ -2337,6 +2337,29 @@ fn test_a_value_landing_exactly_on_the_budget_is_admitted() {
 }
 ```
 
+One carried from Task 7's review. `Number::checked_div`'s doc comment claims its
+zero test catches a zero in either variant, because `Number`'s `PartialEq` compares
+mathematical value rather than the enum tag. Nothing enforces that claim: both of
+its tests pass a `NaturalNumber` zero, so a regression to variant-only matching
+would keep the whole suite green while reopening the panic inside `num-rational`
+that this stage closed. `Number`'s variants are public, so an externally built
+`DecimalNumber` holding zero is constructible even though nothing inside the crate
+produces one.
+
+```rust
+/// The doc comment on `checked_div` says the zero test reaches across both
+/// variants. This is what makes that a claim the suite can falsify: a
+/// `DecimalNumber` holding zero, which no internal path produces — `decimal`
+/// normalises it — but which any caller can build, because the variants are
+/// public.
+#[test]
+fn test_checked_div_catches_a_zero_in_either_variant() {
+    let one = Number::NaturalNumber(BigInt::from(1));
+    let decimal_zero = Number::DecimalNumber(BigRational::new_raw(BigInt::zero(), BigInt::from(3)));
+    assert_eq!(one.checked_div(&decimal_zero), None);
+}
+```
+
 Two more, carried from Task 6's review, where the type system now knows
 something the tests do not:
 
