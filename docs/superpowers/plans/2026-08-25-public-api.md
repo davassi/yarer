@@ -2242,6 +2242,30 @@ being handled — the point of the whole stage:
 //! ```
 ```
 
+- [ ] **Step 3b: Recover the module docs the narrowing hid**
+
+Making nine modules private took their module-level documentation out of
+`cargo doc` with them: a private module gets no index page, so its `//!` block is
+unreachable from the published docs. Most of it was internal anyway, but two
+pieces were written for the crate's users and should survive at the crate root:
+
+- `src/error.rs`'s framing — why there are two error kinds rather than one, that
+  `ParseError` comes from `compile` and `EvalError` from `eval`, and that a
+  caller wanting one type across both converts into `Error`. The actionable half
+  (`#[non_exhaustive]` needs a `_` arm) is not lost, because rustdoc prints that
+  on each enum's own page; the reasoning is.
+- `src/limits.rs`'s "predict to avoid the work, verify to be correct" — but that
+  one is still reachable, because `limits` stays a public module. Leave it.
+
+Fold the first into the crate-root documentation, next to the error-handling
+example. Do not restore it by making `error` public again: the module has no
+other public items, and a module kept public only to carry prose is a worse
+answer than moving the prose.
+
+While there, add one line to `Expression`'s own doc noting that `Clone` copies
+the compiled token sequence, so a reader knows what it costs before reaching for
+it in a loop.
+
 - [ ] **Step 4: Rewrite the README**
 
 Update the API examples the same way, add the declared-changes table from the
