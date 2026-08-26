@@ -9,6 +9,12 @@ edition = "2021"
 authors = ["Copyright © 2024–2025 Gianluigi Davassi <gianluigi.davassi@gmail.com>"]
 categories = ["command-line-interface","algorithms","mathematics","parsing"]
 readme = "README.md"
+# The design specs and implementation plans under docs/superpowers/ are
+# internal process artifacts — they are addressed to whoever implements a
+# stage, not to anyone consuming the crate — and they are half the package by
+# size. They stay in the repository. docs/tech-debt.md does ship: what a crate
+# is known to be weak at is worth knowing before depending on it.
+exclude = ["docs/superpowers/**", ".superpowers/**", ".idea/**"]
 keywords = [
   "evaluator",
   "math",
