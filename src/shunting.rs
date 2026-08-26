@@ -139,29 +139,43 @@ pub(crate) fn to_rpn<'a>(
             Token::Operator(op) => {
                 let op1: Spanned<Token<'_>> = t.clone();
 
-                // Peeking with `while let` rather than testing `is_empty()` and
-                // unwrapping: the emptiness check and the value that depends on
-                // it are then the same expression, and cannot drift apart.
-                // Both `expect`s below rest on the same fact — the loop
-                // condition has just read `last()` and got `Some`, and nothing
-                // between there and the `pop` touches `operators_stack`, so
-                // neither can be `None`.
-                while let Some(op2) = operators_stack.last() {
-                    match op2.node {
-                        Token::Operator(op2_op) => {
-                            if Token::compare_operator_priority(op, op2_op) {
+                // A prefix operator arrives where a value arrives, so nothing
+                // on the stack has its right operand yet and nothing may be
+                // popped for it — the precedence comparison below does not
+                // apply. `Une` is stronger than anything it could displace and
+                // never noticed; `not` is weaker than `+`, `-`, `*`, `/` and
+                // `^`, and without this `1 - not 0` would pop the `-` and hand
+                // the evaluator `1 - 0 not`, a binary minus with one operand.
+                //
+                // A postfix operator is a different matter: `!` consumes the
+                // value on its left, which is already in the output, so popping
+                // on its behalf is correct and it is not covered here.
+                if !op.is_prefix() {
+                    // Peeking with `while let` rather than testing `is_empty()` and
+                    // unwrapping: the emptiness check and the value that depends on
+                    // it are then the same expression, and cannot drift apart.
+                    // Both `expect`s below rest on the same fact — the loop
+                    // condition has just read `last()` and got `Some`, and nothing
+                    // between there and the `pop` touches `operators_stack`, so
+                    // neither can be `None`.
+                    while let Some(op2) = operators_stack.last() {
+                        match op2.node {
+                            Token::Operator(op2_op) => {
+                                if Token::compare_operator_priority(op, op2_op) {
+                                    postfix_stack.push_back(
+                                        operators_stack.pop().expect("the stack was not empty"),
+                                    );
+                                } else {
+                                    break;
+                                }
+                            }
+                            Token::Function(_) => {
                                 postfix_stack.push_back(
                                     operators_stack.pop().expect("the stack was not empty"),
                                 );
-                            } else {
-                                break;
                             }
+                            _ => break,
                         }
-                        Token::Function(_) => {
-                            postfix_stack
-                                .push_back(operators_stack.pop().expect("the stack was not empty"));
-                        }
-                        _ => break,
                     }
                 }
                 operators_stack.push(op1);

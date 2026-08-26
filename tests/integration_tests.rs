@@ -1415,3 +1415,200 @@ fn test_assignment_is_untouched_by_the_comparison_operators() {
         Number::NaturalNumber(BigInt::zero())
     );
 }
+
+/// Zero is false and everything else is true — negatives and fractions
+/// included, which is why the rule asks the value and not the variant.
+#[test]
+fn test_the_logical_operators_read_any_non_zero_value_as_true() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("1 and 1", 1),
+        ("1 and 0", 0),
+        ("0 and 1", 0),
+        ("0 and 0", 0),
+        ("1 or 0", 1),
+        ("0 or 1", 1),
+        ("0 or 0", 0),
+        ("1 xor 0", 1),
+        ("0 xor 1", 1),
+        ("1 xor 1", 0),
+        ("0 xor 0", 0),
+        // Truth is not confined to 1: a fraction, a negative and a value
+        // arriving as a decimal are all true, and only zero is false.
+        ("0.5 or 0", 1),
+        ("(0-1) and 1", 1),
+        ("1/3 and 2", 1),
+        ("0.0 or 0", 0),
+        ("(1-1) or 0", 0),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// Case-insensitive, like every other word in the language.
+#[test]
+fn test_the_word_operators_are_case_insensitive() {
+    let session = Session::init();
+    for source in ["1 and 1", "1 AND 1", "1 And 1", "1 aNd 1"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(1)),
+            "for {source}"
+        );
+    }
+}
+
+/// The one break this work introduces: five words stop being variable names,
+/// in every casing. Refused as a misplaced operator, which is what they now
+/// are, rather than read as a variable that silently evaluates to zero.
+#[test]
+fn test_the_new_words_are_reserved() {
+    for source in ["and = 5", "or + 1", "xor", "MOD = 1", "1 + and", "not = 2"] {
+        assert!(
+            matches!(
+                Expression::compile(source),
+                Err(ParseError::ExpectedValue { .. })
+            ),
+            "{source} should be refused as a misplaced operator, got {:?}",
+            Expression::compile(source)
+        );
+    }
+}
+
+#[test]
+fn test_not_negates_truth() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("not 0", 1),
+        ("not 1", 0),
+        ("not 5", 0),
+        ("not 0.5", 0),
+        ("not not 1", 1),
+        ("not (1 < 2)", 0),
+        ("not (0-1)", 0),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// `not` is prefix. In operator position it is not a binary operator, and the
+/// diagnosis must say so where it happens rather than surfacing later as a
+/// complaint about a stack — which is the exact defect `max(1,*2)` had before
+/// the previous stage.
+///
+/// The second half is what makes this a test of the validator's explicit `not`
+/// arm rather than of anything else. On its own the first half proves nothing:
+/// before `not` was a word operator it was a *variable*, and a variable in
+/// operator position is refused by the same rule with the same message and the
+/// same span. Only the contrast separates them — `and` reaches the catch-all
+/// that accepts any operator as binary and is fine here, `not` must not.
+#[test]
+fn test_not_in_operator_position_is_diagnosed_where_it_occurs() {
+    let err = Expression::compile("1 not 2").unwrap_err();
+    assert!(
+        matches!(err, ParseError::ExpectedOperator { ref found, span }
+            if found == "not" && (span.start, span.end) == (2, 5)),
+        "got {err:?}"
+    );
+
+    for binary in ["1 and 2", "1 or 2", "1 xor 2", "1 mod 2"] {
+        assert!(
+            Expression::compile(binary).is_ok(),
+            "{binary} is a binary operator and belongs in operator position"
+        );
+    }
+}
+
+/// A prefix operator appears where a value appears, so every operator already
+/// waiting on the shunting yard's stack is still short of its own right
+/// operand and none of them may be displaced — whatever the precedence
+/// arithmetic says.
+///
+/// `Une` never had to state this: at the second-strongest level it is stronger
+/// than anything it could displace. `not` is the weakest of the three unary
+/// operators, and without the rule `1 - not 0` pops the `-` before its right
+/// operand exists, producing the RPN `1 - 0 not` — which fails in the
+/// evaluator with a positionless "malformed expression" for an input that is
+/// nothing of the kind.
+#[test]
+fn test_a_prefix_operator_never_displaces_one_that_is_still_waiting() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("1 - not 0", 0),
+        ("1 + not 0", 2),
+        ("2 * not 0", 2),
+        ("2 ^ not 3", 1),
+        ("0 - not 1", 0),
+        // `not` is weaker than `+`, so it takes the whole sum to its right.
+        ("not 0 + 1", 0),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// Truncating toward zero, as in C, Rust, bc and BASIC — every language whose
+/// spelling this borrows. The result takes the sign of the dividend. All four
+/// sign combinations, because getting one right by accident is easy and
+/// getting all four right by accident is not.
+#[test]
+fn test_mod_truncates_toward_zero() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("7 mod 3", 1),
+        ("-7 mod 3", -1),
+        ("7 mod -3", 1),
+        ("-7 mod -3", -1),
+        ("6 mod 3", 0),
+        ("2 mod 5", 2),
+        ("-2 mod 5", -2),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// Defined on rationals, not only integers, because the formula is the same
+/// one. The brackets are not decoration: `1/2 mod 1/3` shares a precedence
+/// level with `/` and would group as `((1/2) mod 1) / 3` — which happens to
+/// give the same 1/6 and would make this test pass under a reading it does not
+/// mean to assert.
+#[test]
+fn test_mod_works_on_rationals() {
+    resolve_decimal!("7.5 mod 2", 1.5);
+    resolve_decimal!("(1/2) mod (1/3)", 1.0 / 6.0);
+    resolve_decimal!("(-7.5) mod 2", -1.5);
+}
+
+/// Its zero check is the crate's one zero check, so it reports the same error
+/// division does.
+#[test]
+fn test_mod_by_zero_is_the_same_error_as_dividing_by_zero() {
+    let session = Session::init();
+    for source in ["7 mod 0", "7 mod 0.0", "7.5 mod (1-1)"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert!(
+            matches!(expr.eval(&session), Err(EvalError::DivisionByZero { .. })),
+            "for {source}"
+        );
+    }
+}

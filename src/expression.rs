@@ -46,6 +46,16 @@ fn boolean(truth: bool) -> Number {
     Number::NaturalNumber(BigInt::from(u8::from(truth)))
 }
 
+/// Zero is false and everything else is true — including negative and
+/// fractional values, which is why this asks the value rather than the variant.
+///
+/// [`Number`]'s [`PartialEq`] compares mathematically, so a `DecimalNumber`
+/// holding zero is false too — exactly as [`Number::checked_div`] relies on
+/// for its divisor test.
+fn is_truthy(value: &Number) -> bool {
+    value != &Number::NaturalNumber(BigInt::zero())
+}
+
 impl<'a> Expression<'a> {
     /// Compiles `source` into an expression.
     ///
@@ -255,16 +265,57 @@ impl<'a> Expression<'a> {
                             result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
-                        Operator::And
-                        | Operator::Or
-                        | Operator::Xor
-                        | Operator::Not
-                        | Operator::Mod => {
-                            // Unreachable: the tokeniser cannot yet spell any of
-                            // these, so no expression compiles to one. The tasks
-                            // that follow replace this arm with the real ones;
-                            // it exists so that this one compiles on its own.
-                            return Err(EvalError::Malformed { span: Some(t.span) });
+                        // The three binary logical operators. Both operands
+                        // are already on the stack when the arm runs, so the
+                        // `&&` below short-circuits nothing: the right-hand
+                        // expression was evaluated before this line was
+                        // reached. That is a property of the stack machine and
+                        // not of this line — `0 and (2^1000000)` evaluates its
+                        // right operand and is refused by the size budget
+                        // rather than answering 0.
+                        Operator::And => {
+                            let value = boolean(is_truthy(&left_value) && is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Or => {
+                            let value = boolean(is_truthy(&left_value) || is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Xor => {
+                            let value = boolean(is_truthy(&left_value) != is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        // Prefix, so the operand is the one `is_unary` left in
+                        // `right_value`; `left_value` is the placeholder zero.
+                        Operator::Not => {
+                            let value = boolean(!is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Mod => {
+                            // The zero check is `checked_div`'s, which is the
+                            // one place this crate decides what a division by
+                            // zero is — consolidated there from three copies.
+                            let quotient = left_value
+                                .checked_div(&right_value)
+                                .ok_or(EvalError::DivisionByZero { span: Some(t.span) })?;
+                            // `From<Number> for BigInt` truncates toward zero
+                            // rather than flooring, which is exactly what makes
+                            // `-7 mod 3` be -1 and not 2 — the convention of C,
+                            // Rust, bc and BASIC, every language whose spelling
+                            // this borrows.
+                            let truncated = Number::NaturalNumber(BigInt::from(quotient));
+                            let value = left_value - right_value * truncated;
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
                         }
                     }
                 }

@@ -89,6 +89,23 @@ impl Operator {
     pub(crate) const fn is_unary(self) -> bool {
         matches!(self, Operator::Une | Operator::Fac | Operator::Not)
     }
+
+    /// Whether this operator is written before its operand.
+    ///
+    /// A prefix operator appears where a *value* appears, so every operator
+    /// already waiting on the shunting yard's stack is still short of its own
+    /// right operand and none of them may be displaced — whatever the
+    /// precedence arithmetic says. [`Operator::Une`] never had to state this:
+    /// at the second-strongest level it is stronger than anything it could
+    /// displace. [`Operator::Not`] is the weakest of the three unary
+    /// operators, and without the rule `1 - not 0` pops the `-` before its
+    /// right operand exists.
+    ///
+    /// [`Operator::Fac`] is unary but *postfix* — it consumes the value on its
+    /// left — so it is not one of these, and popping on its behalf is correct.
+    pub(crate) const fn is_prefix(self) -> bool {
+        matches!(self, Operator::Une | Operator::Not)
+    }
 }
 
 /// The "associativity" of an operator dictates the direction
@@ -263,6 +280,26 @@ impl Token<'_> {
     /// This asks about the whole token rather than its first character, and is
     /// asked before [`Token::from_operator`] is: the first character of `<=` is
     /// `<`, which on its own is a perfectly good comparison.
+    /// Converts a whole token to the [`Operator`] it spells, for the operators
+    /// written as words, or [`None`] if it spells none of them.
+    ///
+    /// Case-insensitive, because every other word in this language is: `and`,
+    /// `And` and `AND` all work, exactly as `sin`, `Sin` and `SIN` do. Lower
+    /// case is the canonical spelling for documentation and error messages.
+    ///
+    /// Asked before [`Token::get_some`] and long before the fall-through to
+    /// [`Token::Variable`], which is what makes these five words reserved.
+    fn from_word_operator(t: &str) -> Option<Operator> {
+        match t.to_lowercase().as_str() {
+            "and" => Some(Operator::And),
+            "or" => Some(Operator::Or),
+            "xor" => Some(Operator::Xor),
+            "not" => Some(Operator::Not),
+            "mod" => Some(Operator::Mod),
+            _ => None,
+        }
+    }
+
     fn from_two_char_operator(t: &str) -> Option<Operator> {
         match t {
             "<=" => Some(Operator::LessEq),
@@ -353,6 +390,10 @@ impl Token<'_> {
 
         if let Some(v) = parse_decimal_literal(t) {
             return Token::Operand(Number::decimal(v));
+        }
+
+        if let Some(op) = Token::from_word_operator(t) {
+            return Token::Operator(op);
         }
 
         if let Some(fun) = Token::get_some(t) {
