@@ -3,7 +3,7 @@ use num_rational::BigRational;
 use num_traits::{One, ToPrimitive, Zero};
 use std::{
     fmt::Display,
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, Mul, Sub},
 };
 
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
@@ -17,10 +17,15 @@ use std::{
 /// describe the same number.
 ///
 /// [`Number::decimal`] is the constructor that maintains this, degrading an
-/// integral rational to [`Number::NaturalNumber`]; everything inside the crate
-/// builds decimals through it. Both variants are nevertheless publicly
-/// constructible, so code that builds a [`Number::DecimalNumber`] directly is
-/// responsible for upholding the rule itself — prefer [`Number::decimal`].
+/// integral rational to [`Number::NaturalNumber`], and it is the one to reach
+/// for from outside. Four paths inside the crate — `checked_div`, the shared
+/// `Add`/`Sub`/`Mul` closure, `power_integer` and `decimal_from_f64` — use a
+/// `decimal_unchecked` that skips the reduction, because `BigRational` has
+/// already reduced the value they hand it; the invariant holds on those paths
+/// too, just without paying for a second gcd. Both variants are nevertheless
+/// publicly constructible, so code that builds a [`Number::DecimalNumber`]
+/// directly is responsible for upholding the rule itself — prefer
+/// [`Number::decimal`].
 #[derive(Debug, Clone)]
 pub enum Number {
     /// an Integer [BigInt]
@@ -32,7 +37,7 @@ pub enum Number {
 /// A binary or unary Math [`Operator`]
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Operator {
+pub(crate) enum Operator {
     /// Binary Add ('1+1')
     Add,
     /// Binary Sub ('2-1')
@@ -55,7 +60,7 @@ pub enum Operator {
 /// in which operations of equal precedence are evaluated when they appear
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Associate {
+pub(crate) enum Associate {
     /// If an operator is left-associative, then operations are evaluated from left to right.
     /// Example: -a^b, -1, -(-3)
     ///
@@ -69,7 +74,7 @@ pub enum Associate {
 /// Just [`Token::Bracket`]s. They change the order of evaluation of an expression.
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Bracket {
+pub(crate) enum Bracket {
     /// either '(' or '['
     Open,
     /// either ')' or ']'
@@ -86,7 +91,7 @@ pub enum Bracket {
 /// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
 #[derive(Debug, PartialEq, Clone)]
-pub enum Token<'a> {
+pub(crate) enum Token<'a> {
     /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
     /// Operators +,-,/,*,^...
@@ -105,7 +110,15 @@ pub enum Token<'a> {
 
 /// The [`MathFunction`] enum. It represents a common math function.
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+/// `#[non_exhaustive]`, and for a sharper reason than the other public enums
+/// here: this is the one the README explicitly commits to growing ("More to
+/// come!"), and it is public only because it appears inside
+/// [`crate::ParseError::WrongArity`]. Payload inside a `#[non_exhaustive]`
+/// error enum still breaks a caller who matched it exhaustively, so adding a
+/// function in a later stage would have been a breaking change by the back
+/// door. Match with a `_` arm.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[non_exhaustive]
 pub enum MathFunction {
     /// Trigonometric Sine
     Sin,
@@ -143,7 +156,14 @@ pub enum MathFunction {
     Pdf,
     /// Standard Normal cumulative distribution function
     Cdf,
-    /// No function expected
+    /// No function expected.
+    ///
+    /// It cannot occur through parsing: `Token::get_some` never yields it, so
+    /// no expression compiles to a `MathFunction::None`, and the evaluator
+    /// answers [`crate::EvalError::Malformed`] if one somehow arrives. It is
+    /// public and unconstructible-by-parsing, which the register proposes
+    /// removing; that is a design change rather than a fix, so it stays for
+    /// now.
     None,
 }
 
@@ -248,46 +268,49 @@ impl Token<'_> {
     /// "x"   -> [`Token::Variable`]
     ///
     #[must_use]
-    pub fn tokenize(t: &str) -> Option<Token<'_>> {
-        match t.chars().next() {
-            Some(s) => match s {
+    pub(crate) fn tokenize(t: &str) -> Token<'_> {
+        if let Some(s) = t.chars().next() {
+            match s {
                 c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=' | '×' | '÷') => {
-                    return Some(Token::from_operator(c).unwrap())
+                    return Token::from_operator(c).unwrap()
                 }
-                b @ ('(' | ')' | '[' | ']') => return Some(Token::from_bracket(b).unwrap()),
-                ',' => return Some(Token::Comma),
-                ';' => return Some(Token::SemiColon),
+                b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
+                ',' => return Token::Comma,
+                ';' => return Token::SemiColon,
                 _ => (), // continue the flow
-            },
-            None => return None,
+            }
         }
 
         if let Ok(v) = t.parse::<BigInt>() {
-            return Some(Token::Operand(Number::NaturalNumber(v)));
+            return Token::Operand(Number::NaturalNumber(v));
         }
 
         if let Some(v) = parse_decimal_literal(t) {
-            return Some(Token::Operand(Number::decimal(v)));
+            return Token::Operand(Number::decimal(v));
         }
 
         if let Some(fun) = Token::get_some(t) {
-            return Some(Token::Function(fun));
+            return Token::Function(fun);
         }
 
-        Some(Token::Variable(t))
+        Token::Variable(t)
     }
 
-    /// Founding out the priority and the associative precedence of an operator
+    /// The precedence and associativity of an operator.
     ///
-    fn operator_priority(o: Token) -> (u8, Associate) {
+    /// This takes an [`Operator`] rather than a [`Token`] because that is its
+    /// domain. The wider parameter is what forced the `_ => panic!` arm it used to
+    /// carry: a function that accepts brackets and commas has to say something when
+    /// it gets one. With the narrow type the match is exhaustive and there is
+    /// nothing left to refuse.
+    fn operator_priority(o: Operator) -> (u8, Associate) {
         match o {
-            Token::Operator(Operator::Add | Operator::Sub) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Mul | Operator::Div) => (2, Associate::LeftAssociative),
-            Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
-            Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
-            Token::Operator(Operator::Fac) => (5, Associate::LeftAssociative),
-            Token::Operator(Operator::Eql) => (0, Associate::RightAssociative),
-            _ => panic!("Operator '{o}' not recognised. This must not happen!"),
+            Operator::Add | Operator::Sub => (1, Associate::LeftAssociative),
+            Operator::Mul | Operator::Div => (2, Associate::LeftAssociative),
+            Operator::Pow => (3, Associate::RightAssociative),
+            Operator::Une => (4, Associate::RightAssociative),
+            Operator::Fac => (5, Associate::LeftAssociative),
+            Operator::Eql => (0, Associate::RightAssociative),
         }
     }
 
@@ -299,7 +322,7 @@ impl Token<'_> {
     /// unary - has priority over ^
     ///
     #[must_use]
-    pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
+    pub(crate) fn compare_operator_priority(op1: Operator, op2: Operator) -> bool {
         let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
         let v_op2: (u8, Associate) = self::Token::operator_priority(op2);
 
@@ -315,8 +338,35 @@ impl Number {
     /// This is the only sanctioned way to build a [`Number::DecimalNumber`]:
     /// it upholds the invariant that a decimal never carries a denominator of 1,
     /// so a given mathematical value has exactly one representation.
+    ///
+    /// `value` is taken by value, matching every other public numeric
+    /// constructor on [`Number`], even though the body only ever borrows it
+    /// through [`BigRational::reduced`] (which clones internally regardless);
+    /// taking `&BigRational` here would save nothing and would put this
+    /// constructor's signature out of step with its callers and its sibling
+    /// [`Number::decimal_unchecked`].
     #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn decimal(value: BigRational) -> Number {
+        let value = value.reduced();
+        if value.denom().is_one() {
+            Number::NaturalNumber(value.to_integer())
+        } else {
+            Number::DecimalNumber(value)
+        }
+    }
+
+    /// Builds a decimal number without reducing first, degrading to
+    /// [`Number::NaturalNumber`] when the rational is already a whole number.
+    ///
+    /// Measurement showed `.reduced()` costing well over 5% on both the
+    /// harness's small- and large-rational cases (see the commit that
+    /// introduced this function for the numbers), so [`Number::decimal`]'s
+    /// gcd is skipped here. Safe only where `value` is already known to be in
+    /// lowest terms — every caller must be a path where `value` came straight
+    /// out of `BigRational`'s own arithmetic, which reduces its own results.
+    #[must_use]
+    pub(crate) fn decimal_unchecked(value: BigRational) -> Number {
         if value.denom().is_one() {
             Number::NaturalNumber(value.to_integer())
         } else {
@@ -360,6 +410,15 @@ impl PartialEq for Number {
 
 /// Let's display a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
 ///
+/// A [`Number::DecimalNumber`] is shown as an `f64` when one can carry it, and
+/// as `numer/denom` when one cannot. The test for "cannot" is not
+/// `to_f64() == None`: [`BigRational::to_f64`] answers `Some(±inf)` on overflow
+/// and `Some(0.0)` on underflow rather than `None`, so a fallback guarded on
+/// `None` alone never fires and an exactly held value such as `(10^400)/3`
+/// prints as `inf`. The predicate below asks instead whether the `f64` is a
+/// faithful rendering of the rational. Its second half is what keeps a genuine
+/// zero printing as `0`: only a *non-zero* rational that has underflowed to
+/// `0.0` needs the ratio.
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -367,7 +426,10 @@ impl Display for Number {
             Number::DecimalNumber(v) => {
                 if v.denom().is_one() {
                     write!(f, "{}", v.to_integer())
-                } else if let Some(fl) = v.to_f64() {
+                } else if let Some(fl) = v
+                    .to_f64()
+                    .filter(|x| x.is_finite() && (*x != 0.0 || v.numer().is_zero()))
+                {
                     write!(f, "{fl}")
                 } else {
                     write!(f, "{}/{}", v.numer(), v.denom())
@@ -384,7 +446,7 @@ impl Display for Number {
 /// 3. Decimal (op) Decimal returns Decimal
 /// 4. Decimal (op) Natural returns Decimal
 ///
-/// (op) can be [Add], [Mul], [Sub], [Div], [BitXor], ...
+/// (op) can be [Add], [Mul], [Sub], [BitXor], ...
 ///
 /// We define 2 closures: 1 specialised for Natural Numbers and the other one specialised for Decimals.
 ///
@@ -393,15 +455,20 @@ where
     NF: Fn(BigInt, BigInt) -> BigInt,
     DF: Fn(BigRational, BigRational) -> BigRational,
 {
+    // `df` is always `+`, `-` or `*` on `BigRational`, and `num-rational`
+    // reduces the result of every one of its own arithmetic ops — so the
+    // value handed to `Number::decimal_unchecked` here is already reduced.
     match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::decimal(df(BigRational::from(v1), v2))
+            Number::decimal_unchecked(df(BigRational::from(v1), v2))
         }
         (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-            Number::decimal(df(v1, BigRational::from(v2)))
+            Number::decimal_unchecked(df(v1, BigRational::from(v2)))
         }
-        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(df(v1, v2)),
+        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
+            Number::decimal_unchecked(df(v1, v2))
+        }
     }
 }
 
@@ -429,22 +496,38 @@ impl Mul for Number {
     }
 }
 
-impl Div for Number {
-    type Output = Number;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+impl Number {
+    /// Divides, or answers [`None`] when `rhs` is zero.
+    ///
+    /// There is no `impl Div for Number`: division is partial, and a
+    /// `std::ops` impl has nowhere to say so. [`Add`], [`Sub`] and [`Mul`] are
+    /// total and stay.
+    ///
+    /// The zero test compares by value, so it catches a `DecimalNumber(0/1)`
+    /// as well as a `NaturalNumber(0)` — [`Number`]'s [`PartialEq`] has
+    /// compared by value since Stage 1.
+    #[must_use]
+    pub fn checked_div(&self, rhs: &Number) -> Option<Number> {
+        if rhs == &Number::NaturalNumber(BigInt::zero()) {
+            return None;
+        }
+        // `BigRational::new` reduces on construction, and `/` on `BigRational`
+        // reduces its result the same way `+`, `-` and `*` do — every branch
+        // here hands `Number::decimal_unchecked` an already-reduced value.
+        Some(match (self.clone(), rhs.clone()) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::decimal(BigRational::new(v1, v2))
+                Number::decimal_unchecked(BigRational::new(v1, v2))
             }
             (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-                Number::decimal(BigRational::from(v1) / v2)
+                Number::decimal_unchecked(BigRational::from(v1) / v2)
             }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::decimal(v1 / BigRational::from(v2))
+                Number::decimal_unchecked(v1 / BigRational::from(v2))
             }
-            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(v1 / v2),
-        }
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
+                Number::decimal_unchecked(v1 / v2)
+            }
+        })
     }
 }
 
@@ -467,7 +550,14 @@ impl PartialOrd for Number {
 
 /// Error returned when a [`Number`] cannot be converted into a fixed-size
 /// numeric type because the value falls outside that type's representable range.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+///
+/// This was [`Eq`] in 0.2.0 and is not any more: [`ConversionError::NotFinite`]
+/// carries an `f64`, which is not [`Eq`], and no manual implementation could
+/// honestly supply one. [`PartialEq`] is unchanged, so `==` still works — only
+/// an `Eq` bound stops compiling. The loss is declared in the README's
+/// migration table, which is where the 0.3.0 CHANGELOG is written from.
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
 pub enum ConversionError {
     /// The value does not fit in the requested target type.
     #[error("value '{value}' is out of range for target type {target}")]
@@ -476,6 +566,12 @@ pub enum ConversionError {
         value: String,
         /// The name of the target type that could not hold the value.
         target: &'static str,
+    },
+    /// The value is NaN or infinite, which has no rational representation.
+    #[error("{value} is not a finite number")]
+    NotFinite {
+        /// The offending value.
+        value: f64,
     },
 }
 
@@ -507,6 +603,20 @@ impl TryFrom<Number> for f64 {
                 value: n.to_string(),
                 target: "f64",
             })
+    }
+}
+
+/// Builds a [`Number`] from an [`f64`], refusing NaN and the infinities.
+///
+/// The value decides the variant, as everywhere else: an integral `f64`
+/// becomes a [`Number::NaturalNumber`].
+impl TryFrom<f64> for Number {
+    type Error = ConversionError;
+
+    fn try_from(value: f64) -> Result<Number, ConversionError> {
+        BigRational::from_float(value)
+            .map(Number::decimal)
+            .ok_or(ConversionError::NotFinite { value })
     }
 }
 
@@ -632,17 +742,17 @@ mod tests {
     #[test]
     fn test_tokenise_operators() {
         let v = vec!["1", "+", "2.1"];
-        assert_eq!(Token::tokenize(v[1]), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize(v[1]), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize(v[0]),
-            Some(Token::Operand(Number::NaturalNumber(One::one())))
+            Token::Operand(Number::NaturalNumber(One::one()))
         );
         assert_eq!(
             Token::tokenize(v[2]),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(21),
                 BigInt::from(10)
-            ))))
+            )))
         );
     }
 
@@ -687,36 +797,36 @@ mod tests {
 
     #[test]
     fn test_tokenize_valid() {
-        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
+            Token::Operand(Number::NaturalNumber(BigInt::from(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(157),
                 BigInt::from(50)
-            ))))
+            )))
         );
-        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 
     #[test]
     fn test_tokenize_vec_valid() {
-        assert_eq!(Token::tokenize("+"), Some(Token::Operator(Operator::Add)));
+        assert_eq!(Token::tokenize("+"), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize("100"),
-            Some(Token::Operand(Number::NaturalNumber(BigInt::from(100))))
+            Token::Operand(Number::NaturalNumber(BigInt::from(100)))
         );
         assert_eq!(
             Token::tokenize("3.14"),
-            Some(Token::Operand(Number::DecimalNumber(BigRational::new(
+            Token::Operand(Number::DecimalNumber(BigRational::new(
                 BigInt::from(157),
                 BigInt::from(50)
-            ))))
+            )))
         );
-        assert_eq!(Token::tokenize("("), Some(Token::Bracket(Bracket::Open)));
+        assert_eq!(Token::tokenize("("), Token::Bracket(Bracket::Open));
     }
 
     #[test]
@@ -762,31 +872,31 @@ mod tests {
     #[test]
     fn test_operator_priority() {
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Add)),
+            Token::operator_priority(Operator::Add),
             (1, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Sub)),
+            Token::operator_priority(Operator::Sub),
             (1, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Mul)),
+            Token::operator_priority(Operator::Mul),
             (2, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Div)),
+            Token::operator_priority(Operator::Div),
             (2, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Pow)),
+            Token::operator_priority(Operator::Pow),
             (3, Associate::RightAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Une)),
+            Token::operator_priority(Operator::Une),
             (4, Associate::RightAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Fac)),
+            Token::operator_priority(Operator::Fac),
             (5, Associate::LeftAssociative)
         );
     }
@@ -794,37 +904,55 @@ mod tests {
     #[test]
     fn test_operator_priority_for_assignment() {
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Eql)),
+            Token::operator_priority(Operator::Eql),
             (0, Associate::RightAssociative)
+        );
+    }
+
+    /// The reason this exists: `a / b` panicked here, inside a public `std::ops`
+    /// impl, on an input any caller can supply.
+    #[test]
+    fn test_dividing_by_zero_answers_none_instead_of_panicking() {
+        let one = Number::NaturalNumber(BigInt::from(1));
+        let zero = Number::NaturalNumber(BigInt::from(0));
+        assert_eq!(one.checked_div(&zero), None);
+        assert_eq!(
+            Number::decimal(BigRational::new(BigInt::from(1), BigInt::from(2))).checked_div(&zero),
+            None
+        );
+    }
+
+    #[test]
+    fn test_checked_div_still_divides() {
+        let six = Number::NaturalNumber(BigInt::from(6));
+        let three = Number::NaturalNumber(BigInt::from(3));
+        assert_eq!(
+            six.checked_div(&three),
+            Some(Number::NaturalNumber(BigInt::from(2)))
         );
     }
 
     #[test]
     fn test_tokenize_edge_cases() {
-        assert_eq!(Token::tokenize(""), None);
-        assert_eq!(Token::tokenize("["), Some(Token::Bracket(Bracket::Open)));
-        assert_eq!(Token::tokenize("]"), Some(Token::Bracket(Bracket::Close)));
-        assert_eq!(Token::tokenize(";"), Some(Token::SemiColon));
-        assert_eq!(Token::tokenize(","), Some(Token::Comma));
-        assert_eq!(Token::tokenize("×"), Some(Token::Operator(Operator::Mul)));
-        assert_eq!(Token::tokenize("÷"), Some(Token::Operator(Operator::Div)));
-        assert_eq!(Token::tokenize("foo"), Some(Token::Variable("foo")));
+        // The regex feeding `tokenize` never produces an empty match, so this
+        // is unreachable in the real pipeline; the total function still needs
+        // a defined answer, and an empty chunk falls through to a variable
+        // with an empty name.
+        assert_eq!(Token::tokenize(""), Token::Variable(""));
+        assert_eq!(Token::tokenize("["), Token::Bracket(Bracket::Open));
+        assert_eq!(Token::tokenize("]"), Token::Bracket(Bracket::Close));
+        assert_eq!(Token::tokenize(";"), Token::SemiColon);
+        assert_eq!(Token::tokenize(","), Token::Comma);
+        assert_eq!(Token::tokenize("×"), Token::Operator(Operator::Mul));
+        assert_eq!(Token::tokenize("÷"), Token::Operator(Operator::Div));
+        assert_eq!(Token::tokenize("foo"), Token::Variable("foo"));
     }
 
     #[test]
     fn test_tokenize_functions_are_case_insensitive() {
-        assert_eq!(
-            Token::tokenize("SIN"),
-            Some(Token::Function(MathFunction::Sin))
-        );
-        assert_eq!(
-            Token::tokenize("Cos"),
-            Some(Token::Function(MathFunction::Cos))
-        );
-        assert_eq!(
-            Token::tokenize("log10"),
-            Some(Token::Function(MathFunction::Log))
-        );
+        assert_eq!(Token::tokenize("SIN"), Token::Function(MathFunction::Sin));
+        assert_eq!(Token::tokenize("Cos"), Token::Function(MathFunction::Cos));
+        assert_eq!(Token::tokenize("log10"), Token::Function(MathFunction::Log));
     }
 
     #[test]
@@ -864,6 +992,40 @@ mod tests {
         // 1/3 is not a finite decimal, so it is rendered via its f64 approximation
         let third = Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(3)));
         assert_eq!(third.to_string(), format!("{}", 1.0_f64 / 3.0));
+    }
+
+    /// `(10^400)/3` and `1/(10^400)` are held exactly and compute correctly —
+    /// only their printed form was wrong. `BigRational::to_f64` answers
+    /// `Some(inf)` and `Some(0.0)` rather than `None` for them, so the
+    /// `numer/denom` fallback, guarded on `None`, never ran: the first printed
+    /// `inf` and the second `0`, with nothing signalling the loss.
+    #[test]
+    fn test_display_falls_back_to_a_ratio_when_no_f64_can_carry_the_value() {
+        let huge = BigInt::from(10).pow(400_u32);
+
+        let overflows = Number::DecimalNumber(BigRational::new(huge.clone(), BigInt::from(3)));
+        assert_eq!(overflows.to_string(), format!("{huge}/3"));
+
+        let underflows = Number::DecimalNumber(BigRational::new(BigInt::from(1), huge.clone()));
+        assert_eq!(underflows.to_string(), format!("1/{huge}"));
+
+        // Negative overflow takes the same route: `to_f64` answers Some(-inf).
+        let negative = Number::DecimalNumber(BigRational::new(-huge.clone(), BigInt::from(3)));
+        assert_eq!(negative.to_string(), format!("-{huge}/3"));
+    }
+
+    /// The other direction of the same predicate. A rational that underflows to
+    /// `0.0` must take the fallback, but one that *is* zero must still print
+    /// `0` — the two are indistinguishable by their `f64` alone, which is why
+    /// the numerator is consulted as well.
+    #[test]
+    fn test_display_still_prints_a_genuine_zero_as_zero() {
+        assert_eq!(Number::NaturalNumber(BigInt::zero()).to_string(), "0");
+        // new_raw skips reduction, so this reaches the f64 branch with a
+        // denominator that is not 1 — the only way a zero gets that far.
+        let unreduced_zero =
+            Number::DecimalNumber(BigRational::new_raw(BigInt::zero(), BigInt::from(3)));
+        assert_eq!(unreduced_zero.to_string(), "0");
     }
 
     #[test]

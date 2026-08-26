@@ -6,69 +6,126 @@
 //! # Example of usage of the library:
 //!
 //!  ```
-//!     use yarer::{rpn_resolver::RpnResolver, session::Session, token::Number};
+//!     use yarer::{Expression, Session, Number};
 //!
 //!     let exp = "((10 + 5) - 3 * ( 9 / 3 )) + 2";
 //!     let session = Session::init();
-//!     let mut resolver: RpnResolver = session.process(&exp);
+//!     let expr = Expression::compile(exp).unwrap();
 //!
-//!     let result: Number = resolver.resolve().unwrap();
+//!     let result: Number = expr.eval(&session).unwrap();
 //!     println!("The result of {} is {}", exp, result);
 //!  ```
 //!
-//! All that's needed is to create a new instance of the [`RpnResolver`] and hand over the expression to be analysed.
-//! The library returns a [`Number`](crate::token::Number), and the value decides which variant, not the
+//! All that's needed is to compile the expression into an [`Expression`] and evaluate it against a [`Session`].
+//! The library returns a [`Number`], and the value decides which variant, not the
 //! expression that produced it. An integral result always comes back as
-//! [`Number::NaturalNumber`](crate::token::Number::NaturalNumber), whatever it came from — `2.5+2.5` is `5`,
-//! `1/cos(0)` is `1`, `6/3` is `2`. [`Number::DecimalNumber`](crate::token::Number::DecimalNumber) appears only
+//! [`Number::NaturalNumber`], whatever it came from — `2.5+2.5` is `5`,
+//! `1/cos(0)` is `1`, `6/3` is `2`. [`Number::DecimalNumber`] appears only
 //! when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore
 //! has exactly one representation.
 //!
 //! Yarer can handle also variables and functions. Here an example:
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session};
+//! # use yarer::{Expression, Session};
 //!
 //! let session: Session = Session::init();
-//! let mut resolver: RpnResolver = session.process("1/cos(x^2)");
-//! session.set("x",1);
+//! let expr = Expression::compile("1/cos(x^2)").unwrap();
+//! session.set("x",1).unwrap();
 //!
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
 //!
 //! and of course, the expression can be re-evaluated if the variable changes.
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session};
+//! # use yarer::{Expression, Session};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
+//! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
-//! session.set("x",-1);
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! session.set("x",-1).unwrap();
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //!
-//! session.setf("x",0.001);
-//! println!("The result is {}", resolver.resolve().unwrap());
+//! session.setf("x",0.001).unwrap();
+//! println!("The result is {}", expr.eval(&session).unwrap());
 //! ```
 //!
 //! The result can be simply converted into a i32 or a f64 (if decimal) simply with
 //!
 //! ```
-//! # use yarer::{rpn_resolver::RpnResolver, session::Session, token::Number};
+//! # use yarer::{Expression, Session, Number};
 //! # let session: Session = Session::init();
-//! # let mut resolver: RpnResolver = session.process("1/cos(x^2)");
+//! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
-//! let result: Number = resolver.resolve().unwrap();
+//! let result: Number = expr.eval(&session).unwrap();
 //!
 //! let int : i32 = result.clone().try_into().unwrap();
 //! // or
 //! let float : f64 = result.try_into().unwrap();
 //! ```
 //!
+//! ## Errors
+//!
+//! Two kinds, kept apart in the type system rather than in a message prefix:
+//! [`ParseError`] is produced while an expression is being compiled, and
+//! [`EvalError`] while a compiled expression is being evaluated. A caller that
+//! wants one type across both calls converts into [`Error`].
+//!
+//! Every error that is about a specific token carries a [`Span`]: a byte range
+//! into the source text. [`Error::render`] turns that into the message plus the
+//! source line plus a caret under the offending token — which is what the
+//! bundled REPL uses to report a bad expression.
+//!
+//! ```
+//! use yarer::{Error, Expression, ParseError};
+//!
+//! let source = "max(1,*2)";
+//! let err = Expression::compile(source).unwrap_err();
+//!
+//! // React to *what* went wrong...
+//! assert!(matches!(err, ParseError::ExpectedValue { .. }));
+//!
+//! // ...and know *where*.
+//! let span = err.span().unwrap();
+//! assert_eq!((span.start, span.end), (6, 7));
+//!
+//! assert_eq!(
+//!     Error::from(err).render(source),
+//!     "Parse error: expected a value, found '*'\n  max(1,*2)\n        ^"
+//! );
+//! ```
+//!
+//! ## Limits
+//!
+//! [`Expression::eval`] runs under the session's own [`Limits`].
+//! [`Expression::eval_with`] runs the *same* compiled expression under a
+//! different budget instead, against the same variables — which is how to
+//! give text you don't control a tight budget and text you do a loose one,
+//! without maintaining two sessions.
+//!
+//! ```
+//! use yarer::{Expression, Session, Limits};
+//!
+//! let session = Session::init();
+//! let expr = Expression::compile("2^1000").unwrap();
+//!
+//! // A tight budget for text you don't control...
+//! let tight = Limits::default().with_max_value_bits(64);
+//! assert!(expr.eval_with(&session, tight).is_err());
+//!
+//! // ...and the session's own, looser budget for text you do.
+//! assert!(expr.eval(&session).is_ok());
+//! ```
+//!
+//! Mind the floor the built-in constants impose: `pi`, `e`, `tau`, `phi` and
+//! `gamma` are held as exact rationals that cost up to 107 bits, so a budget
+//! under that refuses a value the caller never actually supplied.
+//!
 //! Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 //!
 //! ```ignore
 //! $ yarer
-//! Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
+//! Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
 //! License MIT OR Apache-2.0
 //! > (1+9)*(8+2)
 //! 100
@@ -119,15 +176,20 @@
 //! ```
 //!
 //! Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
-/// Built-in function evaluation
+mod error;
+mod expression;
 mod functions;
-/// Evaluation limits
 pub mod limits;
-/// Parser
-pub mod parser;
-/// `RpnResolver`
-pub mod rpn_resolver;
-/// Session
-pub mod session;
-/// Token
-pub mod token;
+mod parser;
+mod session;
+mod shunting;
+mod span;
+mod token;
+mod validate;
+
+pub use error::{Error, EvalError, ParseError};
+pub use expression::Expression;
+pub use limits::Limits;
+pub use session::Session;
+pub use span::Span;
+pub use token::{ConversionError, MathFunction, Number};

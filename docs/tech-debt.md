@@ -1,131 +1,164 @@
 # Tech debt
 
 Known structural and maintainability debt, and follow-up work deliberately left
-undone. Every entry below was verified against the source at `3104971`, the head
-of the Stage 1 reliable-core work.
+undone. Every entry below was verified against the source at `a7f1220`, the
+commit the production-ready-api stage (Stage 2 of the 0.3.0 plan)'s own code
+and documentation changes land on. This file's own commit adds and reorganises
+tests, and adds two short documentation sections; nothing it touches changes
+any claim below. The fix wave that followed the whole-branch review revisited
+two of them, and both revisions say so where they stand.
 
-Entries name files and symbols rather than line numbers: line numbers drift, and
-half of those recorded during Stage 1 were stale within a day.
+Entries name files and symbols rather than line numbers: line numbers drift,
+and half of those recorded during Stage 1 were stale within a day. Several
+symbols named in the Stage 1 register were renamed or moved outright during
+Stage 2 — `RpnResolver` is gone; its two former responsibilities are now
+`Expression::eval_with` and `shunting::to_rpn` — so this revision updates
+those names too, not just the numbers attached to them.
 
-Nothing here is a known wrong answer. The Stage 1 review found no incorrect
-result, no reachable panic on any evaluation path, and no way to route an
-expression around a size guard. These are the things worth fixing next, not
-things that are broken now.
+Nothing here is a known wrong answer — but that sentence needs its history
+attached, because the one that used to follow it was false. It read "neither
+stage's review found an incorrect result", and the whole-branch review that
+read Stage 2 end to end found one: `Display for Number` printed `inf` for
+`(10^400)/3` and `0` for `1/(10^400)`. Both values were held exactly and
+computed correctly — `(10^400)/3 * 3` returned the right 401-digit integer —
+and only the printed form was wrong, because the `numer/denom` fallback was
+guarded on `BigRational::to_f64` answering `None`, which it does not do: it
+answers `Some(inf)` on overflow and `Some(0.0)` on underflow. Nothing
+signalled the loss, and `f64::try_from` inherited it, reporting `value 'inf'
+is out of range` for a value that is neither infinite nor NaN. It is fixed and
+pinned, in `token::tests` and in
+`test_a_rational_no_f64_can_hold_prints_as_a_ratio_not_as_infinity`.
+
+The claim is kept rather than deleted because it is worth being able to make,
+and the correction is kept next to it because a register that quietly drops a
+falsified claim is worth less than one that records what falsified it. What
+still holds unqualified is the rest: no reachable panic on any evaluation
+path, and no way to route an expression around a size guard. These are the
+things worth fixing next, not things that are broken now.
 
 ## Structural
 
-**`impl Div for Number` panics on a zero divisor.** It builds
-`BigRational::new(v1, v2)`, which panics when `v2` is zero. Unreachable through
-evaluation — `RpnResolver::resolve` guards against a zero right operand before
-dividing — but this is a public `std::ops` impl that panics on ordinary input, so
-a consumer using `Number` directly can hit it. Fixing it requires `Div` to become
-fallible, which is a breaking API change; it belongs with Stage 2's typed-error
-pass rather than on its own.
+**Four functions exceed the 100-line clippy `too_many_lines` threshold**,
+re-measured cold against `a7f1220`: `Expression::eval_with` at 146,
+`validate::validate` at 150, `functions::eval` at 110, and the
+`test_expressions` integration test at 115. The fix wave after the
+whole-branch review moved one of those numbers: `validate::validate` is 153,
+having grown the check that refuses an expression made of nothing but `;`.
+`shunting::to_rpn` was re-measured in the same pass and is still 91.
+`too_many_lines` is part of
+`clippy::pedantic`, which is only turned on in `src/lib.rs`; the integration
+test crate doesn't inherit it, so `test_expressions` has never been
+clippy-flagged and this number is a manual line count, same as the original
+entry's 107.
 
-**`Token::operator_priority` panics on an unrecognised operator**
-(`_ => panic!("Operator '{o}' not recognised. This must not happen!")`). Reachable
-from the public `Token::compare_operator_priority`. Same shape and same home as
-the entry above: it wants a `Result`, which is a breaking change.
+Two of the four are Stage 1 holdovers under new names.
+`RpnResolver::resolve` (155 lines at Stage 1's close) became
+`Expression::eval_with` (146) when `rpn_resolver.rs` was renamed to
+`expression.rs`. `RpnResolver::reverse_polish_notation` (168 lines) became
+`shunting::to_rpn` — and dropped **under** the threshold, to 91, when Stage 2
+split the bracket/arity/comma bookkeeping out of it and into a dedicated
+validation pass. That pass is the third function on this list.
 
-**Four functions exceed the 100-line clippy threshold**, measured at `3104971`:
-`RpnResolver::reverse_polish_notation` at 168, `RpnResolver::resolve` at 155,
-`functions::eval` at 108, and the `test_expressions` integration test at 107. All
-four were already over before Stage 1, but `reverse_polish_notation` grew during
-it, in Task 3 and again in Task 4. This is the clearest structural debt Stage 1
-leaves behind. `reverse_polish_notation` is a single `match` over token kinds
-with the bracket-frame bookkeeping interleaved; the arms are separable.
+`validate::validate` is new, and it is the longest function in the crate. It
+replaced logic that used to be scattered — partly inside the shunting yard,
+partly in a `mod_unary_operators` pass that had no way to refuse anything —
+with a single walk over the token stream that gives every rejection a
+position. That is the most visible thing Stage 2 did: five previously
+identical "malformed expression" failures are now five distinct, positioned
+diagnoses. The length is worth that. Structurally it is the same shape
+`reverse_polish_notation` had before its own split: one `match` over `Token`
+variants, with `Token::Bracket(Bracket::Close)` (~50 lines) the largest and
+most separable arm, `Token::Comma` and `Token::Operator` next. If this needs
+to shrink, that arm is where to start.
 
-**`functions::eval`'s match arms are repetitive.** The trigonometric arms differ
-only by the `f64` method they call. Folding them into a helper was deliberately
-not done during Stage 1 because Tasks 2 through 4 all extended the same match and
-the conflict was not worth it. That constraint is gone now.
-
-**`Limits` is not `#[non_exhaustive]`**, and it has one field. Adding a second
-knob later is a breaking change unless this is decided before 0.3.0 ships.
-
-**`Session` exposes no accessor for its limits**, and its `variable_heap` is
-private, so there is no way to evaluate against an existing variable heap under
-different limits. An embedder wanting "tight budget for untrusted input, loose
-for trusted, same variables" has to rebuild the heap themselves through
-`RpnResolver::parse_with_borrowed_heap`. Fine for Stage 1's scope; it belongs in
-Stage 2's API pass.
+**The numeric kernels behind `^` and `!` live in `expression.rs`, not
+`functions.rs`.** `Expression::power`, `power_integer`, `pow_big_int`,
+`pow_big_rational` and `factorial_helper` are bignum arithmetic sitting next
+to the evaluation loop that calls them, while `functions.rs`'s own module doc
+describes its job as "what happens when that loop meets a `MathFunction`" —
+the *named* built-ins (`sin`, `ln`, `abs`, ...), not the `^` and `!`
+operators, which never reach `functions::eval` at all. The placement is
+defensible on that boundary, and moving the kernels wouldn't change any
+behaviour. It is still a real seam: a reader searching for "where does yarer
+compute a power" has no reason to expect `expression.rs` over `functions.rs`,
+which already holds the crate's other bignum-to-bignum conversions
+(`decimal_from_f64`, `number_to_rational`, ...). Worth a look if `functions.rs`
+and `expression.rs` are touched together again; not worth a dedicated pass on
+its own.
 
 ## Performance
 
-**`parse_decimal_literal` is quadratic in the number of fractional digits.** It
-builds the denominator with a `for _ in 0..fractional_digits` loop of bignum
-multiplications rather than one `pow`. Measured at 1.54 s for a 200,000-digit
-fractional literal. Bounded by input length and outside the size budget's reach,
-since the budget checks the value after it has been built.
+**`parse_decimal_literal` is quadratic in the number of fractional digits.**
+It builds the denominator with a `for _ in 0..fractional_digits` loop of
+bignum multiplications rather than one `pow`. Re-measured on this machine, in
+release mode, `Expression::compile` only (no `eval`): a 100,000-digit
+fractional literal takes 134 ms, a 200,000-digit one 534 ms — roughly a 4×
+increase for a 2× input, confirming the quadratic shape still holds. (The
+absolute numbers are machine-dependent and not comparable to the Stage 1
+entry's 1.54 s, which was not recorded against a specific build profile or
+measurement method; the scaling is the load-bearing fact, not the constant.)
+Bounded by input length and outside the size budget's reach, since the budget
+checks the value after it has been built.
 
 **`apply_functional_token_operation` clones its right operand needlessly.** It
-does `match (ln, rn.clone())` and the match consumes both by value, so the clone
-is never used. Under the 1 Mibit budget that is up to roughly 128 KB copied on
-every `+`, `-`, `*` and `/`.
+does `match (ln, rn.clone())` and the match consumes both by value, so the
+clone is never used. Under the 1 Mibit default budget that is up to roughly
+128 KiB copied on every `+`, `-`, `*` and `/`. Unchanged since Stage 1.
 
-**`RpnResolver::factorial_helper` is the naive sequential product.** Binary
-splitting would decouple running time from the bit budget. Only worth doing if
-someone actually raises `Limits::max_value_bits` — at the 1 Mibit default the
-worst admitted case, `71421!`, takes about 0.43 s in release. This is the reason
-`max_value_bits`' doc warns that time scales superlinearly with the budget.
+**`Expression::factorial_helper` is the naive sequential product.** Binary
+splitting would decouple running time from the bit budget. Re-verified the
+boundary this entry depends on: at the default 1 Mibit budget, `71421!` is
+still admitted and `71422!` is still refused by the prediction check (in
+single-digit microseconds — the prediction, not the computation, is what
+refuses it). `71421!` itself now takes about 290 ms on this machine in release
+mode; again not comparable to Stage 1's 0.43 s figure without knowing its
+build profile, but the shape — the reason `max_value_bits`'s doc warns that
+time scales superlinearly with the budget — is unchanged and only worth
+fixing if someone actually raises the budget.
 
-## Deferred from the Stage 1 review
+**`measure_the_cost_of_reducing_every_decimal`'s two cases exercise only two
+of the four `Number::decimal_unchecked` call sites it was drafted to justify.**
+Task 9's decision to split `Number::decimal` (reduces) from
+`Number::decimal_unchecked` (doesn't) rests on this harness, and the split
+covers four call sites: `checked_div`, `apply_functional_token_operation`,
+`power_integer`, and `decimal_from_f64`. `"1/3 + 1/7 + 1/11"` exercises
+`checked_div` and `apply_functional_token_operation`; `"(2^60000)/3"`
+exercises `checked_div` again, on a large numerator. Neither expression
+touches `power_integer`'s decimal arm (both bases are integers) or
+`decimal_from_f64` (neither expression calls a trig/`sqrt`/`ln`-family
+function or a non-integer power). Separately, `"(2^60000)/3"` divides a huge
+numerator by a *small* literal denominator, so the Euclidean algorithm
+resolves `gcd(huge, 3)` in essentially one step — that case measures the cheap
+end of reduction, not the expensive end, which is two operands of comparable
+size sharing no small common factor. Neither gap matters for the one-off,
+`#[ignore]`d measurement this harness was built for. Both would matter if it
+were ever turned into an automated regression gate: it would miss a
+regression confined to `power_integer` or `decimal_from_f64`, and it would not
+catch reduction getting slower on the case that actually costs the most.
 
-Small items raised by reviewers, judged not worth their own fix round at the
-time. Each was verified as still open at `3104971`.
+## Polish
 
-**`Number::decimal` checks `denom().is_one()` rather than reducing.** An
-externally built `Ratio::new_raw(4, 2)` is integral but unreduced, so it slips
-past the canonicalisation invariant and becomes a `DecimalNumber(4/2)`. That same
-value also makes `PartialEq` and `PartialOrd` disagree. One-line fix:
-`value.reduced()`. Not reachable through parsing — the parser never produces an
-unreduced rational — so this is about the public constructor's contract.
+**Two `#[allow]` attributes on `predicted_factorial_bits`**
+(`clippy::cast_precision_loss`, then `clippy::cast_possible_truncation` and
+`clippy::cast_sign_loss`), where `#[expect(...)]` would self-report once the
+casts stop needing suppression. Unchanged since Stage 1.
 
-**`setf` silently does nothing when given NaN or infinity.**
-`BigRational::from_float` returns `None` and the `if let Some(value)` has no
-`else`, so the variable is simply never set and the caller is not told. The
-rewritten doc comment does not mention it.
-
-**Untested behaviours:**
-
-- `2.0!` returns `2` since canonicalisation landed, where it used to error. User
-  visible, and pinned by nothing.
-- `1/0.0` — the decimal-literal form of division by zero, which used to panic and
-  was incidentally fixed by canonicalisation. `1/0` is tested; the form that
-  actually panicked is not.
-- The canonicalisation invariant test never reaches `Div` Decimal/Decimal, the
-  `apply_functional_token_operation` decimal arms, or `power_integer`'s decimal
-  arms. Adding `0.5+0.5`, `1.5/0.5` and `(0.5)^-1` to the existing loop covers
-  all three.
-- `(-1)^odd`. Only the even-exponent degenerate case is pinned.
-- Exponent zero, the `n = 0` and `n = 1` factorial early returns, and an
-  expression landing exactly on the size budget.
-
-**Diagnostics that are still generic or slightly wrong:**
-
-- A bare `()` outside a function call falls through to the generic
-  malformed-expression message. Pre-existing.
-- `COMMA_OUTSIDE_CALL_ERR`'s wording misdescribes the nested case: a comma inside
-  a plain bracket nested within a call reads as if no call were open at all.
-- `sin[5]` evaluates, because `[` and `]` are bracket aliases, while the error
-  text and the README both say a function must be followed by `(`. Either the
-  aliases or the wording should give way.
-- `max(1,*2)` passes the arity check with `given == 2` and fails later at
-  evaluation. Operator-sequence validation is deferred to Stage 2 by design; this
-  is the visible edge of that gap.
-
-**Polish:**
-
-- `resolve_decimal!` no longer asserts the decimal variant, so the name is a
-  misnomer. `resolve_approx!` would read truer.
-- `EXPONENT_TOO_LARGE_ERR` is lowercase after `Runtime error:`, unlike its
-  siblings in `rpn_resolver.rs`, though consistent with `limits.rs`.
-- Two `#[allow]` attributes on `predicted_factorial_bits` where `#[expect(...)]`
-  would self-report once the casts stop needing suppression.
-- `test_max_min` is a single loop over three expressions, so a failure on the
-  first skips the other two.
-- Several README fenced blocks holding CLI transcripts and the built-in function
-  list are tagged ```rust. Pre-existing mislabelling.
+**`MathFunction::None` is public and cannot be produced by parsing.**
+`Token::get_some` never yields it, so no expression compiles to one, and
+`functions::eval` answers `EvalError::Malformed` for it — an arm that exists
+only to keep the `match` exhaustive over a variant no input reaches. It costs
+more than a dead arm, because `MathFunction` is public payload inside
+`ParseError::WrongArity`: an embedder matching on it sees a variant the
+documentation has to explain cannot occur, and `arity()` has to answer
+something for it (it answers 1, deliberately, rather than panicking). The
+tokeniser's `Token::get_some` already returns `Option<MathFunction>`, so the
+"no function here" answer `None` stands in for is carried elsewhere already:
+removing the variant means deleting its declaration, its arm in `arity()`, its
+arm in `functions::eval`, and the two doc paragraphs that exist to explain
+it. It is left alone here because removing a variant from a
+public enum is a design change, not a fix, and this fix wave was scoped to
+fixes; `#[non_exhaustive]` on `MathFunction`, added in the same wave, is what
+makes the removal additive-cost rather than a second break when it happens.
 
 ## A pattern worth remembering
 
@@ -150,3 +183,12 @@ when it is merely shadowed. Two things catch it: assert *which* check fired, by
 its distinctive wording, rather than merely that an error occurred; and where two
 wordings cannot be told apart, break the guard on purpose and confirm the test
 goes red.
+
+Stage 2 ran into the same shape of problem, one level up: a test that asserts
+`is_err()` or a value alone, rather than *which* step failed or *which* enum
+variant came back, stays green under a regression that changes *why* it
+passes. `resolve_err!`'s split into compile-time and eval-time assertions
+(`test_invalid_input_is_rejected`, `test_domain_errors_are_rejected`), the
+`checked_div` cross-variant test, and `test_wrong_arity_is_diagnosed_by_name`
+binding `function` instead of discarding it with `..` are all this same
+lesson applied to the typed-error API.

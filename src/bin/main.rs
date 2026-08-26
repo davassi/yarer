@@ -4,8 +4,9 @@ use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
-use yarer::rpn_resolver::*;
-use yarer::session::*;
+use yarer::Error;
+use yarer::Expression;
+use yarer::Session;
 
 use log::debug;
 
@@ -37,17 +38,17 @@ The internal flow is conceptually straightforward:
  3 Then it converts the infix expression to postfix
  4 Finally it resolves the expression.
 
- Point 1 and 2 are executed by the Parser, 3 and 4 by the RpnResolver
+ Point 1, 2 and 3 are executed by Expression::compile, 4 by Expression::eval
 
  # Usage
 
  Example
- ```
+ ```ignore
      let exp = "4 + 4 * 2 / ( 1 - 5 )";
-     let mut session = Session::init();
-     let mut resolver: RpnResolver = session.process(&exp);
+     let session = Session::init();
+     let expr = Expression::compile(exp).unwrap();
 
-     let result: token::Number = resolver.resolve().unwrap();
+     let result: Number = expr.eval(&session).unwrap();
      println!("The result of {} is {}", exp, result);
  ```
 */
@@ -87,11 +88,13 @@ fn main() -> Result<()> {
 
                 let _ = rl.add_history_entry(line.as_str());
 
-                let mut resolver: RpnResolver = session.process(&line);
+                let outcome = Expression::compile(&line)
+                    .map_err(Error::from)
+                    .and_then(|expr| expr.eval(&session).map_err(Error::from));
 
-                match resolver.resolve() {
-                    Ok(value) => println!("{}", value),
-                    Err(e) => println!("Error: {}", e),
+                match outcome {
+                    Ok(value) => println!("{value}"),
+                    Err(err) => println!("{}", err.render(&line)),
                 }
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {

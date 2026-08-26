@@ -1,13 +1,11 @@
 //! Evaluation of the built-in mathematical functions, together with the
 //! numeric conversions they rely on.
 //!
-//! Split out of [`crate::rpn_resolver`], which owns the shunting-yard
-//! translation and the evaluation loop; this module owns what happens when
-//! that loop meets a [`MathFunction`].
+//! Split out of [`crate::expression`], which owns the evaluation loop; this
+//! module owns what happens when that loop meets a [`MathFunction`].
 
-use crate::rpn_resolver::{FLOAT_EVAL_TOO_LARGE_ERR, INVALID_FUNCTION_RESULT_ERR, MALFORMED_ERR};
+use crate::error::EvalError;
 use crate::token::{MathFunction, Number};
-use anyhow::anyhow;
 use num::{Integer, Signed};
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -21,56 +19,54 @@ use std::collections::VecDeque;
 /// caller popped the top of the stack and postfix order puts the second argument
 /// there. What this function pops from `result_stack` is therefore the *first*
 /// argument, keeping `var_stack` in step. Both stacks belong to the evaluation
-/// loop in [`crate::rpn_resolver::RpnResolver::resolve`].
+/// loop in [`crate::Expression::eval_with`].
 pub(crate) fn eval(
     fun: MathFunction,
     value: Number,
     result_stack: &mut VecDeque<Number>,
     var_stack: &mut VecDeque<Option<String>>,
-) -> anyhow::Result<Number> {
+) -> Result<Number, EvalError> {
     let result = match fun {
         MathFunction::Sin => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sin(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.sin(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Cos => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.cos(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.cos(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Tan => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.tan(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.tan(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::ASin => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.asin(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.asin(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::ACos => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.acos(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.acos(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::ATan => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.atan(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.atan(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Ln => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.ln(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.ln(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Log => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.log10(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.log10(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Abs => match value {
             Number::NaturalNumber(v) => Number::NaturalNumber(v.abs()),
             Number::DecimalNumber(v) => Number::decimal(v.abs()),
         },
         MathFunction::Max => {
-            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
-                "{} {}",
-                MALFORMED_ERR,
-                "Wrong number of parameters for function Max"
-            ))?;
+            let value2: Number = result_stack
+                .pop_back()
+                .ok_or(EvalError::Malformed { span: None })?;
             var_stack.pop_back();
             if value >= value2 {
                 value
@@ -79,11 +75,9 @@ pub(crate) fn eval(
             }
         }
         MathFunction::Min => {
-            let value2: Number = result_stack.pop_back().ok_or(anyhow!(
-                "{} {}",
-                MALFORMED_ERR,
-                "Wrong number of parameters for function Min"
-            ))?;
+            let value2: Number = result_stack
+                .pop_back()
+                .ok_or(EvalError::Malformed { span: None })?;
             var_stack.pop_back();
             if value <= value2 {
                 value
@@ -92,8 +86,8 @@ pub(crate) fn eval(
             }
         }
         MathFunction::Sqrt => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.sqrt(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.sqrt(),
+            EvalError::NotARealNumber { span: None },
         )?,
         MathFunction::Floor => {
             let value = number_to_rational(value);
@@ -118,41 +112,61 @@ pub(crate) fn eval(
         MathFunction::Pdf => {
             let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
             decimal_from_f64(
-                normal.pdf(number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
-                INVALID_FUNCTION_RESULT_ERR,
+                normal.pdf(number_to_f64(
+                    &value,
+                    EvalError::OperandTooLargeForFloat { span: None },
+                )?),
+                EvalError::NotARealNumber { span: None },
             )?
         }
         MathFunction::Cdf => {
             let normal = Normal::new(0.0, 1.0).expect("valid normal dist");
             decimal_from_f64(
-                normal.cdf(number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?),
-                INVALID_FUNCTION_RESULT_ERR,
+                normal.cdf(number_to_f64(
+                    &value,
+                    EvalError::OperandTooLargeForFloat { span: None },
+                )?),
+                EvalError::NotARealNumber { span: None },
             )?
         }
         MathFunction::Exp => decimal_from_f64(
-            number_to_f64(&value, FLOAT_EVAL_TOO_LARGE_ERR)?.exp(),
-            INVALID_FUNCTION_RESULT_ERR,
+            number_to_f64(&value, EvalError::OperandTooLargeForFloat { span: None })?.exp(),
+            EvalError::NotARealNumber { span: None },
         )?,
-        MathFunction::None => return Err(anyhow!("This should never happen!")),
+        MathFunction::None => return Err(EvalError::Malformed { span: None }),
     };
     Ok(result)
 }
 
-pub(crate) fn number_to_f64(value: &Number, error_message: &'static str) -> anyhow::Result<f64> {
+/// Narrows a [`Number`] to an [`f64`], or reports `on_error` when none can
+/// hold it.
+///
+/// The finiteness filter is what makes `on_error` reachable at all.
+/// `BigInt::to_f64` and `BigRational::to_f64` answer `Some(±inf)` when the
+/// value overflows a double, never `None`, so an `ok_or` on its own never
+/// fired: the infinity flowed on and was caught downstream by
+/// [`decimal_from_f64`]'s own finiteness test, under a different name.
+/// `sqrt(2^5000)` reported "function result is not a real number" about a
+/// number that is perfectly real; what had actually failed is the narrowing
+/// here.
+pub(crate) fn number_to_f64(value: &Number, on_error: EvalError) -> Result<f64, EvalError> {
     match value {
-        Number::NaturalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
-        Number::DecimalNumber(v) => v.to_f64().ok_or_else(|| anyhow!(error_message)),
+        Number::NaturalNumber(v) => v.to_f64().filter(|f| f.is_finite()).ok_or(on_error),
+        Number::DecimalNumber(v) => v.to_f64().filter(|f| f.is_finite()).ok_or(on_error),
     }
 }
 
-pub(crate) fn decimal_from_f64(value: f64, error_message: &'static str) -> anyhow::Result<Number> {
+pub(crate) fn decimal_from_f64(value: f64, on_error: EvalError) -> Result<Number, EvalError> {
     if !value.is_finite() {
-        return Err(anyhow!(error_message));
+        return Err(on_error);
     }
 
+    // `BigRational::from_float` builds its result through `Ratio::new`
+    // (or `Ratio::from_integer` when the exponent is non-negative), both of
+    // which reduce before returning, so the value is already reduced.
     BigRational::from_float(value)
-        .map(Number::decimal)
-        .ok_or_else(|| anyhow!(error_message))
+        .map(Number::decimal_unchecked)
+        .ok_or(on_error)
 }
 
 pub(crate) fn number_to_rational(value: Number) -> BigRational {

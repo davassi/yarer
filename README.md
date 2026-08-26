@@ -17,13 +17,15 @@ Yarer (Yet Another Rust Expression Resolver) is a library for evaluating mathema
 Example of usage of the library:
 
 ```rust
-      let session = Session::init();
-      let mut resolver = session.process("1+2"); // or even "(cos(10+e)+3*sin(9/pi))^2"
+      use yarer::{Expression, Session};
 
-      println!("The result is {}", resolver.resolve().unwrap());
+      let session = Session::init();
+      let expr = Expression::compile("1+2").unwrap(); // or even "(cos(10+e)+3*sin(9/pi))^2"
+
+      println!("The result is {}", expr.eval(&session).unwrap());
 ```
 
-All that's needed is to get a new instance of the 'resolver' from a Session and hand over the expression to be analysed.
+All that's needed is to compile the expression into an `Expression` and evaluate it against a `Session`.
 The library returns a `Number`, and the value decides which variant, not the expression that produced it. An integral result always comes back as `Number::NaturalNumber`, whatever it came from — `2.5+2.5` is `5`, `1/cos(0)` is `1`, `6/3` is `2`. `Number::DecimalNumber` appears only when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore has exactly one representation.
 
 ## Variables
@@ -31,24 +33,30 @@ The library returns a `Number`, and the value decides which variant, not the exp
 Yarer handles variables and functions. Here is an example:
 
 ```rust
-      let session = Session::init();
-      let mut resolver = session.process("1/cos(x^2)");
+      use yarer::{Expression, Session};
 
-      session.set("x",1);
-      println!("The result is {}", resolver.resolve().unwrap());
+      let session = Session::init();
+      let expr = Expression::compile("1/cos(x^2)").unwrap();
+
+      session.set("x", 1).unwrap();
+      println!("The result is {}", expr.eval(&session).unwrap());
 ```
 
 and of course, the expression can be re-evaluated if the variable changes.
 
 ```rust
       //...
-      session.set("x",-1);
-      println!("The result is {}", resolver.resolve().unwrap());
+      session.set("x", -1).unwrap();
+      println!("The result is {}", expr.eval(&session).unwrap());
 
-      session.setf("x",0.001);
-      println!("The result is {}", resolver.resolve().unwrap());
+      session.setf("x", 0.001).unwrap();
+      println!("The result is {}", expr.eval(&session).unwrap());
       //...
 ```
+
+`Expression` is `Clone`, and cloning copies the whole compiled token sequence, so
+it's cheap to compile once and evaluate against several sessions, but worth
+knowing before cloning inside a hot loop.
 
 ## Casting
 
@@ -57,18 +65,67 @@ fallible `TryFrom`/`TryInto` conversions, which return an error instead of
 panicking when the value does not fit the target type:
 
 ```rust
-      let result: Number = resolver.resolve().unwrap();
+      let result: Number = expr.eval(&session).unwrap();
 
       let int : i32 = result.clone().try_into().unwrap();
       // or
       let float : f64 = result.try_into().unwrap();
 ```
 
+## Errors
+
+`Expression::compile` fails with a `ParseError`, `expr.eval` with an `EvalError`.
+Both carry a byte-range `Span` when the failure is about a specific token, and
+both convert into the union type `Error` for a caller that wants one type
+across both calls. `Error::render` turns that into the message, the source
+line, and a caret under the offending token — the same rendering the bundled
+REPL uses:
+
+```rust
+      use yarer::{Error, Expression, ParseError};
+
+      let source = "max(1,*2)";
+      match Expression::compile(source) {
+          Err(err @ ParseError::ExpectedValue { .. }) => {
+              println!("{}", Error::from(err).render(source));
+          }
+          other => panic!("expected a parse error, got {other:?}"),
+      }
+```
+
+prints:
+
+```text
+Parse error: expected a value, found '*'
+  max(1,*2)
+        ^
+```
+
+## Limits
+
+`expr.eval(&session)` runs under the session's own `Limits`. `expr.eval_with(&session, limits)` runs the *same* compiled expression under a different budget instead, against the same variables — which is how to give text you don't control a tight budget and text you do a loose one, without maintaining two sessions:
+
+```rust
+      use yarer::{Expression, Session, Limits};
+
+      let session = Session::init();
+      let expr = Expression::compile("2^1000").unwrap();
+
+      // A tight budget for text you don't control...
+      let tight = Limits::default().with_max_value_bits(64);
+      assert!(expr.eval_with(&session, tight).is_err());
+
+      // ...and the session's own, looser budget for text you do.
+      assert!(expr.eval(&session).is_ok());
+```
+
+Mind the floor the built-in constants impose: `pi`, `e`, `tau`, `phi` and `gamma` are held as exact rationals that cost up to 107 bits, so a budget under that refuses a value the caller never actually supplied.
+
 ## CLI
 
 Yarer can also be used from the command line and behaves similarly to GNU bc
 
-```rust
+```text
       $ yarer
       Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
@@ -94,6 +151,60 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
       
 ```
 ## News and Updates
+
+### Unreleased — migrating from 0.2.0
+
+The next release (targeting 0.3.0, not yet published) replaces the public API
+with one where every failure is a typed error carrying a position, instead of
+a string. It is a breaking change; everything that moved is in this table.
+
+| Before | After |
+|---|---|
+| `session.process(s) -> RpnResolver` | `Expression::compile(s) -> Result<Expression, ParseError>` |
+| `resolver.resolve() -> anyhow::Result<Number>` | `expr.eval(&session) -> Result<Number, EvalError>` |
+| `RpnResolver::parse_with_borrowed_heap(..)` public | removed from the public surface |
+| `Parser`, `Token`, `Operator`, `Bracket`, `Associate` public | `pub(crate)` |
+| `yarer::token::{Number, ConversionError, MathFunction}` | `yarer::{Number, ConversionError, MathFunction}` |
+| `yarer::session::Session` | `yarer::Session` |
+| `a / b` on `Number`, panics when `b` is zero | `a.checked_div(&b) -> Option<Number>` |
+| `Token::compare_operator_priority` public, panics | internal, and total |
+| `session.set(..)` / `setf(..)` return `()` | return `Result<(), EvalError>` |
+| `Limits { max_value_bits: n }` | `Limits::default().with_max_value_bits(n)` |
+| errors are `anyhow::Error` strings | `Error`, `ParseError`, `EvalError`, with spans |
+| `ConversionError` is `Eq` and exhaustive | gains `NotFinite { value: f64 }`, loses `Eq`, becomes `#[non_exhaustive]` |
+| `MathFunction` is exhaustive | `#[non_exhaustive]`: an exhaustive `match` on it needs a `_` arm |
+| `Number::decimal` keeps an unreduced rational a decimal | it reduces first: `Number::decimal(BigRational::new_raw(4, 2))` is `NaturalNumber(2)` |
+| `!5` returns `120` | `ParseError::ExpectedValue` |
+| a function on an operand too large for `f64` returned the limit value there, for the functions that have one (`atan(10^400)` was `pi/2`; also `exp`, `cdf`, `pdf`) | `EvalError::OperandTooLargeForFloat` |
+| `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |
+| `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
+
+Three of those rows want a sentence more than a cell.
+
+**Module paths.** `Number`, `Session`, `ConversionError` and `MathFunction`
+are unchanged as types, but `token`, `session` and `rpn_resolver` are no
+longer public modules — everything public is re-exported from the crate root,
+so one `use yarer::{..}` covers it. 0.2.0's own crate documentation told
+adopters to write `use yarer::{rpn_resolver::RpnResolver, session::Session,
+token::Number};`, so every 0.2.0 user has imports that need rewriting even
+where the type they name did not move.
+
+**`ConversionError` is no longer `Eq`.** The new `NotFinite { value: f64 }`
+carries an `f64`, which is not `Eq`, and no manual implementation can honestly
+supply one. `PartialEq` is unchanged, so `==` still works; a bound of `T: Eq`
+does not. It is also `#[non_exhaustive]` now, like every other public enum
+here, so an exhaustive `match` on it needs a `_` arm.
+
+**`Number::decimal` reduces.** It used to test `denom().is_one()` without
+reducing, so an externally built `Ratio::new_raw(4, 2)` was integral but
+unreduced and came back as a `DecimalNumber` — which also made `PartialEq` and
+`PartialOrd` disagree about it. Values built from yarer's own arithmetic are
+unaffected: `BigRational` reduces its own results.
+
+Unchanged on purpose: undefined variables still read as `0`; `sin[5]` still
+evaluates; chained assignment (`x=y=5`) and chained expressions
+(`x=2; y=3; x*y`) are unaffected; every numeric result already documented
+above stays the same.
 
 ### Version 0.2.0
 
@@ -125,7 +236,7 @@ Yarer 0.1.8 comes with several enhancements:
 
 Starting with Yarer version 0.1.7, natural numbers are implemented internally using [BigInt](https://crates.io/crates/num-bigint) from the [num crate](https://crates.io/crates/num). Now it is possible to do calculations with arbitrarily large natural numbers.
 
-```rust
+```text
     $ yarer
       Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
@@ -135,17 +246,19 @@ Starting with Yarer version 0.1.7, natural numbers are implemented internally us
       302231454903657293676544
 ```
 
-From Yarer version 0.1.5 it's possible to share a single session, and therefore a single heap of variables, for multiple resolvers. The library is not intended to be thread-safe.
+From Yarer version 0.1.5 it's possible to share a single session, and therefore a single heap of variables, for multiple compiled expressions. The library is not intended to be thread-safe.
 
 ```rust
-    let session = Session::init();
-    
-    let mut res = session.process("x ^ 2");
-    let mut res2 = session.process("x! - (x-1)!");
+    use yarer::{Expression, Session};
 
-    session.set("x", 10);
-   
-    if let (Ok(a), Ok(b)) = (res.resolve(),res2.resolve()) {
+    let session = Session::init();
+
+    let expr1 = Expression::compile("x ^ 2").unwrap();
+    let expr2 = Expression::compile("x! - (x-1)!").unwrap();
+
+    session.set("x", 10).unwrap();
+
+    if let (Ok(a), Ok(b)) = (expr1.eval(&session), expr2.eval(&session)) {
         println!("{} {}", a, b); // 100 3265920
     }
 ```
@@ -155,7 +268,7 @@ From Yarer version 0.1.5 it's possible to share a single session, and therefore 
 There are several math functions defined that you can use in your expression. More to come!
 There are many examples of processed expressions in the [integration test file](https://github.com/davassi/yarer/blob/master/tests/integration_tests.rs).
 
-```rust
+```text
     Sin
     Cos
     Tan
@@ -182,7 +295,7 @@ Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
 
 There are a few predefined math constants available:
 
-```rust
+```text
     PI    -> 3.14159265...
     e     -> 2.7182818...
     tau   -> 6.2831853...
@@ -194,7 +307,7 @@ There are a few predefined math constants available:
 
 Using Yarer, the Black–Scholes formula for a European call option can be evaluated straight from the CLI.
 
-```rust
+```text
       $ yarer
       Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
@@ -229,15 +342,17 @@ cargo install --path .
 
 ## Internal Implementation
 
-Each expression is the result of an evaluation by the following actors
+Each expression goes through the following steps, the first three run by `Expression::compile` and the fourth by `Expression::eval`:
 
-Step1 - Parser: A string is "regexed" and converted into a token array.
+Step 1 - Parser: A string is "regexed" and converted into a token array.
 
-Step 2 - RpnResolver: Using the Shunting Yard algorithm the token array is converted from infix to postfix notation.
+Step 2 - Validation: the token array is walked once, checking that it describes a well-formed expression — brackets balance, calls get the right number of arguments, values and operators alternate correctly — and rewriting unary operators along the way. This is the pass that turns five previously-identical "malformed expression" failures into five distinct, positioned diagnoses.
 
-Step 3 - RpnResolver: The resulting RPN (Reverse Polish Notation) expression is evaluated.
+Step 3 - Shunting yard: the validated token array is converted from infix to postfix (RPN) notation, becoming a compiled `Expression`.
 
-It's worth mentioning that the Session is responsible for storing all variables (and constants) that are borrowed by all the RpnResolvers.
+Step 4 - Expression: The resulting RPN (Reverse Polish Notation) expression is evaluated against a `Session`.
+
+It's worth mentioning that the Session is responsible for storing all variables (and constants) that are borrowed by every `Expression` evaluated against it.
 
 ## Contribution
 
