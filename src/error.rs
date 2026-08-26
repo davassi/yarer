@@ -23,7 +23,8 @@ pub enum ParseError {
     /// Text that is not part of any token, e.g. the `@` in `1@2`.
     #[error("unexpected character '{text}'")]
     UnexpectedCharacter { text: String, span: Span },
-    /// The expression contains no tokens at all.
+    /// The expression has nothing in it that produces a value: no tokens at
+    /// all, or nothing but separators, e.g. `";"`.
     #[error("the expression is empty")]
     EmptyExpression,
     /// A bracket pair enclosing nothing, e.g. `()`.
