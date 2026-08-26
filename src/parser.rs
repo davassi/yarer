@@ -2,8 +2,8 @@ use crate::error::ParseError;
 use crate::span::{Span, Spanned};
 use crate::token::Token;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// The Parser has 2 primary functions:
 /// to parse the math expression with a Regex and to tokenise the math &[str] expression
@@ -11,7 +11,7 @@ use regex::Regex;
 #[derive(Debug)]
 pub(crate) struct Parser;
 
-static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
+static EXPRESSION_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     // The two-character operators come first because regex alternation is
     // ordered: written after the character class, `<=` would match as `<`
     // followed by `=` — a comparison and then an assignment, which fails
