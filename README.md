@@ -175,6 +175,7 @@ a string. It is a breaking change; everything that moved is in this table.
 | `MathFunction` is exhaustive | `#[non_exhaustive]`: an exhaustive `match` on it needs a `_` arm |
 | `Number::decimal` keeps an unreduced rational a decimal | it reduces first: `Number::decimal(BigRational::new_raw(4, 2))` is `NaturalNumber(2)` |
 | `!5` returns `120` | `ParseError::ExpectedValue` |
+| a function on an operand too large for `f64` returned the limit value there, for the functions that have one (`atan(10^400)` was `pi/2`; also `exp`, `cdf`, `pdf`) | `EvalError::OperandTooLargeForFloat` |
 | `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |
 | `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
 

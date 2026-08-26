@@ -875,6 +875,28 @@ fn test_an_operand_too_large_for_an_f64_reports_that_and_not_something_else() {
     ));
 }
 
+/// The finiteness filter above does not only intercept the unreal answers it
+/// was aimed at. `atan(10^400)` narrows to `f64::INFINITY`, and unlike
+/// `sqrt(inf)` (not finite, so it fell to `NotARealNumber` even before the
+/// filter existed), `atan(inf)` is a perfectly real, finite limit: `pi/2`.
+/// 0.2.0 computed exactly that. The filter cannot tell "the operand
+/// overflowed and the answer is unreal" from "the operand overflowed and the
+/// function has a finite limit anyway" — both narrow to an infinite `f64`, so
+/// both are now refused. This crate accepts giving up the second case's
+/// correct answer, because silently narrowing the operand — the failure mode
+/// the filter exists to close — was judged the larger problem. See the
+/// migration table in README.md.
+#[test]
+fn test_an_operand_too_large_for_an_f64_is_refused_even_with_a_finite_limit_there() {
+    let session = Session::init();
+
+    let expr = Expression::compile("atan(10^400)").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::OperandTooLargeForFloat { .. })
+    ));
+}
+
 #[test]
 fn test_degenerate_power_bases_are_not_refused() {
     // 1^n, 0^n and (-1)^n all stay tiny no matter how large n is, and are cheap to
