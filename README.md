@@ -127,7 +127,7 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
 
 ```text
       $ yarer
-      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
+      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
@@ -152,11 +152,11 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
 ```
 ## News and Updates
 
-### Unreleased — migrating from 0.2.0
+### Version 0.3.0 — migrating from 0.2.0
 
-The next release (targeting 0.3.0, not yet published) replaces the public API
-with one where every failure is a typed error carrying a position, instead of
-a string. It is a breaking change; everything that moved is in this table.
+Yarer 0.3.0 replaces the public API with one where every failure is a typed
+error carrying a position instead of a string, and adds ten operators. It is a
+breaking change; everything that moved is in this table.
 
 | Before | After |
 |---|---|
@@ -180,7 +180,7 @@ a string. It is a breaking change; everything that moved is in this table.
 | `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
 | `and`, `or`, `xor`, `not`, `mod` are valid variable names | reserved words, in every casing |
 
-Three of those rows want a sentence more than a cell.
+Four of those rows want a sentence more than a cell.
 
 **Module paths.** `Number`, `Session`, `ConversionError` and `MathFunction`
 are unchanged as types, but `token`, `session` and `rpn_resolver` are no
@@ -253,7 +253,7 @@ Starting with Yarer version 0.1.7, natural numbers are implemented internally us
 
 ```text
     $ yarer
-      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
+      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > 78!
       1132428117820629783145752115873204622873174957948825.....
@@ -382,7 +382,7 @@ Using Yarer, the Black–Scholes formula for a European call option can be evalu
 
 ```text
       $ yarer
-      Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
+      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > S=100;K=100;T=1;r=0.05;sigma=0.2;
       > d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))
