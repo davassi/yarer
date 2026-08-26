@@ -27,6 +27,9 @@ use num_traits::ToPrimitive;
 /// text — it consults no session and touches no variable heap — so one
 /// `Expression` can be evaluated against several sessions, and under several
 /// budgets.
+///
+/// `Expression` is [`Clone`], and cloning copies the whole compiled token
+/// sequence — worth knowing before reaching for it inside a loop.
 #[derive(Debug, Clone)]
 pub struct Expression<'a> {
     rpn: VecDeque<Spanned<Token<'a>>>,

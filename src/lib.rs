@@ -64,11 +64,42 @@
 //! let float : f64 = result.try_into().unwrap();
 //! ```
 //!
+//! ## Errors
+//!
+//! Two kinds, kept apart in the type system rather than in a message prefix:
+//! [`ParseError`] is produced while an expression is being compiled, and
+//! [`EvalError`] while a compiled expression is being evaluated. A caller that
+//! wants one type across both calls converts into [`Error`].
+//!
+//! Every error that is about a specific token carries a [`Span`]: a byte range
+//! into the source text. [`Error::render`] turns that into the message plus the
+//! source line plus a caret under the offending token — which is what the
+//! bundled REPL uses to report a bad expression.
+//!
+//! ```
+//! use yarer::{Error, Expression, ParseError};
+//!
+//! let source = "max(1,*2)";
+//! let err = Expression::compile(source).unwrap_err();
+//!
+//! // React to *what* went wrong...
+//! assert!(matches!(err, ParseError::ExpectedValue { .. }));
+//!
+//! // ...and know *where*.
+//! let span = err.span().unwrap();
+//! assert_eq!((span.start, span.end), (6, 7));
+//!
+//! assert_eq!(
+//!     Error::from(err).render(source),
+//!     "Parse error: expected a value, found '*'\n  max(1,*2)\n        ^"
+//! );
+//! ```
+//!
 //! Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 //!
 //! ```ignore
 //! $ yarer
-//! Yarer v.0.1.1 - Yet Another (Rusty||Rpn) Expression Resolver.
+//! Yarer v.0.2.0 - Yet Another Rust Expression Resolver.
 //! License MIT OR Apache-2.0
 //! > (1+9)*(8+2)
 //! 100

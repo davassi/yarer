@@ -43,12 +43,12 @@ The internal flow is conceptually straightforward:
  # Usage
 
  Example
- ```
+ ```ignore
      let exp = "4 + 4 * 2 / ( 1 - 5 )";
      let session = Session::init();
      let expr = Expression::compile(exp).unwrap();
 
-     let result: token::Number = expr.eval(&session).unwrap();
+     let result: Number = expr.eval(&session).unwrap();
      println!("The result of {} is {}", exp, result);
  ```
 */
@@ -93,8 +93,8 @@ fn main() -> Result<()> {
                     .and_then(|expr| expr.eval(&session).map_err(Error::from));
 
                 match outcome {
-                    Ok(value) => println!("{}", value),
-                    Err(e) => println!("Error: {}", e),
+                    Ok(value) => println!("{value}"),
+                    Err(err) => println!("{}", err.render(&line)),
                 }
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
