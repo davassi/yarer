@@ -5,25 +5,73 @@ on:
     branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
+  schedule:
+    # Weekly, Sunday 03:17 UTC. The fuzz job only.
+    - cron: '17 3 * * 0'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
-    - name: Upload coverage reports to Codecov
-      uses: codecov/codecov-action@v3
-      env:
-          CODECOV_TOKEN: ${{secrets.CODECOV_TOKEN}}
+      - uses: actions/checkout@v4
+      - run: cargo build --verbose
+      - run: cargo test --verbose
 
+  fmt:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo fmt --check
 
-      
+  clippy:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+
+  slim:
+    # The library must build and test without the CLI feature. Nothing else
+    # would catch a `use clap::..` finding its way into library code, and the
+    # point of the feature is that a library user does not compile it: 74
+    # crates with it, 41 without.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --no-default-features --verbose
+      - run: cargo test --no-default-features --verbose
+
+  msrv:
+    # An unverified rust-version is a comment. This is what makes it a claim.
+    #
+    # 1.88 is the floor for the default feature set. The library alone builds
+    # on 1.86 — Vec::pop_if in the shunting yard is the newest thing it uses —
+    # and the extra two versions come from rustyline 16 requiring home ^0.5.12.
+    # This version must stay in step with `rust-version` in Cargo.toml; nothing
+    # checks that they agree.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - run: cargo build --all-features
+      - run: cargo build --no-default-features
+      - run: cargo test --all-features
+
+  fuzz:
+    # Weekly rather than per-push: coverage-guided fuzzing wants minutes, not
+    # seconds, and the corpus it produces is replayed on stable by
+    # tests/fuzz_regressions.rs on every push regardless.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - run: cargo install cargo-fuzz
+      - run: cargo fuzz run compile_eval tests/fuzz_regressions -- -max_total_time=600
