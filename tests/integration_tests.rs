@@ -1612,3 +1612,105 @@ fn test_mod_by_zero_is_the_same_error_as_dividing_by_zero() {
         );
     }
 }
+
+/// Every boundary in the precedence ladder, each pinned by an input that gives
+/// a *different* answer under the wrong grouping.
+///
+/// The third and fourth columns are what make this a test of precedence rather
+/// than of arithmetic: they spell the wrong grouping out in brackets and assert
+/// what it would produce. A row whose two readings agree proves nothing about
+/// where the boundary is, and the `assert_ne!` refuses to let one be added.
+///
+/// Two rows took finding. With 0 and 1 the two readings of `not` usually agree
+/// — `not 0 == 0`, `not 1 == 0` and `not 2 == 2` are the same either way — so
+/// it needs an input where `not x` is 0 and x differs from the comparand. And
+/// equality against relational needs `0 == 0 < 0`: the obvious `1 < 2 == 1`
+/// groups identically whether the six comparisons share a level or equality
+/// sits on a weaker one of its own, as it does in C.
+#[test]
+fn test_the_precedence_boundaries_hold() {
+    let session = Session::init();
+    let value = |source: &str| {
+        Expression::compile(source)
+            .unwrap_or_else(|e| panic!("{source} should compile: {e}"))
+            .eval(&session)
+            .unwrap_or_else(|e| panic!("{source} should evaluate: {e}"))
+    };
+
+    for (source, expected, misgrouped, wrong) in [
+        ("1 or 0 and 0", 1, "(1 or 0) and 0", 0),
+        ("1 or 1 xor 1", 0, "1 or (1 xor 1)", 1),
+        ("0 and 0 < 1", 0, "(0 and 0) < 1", 1),
+        ("2 == 0 or 1", 1, "2 == (0 or 1)", 0),
+        ("not 5 == 1", 1, "(not 5) == 1", 0),
+        ("not 0 and 0", 0, "not (0 and 0)", 1),
+        ("0 == 0 < 0", 0, "0 == (0 < 0)", 1),
+        ("2 + 3 < 6", 1, "2 + (3 < 6)", 3),
+        ("2 + 7 mod 3", 3, "(2 + 7) mod 3", 0),
+        ("7 mod 3 * 2", 2, "7 mod (3 * 2)", 1),
+        ("2 * 3 mod 4", 2, "2 * (3 mod 4)", 6),
+        ("not 3!", 0, "(not 3)!", 1),
+    ] {
+        assert_ne!(
+            expected, wrong,
+            "{source} does not separate the two readings"
+        );
+        assert_eq!(
+            value(source),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+        assert_eq!(
+            value(misgrouped),
+            Number::NaturalNumber(BigInt::from(wrong)),
+            "for {misgrouped}, the grouping {source} must not have"
+        );
+    }
+}
+
+/// Assignment stays the weakest level of all, below the logical operators that
+/// were inserted above it.
+///
+/// The value of the expression cannot show this: `x = 0 or 1` is worth 1 under
+/// either grouping. Only what lands in `x` separates them — grouped as
+/// `(x = 0) or 1` the assignment stores 0 and the `or` merely reports 1. There
+/// is no public way to read a variable back, so the second expression reads it
+/// the way a user would.
+#[test]
+fn test_assignment_still_binds_more_weakly_than_everything() {
+    let session = Session::init();
+    Expression::compile("x = 0 or 1")
+        .expect("compiles")
+        .eval(&session)
+        .expect("evaluates");
+    assert_eq!(
+        Expression::compile("x")
+            .expect("compiles")
+            .eval(&session)
+            .unwrap(),
+        Number::NaturalNumber(BigInt::from(1)),
+        "the or must be the assignment's right operand, not the other way round"
+    );
+}
+
+/// The four levels inserted below `+` did not disturb anything above it. These
+/// are the groupings the whole renumbering had to preserve, asserted end to end
+/// rather than by reading the table back.
+#[test]
+fn test_the_old_operators_still_group_as_they_did() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("2+3*4", 14),
+        ("2*3+4", 10),
+        ("2-3-4", -5),
+        ("2^3^2", 512),
+        ("3!*2", 12),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
