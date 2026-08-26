@@ -1,0 +1,29 @@
+[package]
+name = "yarer-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+# The fuzz target calls neither a line editor nor an argument parser, so
+# building them for every fuzz run is pure waste.
+[dependencies.yarer]
+path = ".."
+default-features = false
+
+[[bin]]
+name = "compile_eval"
+path = "fuzz_targets/compile_eval.rs"
+test = false
+doc = false
+bench = false
+
+# Kept out of the parent build. The root crate is not a workspace today, but if
+# it ever becomes one this is what stops the fuzz crate — which needs nightly —
+# from being pulled into an ordinary `cargo build`.
+[workspace]
