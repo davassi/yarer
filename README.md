@@ -164,14 +164,40 @@ a string. It is a breaking change; everything that moved is in this table.
 | `resolver.resolve() -> anyhow::Result<Number>` | `expr.eval(&session) -> Result<Number, EvalError>` |
 | `RpnResolver::parse_with_borrowed_heap(..)` public | removed from the public surface |
 | `Parser`, `Token`, `Operator`, `Bracket`, `Associate` public | `pub(crate)` |
+| `yarer::token::{Number, ConversionError, MathFunction}` | `yarer::{Number, ConversionError, MathFunction}` |
+| `yarer::session::Session` | `yarer::Session` |
 | `a / b` on `Number`, panics when `b` is zero | `a.checked_div(&b) -> Option<Number>` |
 | `Token::compare_operator_priority` public, panics | internal, and total |
 | `session.set(..)` / `setf(..)` return `()` | return `Result<(), EvalError>` |
 | `Limits { max_value_bits: n }` | `Limits::default().with_max_value_bits(n)` |
 | errors are `anyhow::Error` strings | `Error`, `ParseError`, `EvalError`, with spans |
+| `ConversionError` is `Eq` and exhaustive | gains `NotFinite { value: f64 }`, loses `Eq`, becomes `#[non_exhaustive]` |
+| `Number::decimal` keeps an unreduced rational a decimal | it reduces first: `Number::decimal(BigRational::new_raw(4, 2))` is `NaturalNumber(2)` |
 | `!5` returns `120` | `ParseError::ExpectedValue` |
 | `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |
 | `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
+
+Three of those rows want a sentence more than a cell.
+
+**Module paths.** `Number`, `Session`, `ConversionError` and `MathFunction`
+are unchanged as types, but `token`, `session` and `rpn_resolver` are no
+longer public modules — everything public is re-exported from the crate root,
+so one `use yarer::{..}` covers it. 0.2.0's own crate documentation told
+adopters to write `use yarer::{rpn_resolver::RpnResolver, session::Session,
+token::Number};`, so every 0.2.0 user has imports that need rewriting even
+where the type they name did not move.
+
+**`ConversionError` is no longer `Eq`.** The new `NotFinite { value: f64 }`
+carries an `f64`, which is not `Eq`, and no manual implementation can honestly
+supply one. `PartialEq` is unchanged, so `==` still works; a bound of `T: Eq`
+does not. It is also `#[non_exhaustive]` now, like every other public enum
+here, so an exhaustive `match` on it needs a `_` arm.
+
+**`Number::decimal` reduces.** It used to test `denom().is_one()` without
+reducing, so an externally built `Ratio::new_raw(4, 2)` was integral but
+unreduced and came back as a `DecimalNumber` — which also made `PartialEq` and
+`PartialOrd` disagree about it. Values built from yarer's own arithmetic are
+unaffected: `BigRational` reduces its own results.
 
 Unchanged on purpose: undefined variables still read as `0`; `sin[5]` still
 evaluates; chained assignment (`x=y=5`) and chained expressions

@@ -530,6 +530,12 @@ impl PartialOrd for Number {
 
 /// Error returned when a [`Number`] cannot be converted into a fixed-size
 /// numeric type because the value falls outside that type's representable range.
+///
+/// This was [`Eq`] in 0.2.0 and is not any more: [`ConversionError::NotFinite`]
+/// carries an `f64`, which is not [`Eq`], and no manual implementation could
+/// honestly supply one. [`PartialEq`] is unchanged, so `==` still works — only
+/// an `Eq` bound stops compiling. The loss is declared in the README's
+/// migration table, which is where the 0.3.0 CHANGELOG is written from.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[non_exhaustive]
 pub enum ConversionError {
