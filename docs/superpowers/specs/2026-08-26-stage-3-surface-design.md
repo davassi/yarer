@@ -48,12 +48,32 @@ permanently red on something outside the repository.
 defect. They are documentation that lies about the tool, and they survived
 because **the CLI has never been executable from a test**.
 
-**`f64::try_from` on a value too small to represent answers `Ok(0.0)`.**
-`1/(10^400)` displays correctly as a ratio and converts silently to zero, while
-`10^400` correctly answers `Err(OutOfRange)`. This is the same defect the
-Stage 2 fix wave closed in `Display for Number` — `to_f64` answers `Some(0.0)`
-on underflow rather than `None` — and `TryFrom` inherited it. It is a known
-wrong answer shipping in 0.3.0 today.
+**Narrowing to `f64` loses small values silently, and it happens in three
+places.** `BigRational::to_f64` signals neither of its two failures: it answers
+`Some(inf)` when the value is too large and `Some(0.0)` when it is too small, so
+both losses arrive looking like successes. The Stage 2 fix wave closed this in
+`Display for Number`. The other two sites still have it.
+
+`f64::try_from(1/(10^400))` answers `Ok(0.0)` while `f64::try_from(10^400)`
+correctly answers `Err(OutOfRange)`.
+
+Worse, `functions::number_to_f64` narrows every function's *operand* before
+applying it, so the operand becomes `0.0` first:
+
+| expression | 0.3.0 answers | true value |
+|---|---|---|
+| `log(1/(10^400))` | error, "function result is not a real number" | `-400` |
+| `ln(1/(10^400))` | error, same | `-921.034…` |
+| `sqrt(1/(10^400))` | `0` | `1e-200`, comfortably representable |
+| `(1/(10^400))^0.5` | `0` | `1e-200` |
+| `sin`, `cos`, `exp`, `atan`, `cdf` | correct | correct |
+
+The split is not arbitrary. A function that shrinks toward its input — `sin x ≈
+x` — is unharmed by a zeroed operand; one that expands small values is wrecked
+by it. `log(1/(10^400))` is exactly `-400`, and yarer refuses it as not a real
+number.
+
+These are known wrong answers shipping in 0.3.0.
 
 ## What this is not
 
@@ -327,12 +347,56 @@ written from the README's News sections. The 0.3.0 migration table moves there,
 which is where someone upgrading looks; the README's News section shrinks to
 what is new in 0.4.0 plus a link.
 
-### G. The underflow fix
+### G. One narrowing, and a symmetric refusal
 
-`TryFrom<Number> for f64` answers `Err(ConversionError::OutOfRange)` for a value
-too small to represent, as it already does for one too large. Two lines, the
-same shape the `Display` fix used. It rides along in this stage because turning
-on a CI gate around a known wrong answer is the wrong order to do things in.
+The three narrowing sites become one function. It is the only place in the crate
+that turns a [`Number`] into an `f64`, and it reports which way the value
+escaped:
+
+```rust
+/// Which end of `f64`'s range a value fell off.
+pub(crate) enum Narrowing {
+    TooLarge,
+    TooSmall,
+}
+
+/// The one place this crate narrows a `Number` to `f64`.
+///
+/// `to_f64` signals neither failure — `Some(inf)` on overflow, `Some(0.0)` on
+/// underflow — so both arrive looking like successes and every caller that
+/// forgets to check inherits a wrong answer. Three of them did.
+pub(crate) fn narrow_to_f64(value: &Number) -> Result<f64, Narrowing>;
+```
+
+Zero narrows to `0.0` successfully; only a `0.0` that came from a *non-zero*
+value is `TooSmall`.
+
+Its three callers keep their own answers to a failure, because they want
+different ones:
+
+| caller | `TooLarge` | `TooSmall` |
+|---|---|---|
+| `Display for Number` | print the ratio | print the ratio |
+| `TryFrom<Number> for f64` | `ConversionError::OutOfRange` | `ConversionError::OutOfRange` |
+| `functions::number_to_f64` | `EvalError::OperandTooLargeForFloat` | `EvalError::OperandTooSmallForFloat` |
+
+**`EvalError::OperandTooSmallForFloat` is new**, and it is the mirror of the
+`OperandTooLargeForFloat` Stage 2 added for the overflow side. The rule becomes
+symmetric and there is one sentence to explain it: *an operand that cannot be
+represented as a float is refused, and the error says which end it fell off.*
+
+**This withdraws correct answers, and that is declared.** `sin(1/(10^400))`
+answered `0`, which is right, and will now be refused — exactly as Stage 2
+knowingly withdrew `atan(10^400) = π/2` when it made the overflow side refuse.
+Applying the rule per-function instead would preserve those answers at the cost
+of a judgement, for each of eighteen built-ins, about whether a zeroed operand
+is acceptable — a table that is silent when it is wrong. One rule is worth more
+than six preserved answers at the extreme edge of the value space.
+
+`number_to_f64` also loses its `on_error` parameter. Twelve call sites pass
+`EvalError::OperandTooLargeForFloat { span: None }` and nothing else ever has;
+choosing the variant is now the narrowing's job, which is what makes the
+underflow case reachable at all.
 
 ## Testing
 
@@ -359,8 +423,12 @@ on a CI gate around a known wrong answer is the wrong order to do things in.
   caught both false claims, and it is the reason they went unnoticed for three
   releases.
 
-- **The underflow fix is pinned both ways**: `1/(10^400)` errors, `1/3` still
-  converts.
+- **The narrowing is pinned at every caller and in both directions**:
+  `f64::try_from(1/(10^400))` errors and `f64::try_from(1/3)` still converts;
+  `log(1/(10^400))` and `sqrt(1/(10^400))` raise `OperandTooSmallForFloat` with
+  a span rather than answering `0`; `10^400` still raises
+  `OperandTooLargeForFloat`; and a genuine zero still narrows to `0.0`, which is
+  the case that separates "underflowed" from "is zero".
 
 - **`cargo test --no-default-features`** passes, proving no library test reaches
   a CLI dependency.
@@ -378,6 +446,11 @@ on a CI gate around a known wrong answer is the wrong order to do things in.
 - `rust-version` declared, and the pinned CI job green at exactly that version.
 - `yarer -e`, piped stdin and the REPL all covered by tests that spawn the
   binary.
+- `narrow_to_f64` is the only place in the crate that calls `to_f64`, verified
+  by `grep -rn 'to_f64' src/` returning one site.
+- `log(1/(10^400))`, `ln(1/(10^400))` and `sqrt(1/(10^400))` raise
+  `OperandTooSmallForFloat` with a span; the withdrawal of `sin(1/(10^400))`
+  is in the CHANGELOG.
 - `CHANGELOG.md` present and covering 0.1.x through 0.4.0.
 - `docs/tech-debt.md` updated: `statrs`, coverage tooling, comment syntax, and
   whatever this work leaves behind.
