@@ -542,6 +542,51 @@ impl PartialEq for Number {
 /// faithful rendering of the rational. Its second half is what keeps a genuine
 /// zero printing as `0`: only a *non-zero* rational that has underflowed to
 /// `0.0` needs the ratio.
+/// Which end of `f64`'s range a value fell off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Narrowing {
+    /// The magnitude exceeds what `f64` can hold.
+    TooLarge,
+    /// The value is not zero, but rounds to zero.
+    TooSmall,
+}
+
+/// The one place this crate narrows a [`Number`] to `f64`.
+///
+/// `to_f64` signals neither of its failures: it answers `Some(inf)` when the
+/// value is too large and `Some(0.0)` when it is too small, so both losses
+/// arrive looking like successes and every caller that forgets to check
+/// inherits a wrong answer. Three callers did. [`Display`] was fixed during
+/// Stage 2 and the other two were not, which is how `log(1/(10^400))` came to
+/// be refused as not a real number when it is exactly -400.
+///
+/// A genuine zero narrows to `0.0` successfully. Only a `0.0` that came from a
+/// non-zero value is [`Narrowing::TooSmall`], which is what lets
+/// `sqrt(1/(10^400))` be refused without also refusing `sqrt(0)`.
+///
+/// # Errors
+/// [`Narrowing::TooLarge`] or [`Narrowing::TooSmall`], naming which end of the
+/// range the value fell off.
+pub(crate) fn narrow_to_f64(value: &Number) -> Result<f64, Narrowing> {
+    let (narrowed, is_zero) = match value {
+        Number::NaturalNumber(v) => (v.to_f64(), v.is_zero()),
+        Number::DecimalNumber(v) => (v.to_f64(), v.numer().is_zero()),
+    };
+    // Both types answer `Some` for every input, so this arm is unreachable. It
+    // reports `TooLarge` rather than panicking because a `None` could only ever
+    // mean the value did not fit.
+    let Some(f) = narrowed else {
+        return Err(Narrowing::TooLarge);
+    };
+    if !f.is_finite() {
+        return Err(Narrowing::TooLarge);
+    }
+    if f == 0.0 && !is_zero {
+        return Err(Narrowing::TooSmall);
+    }
+    Ok(f)
+}
+
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -549,12 +594,11 @@ impl Display for Number {
             Number::DecimalNumber(v) => {
                 if v.denom().is_one() {
                     write!(f, "{}", v.to_integer())
-                } else if let Some(fl) = v
-                    .to_f64()
-                    .filter(|x| x.is_finite() && (*x != 0.0 || v.numer().is_zero()))
-                {
+                } else if let Ok(fl) = narrow_to_f64(self) {
                     write!(f, "{fl}")
                 } else {
+                    // Too large or too small to be a float, and exact either
+                    // way: print what it actually is.
                     write!(f, "{}/{}", v.numer(), v.denom())
                 }
             }
@@ -716,16 +760,13 @@ impl TryFrom<Number> for f64 {
     type Error = ConversionError;
 
     fn try_from(n: Number) -> Result<Self, Self::Error> {
-        let value = match &n {
-            Number::NaturalNumber(v) => v.to_f64(),
-            Number::DecimalNumber(v) => v.to_f64(),
-        };
-        value
-            .filter(|f| f.is_finite())
-            .ok_or_else(|| ConversionError::OutOfRange {
-                value: n.to_string(),
-                target: "f64",
-            })
+        // Both ends are `OutOfRange`: a value that does not fit does not fit,
+        // and which end it fell off is not something a conversion's caller can
+        // act on differently.
+        narrow_to_f64(&n).map_err(|_| ConversionError::OutOfRange {
+            value: n.to_string(),
+            target: "f64",
+        })
     }
 }
 

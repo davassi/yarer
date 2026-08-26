@@ -1,7 +1,8 @@
 use num::{BigInt, Zero};
 use num_rational::BigRational;
 use yarer::{
-    Error, EvalError, Expression, Limits, MathFunction, Number, ParseError, Session, Span,
+    ConversionError, Error, EvalError, Expression, Limits, MathFunction, Number, ParseError,
+    Session, Span,
 };
 
 #[test]
@@ -1763,4 +1764,161 @@ fn test_a_truth_answered_from_nothing_is_still_checked_against_the_budget() {
             "for {source}"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Narrowing to f64
+// ---------------------------------------------------------------------------
+
+/// The mirror of `OperandTooLargeForFloat`, and the reason it was needed.
+///
+/// `to_f64` answers `Some(0.0)` for a value too small to represent, which
+/// arrives looking like a success, so `number_to_f64` zeroed the operand before
+/// the function ran. A function that shrinks toward its input does not care —
+/// `sin x ≈ x` — but one that expands small values is wrecked by it:
+/// `log(1/(10^400))` is exactly -400 and 0.3.0 refused it as not a real number,
+/// and `sqrt(1/(10^400))` is 1e-200, comfortably inside f64's range, where
+/// 0.3.0 answered 0.
+///
+/// The span is the function name's, because that is the token whose operand is
+/// the problem and the thing the user would have to change.
+#[test]
+fn test_an_operand_too_small_for_a_float_is_refused_not_zeroed() {
+    let session = Session::init();
+    for (source, start, end) in [
+        ("log(1/(10^400))", 0, 3),
+        ("ln(1/(10^400))", 0, 2),
+        ("sqrt(1/(10^400))", 0, 4),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        let err = expr
+            .eval(&session)
+            .expect_err("must be refused, not zeroed");
+        assert!(
+            matches!(err, EvalError::OperandTooSmallForFloat { span: Some(s) }
+                if (s.start, s.end) == (start, end)),
+            "for {source}, got {err:?}"
+        );
+    }
+}
+
+/// The declared withdrawal. These answered correctly — `sin` of something that
+/// rounds to zero really is 0 — and are now refused by the same rule, exactly
+/// as Stage 2 knowingly withdrew `atan(10^400) = pi/2` when it made the
+/// overflow side refuse. One rule is worth more than a handful of preserved
+/// answers at the extreme edge of the value space, and pinning the withdrawal
+/// makes it a decision rather than a surprise.
+#[test]
+fn test_the_functions_that_tolerated_a_zeroed_operand_now_refuse_it_too() {
+    let session = Session::init();
+    for source in [
+        "sin(1/(10^400))",
+        "cos(1/(10^400))",
+        "exp(1/(10^400))",
+        "atan(1/(10^400))",
+        "cdf(1/(10^400))",
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert!(
+            matches!(
+                expr.eval(&session),
+                Err(EvalError::OperandTooSmallForFloat { .. })
+            ),
+            "for {source}"
+        );
+    }
+}
+
+/// The overflow side is unchanged, which is what makes the pair symmetric
+/// rather than one rule replacing another.
+#[test]
+fn test_an_operand_too_large_for_a_float_is_still_refused_as_before() {
+    let session = Session::init();
+    for source in ["sin(10^400)", "atan(10^400)", "exp(10^400)"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert!(
+            matches!(
+                expr.eval(&session),
+                Err(EvalError::OperandTooLargeForFloat { .. })
+            ),
+            "for {source}"
+        );
+    }
+}
+
+/// Zero narrows to 0.0 successfully. This is the case that separates
+/// "underflowed to zero" from "is zero", and without it the rule above would
+/// refuse `sin(0)`.
+#[test]
+fn test_a_genuine_zero_still_narrows_to_a_float() {
+    let session = Session::init();
+    for (source, expected) in [("sin(0)", 0), ("cos(0)", 1), ("exp(0)", 1)] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+    assert_eq!(
+        f64::try_from(Number::NaturalNumber(BigInt::zero())).unwrap(),
+        0.0
+    );
+}
+
+/// `TryFrom` had the same hole at the other end of the crate: a value that
+/// prints correctly as a ratio converted silently to zero, while a value too
+/// large correctly errored.
+#[test]
+fn test_converting_a_value_too_small_for_a_float_errors_rather_than_zeroing() {
+    let session = Session::init();
+
+    let tiny = Expression::compile("1/(10^400)")
+        .unwrap()
+        .eval(&session)
+        .unwrap();
+    assert!(
+        tiny.to_string().starts_with("1/1"),
+        "it prints as a ratio, so it must not convert to 0: {tiny}"
+    );
+    assert!(matches!(
+        f64::try_from(tiny),
+        Err(ConversionError::OutOfRange { .. })
+    ));
+
+    // An ordinary fraction is untouched.
+    let third = Expression::compile("1/3").unwrap().eval(&session).unwrap();
+    assert!((f64::try_from(third).unwrap() - 1.0 / 3.0).abs() < 1e-15);
+}
+
+/// A non-integer power narrows both its operands through the same one place,
+/// but reports its own pair of errors — because `(2^2000)^0.5` failing is about
+/// the power, not about `2^2000`, which is a perfectly good value.
+/// `test_an_operand_too_large_for_an_f64_reports_that_and_not_something_else`
+/// pins the large half of that distinction; this pins the small half, which did
+/// not exist until the narrowing was consolidated and the underflow became
+/// reportable at all.
+#[test]
+fn test_a_power_operand_too_small_for_a_float_says_so_in_its_own_terms() {
+    let session = Session::init();
+
+    let expr = Expression::compile("(1/(10^400))^0.5").expect("compiles");
+    assert!(
+        matches!(
+            expr.eval(&session),
+            Err(EvalError::PowerOperandsTooSmall { .. })
+        ),
+        "0.3.0 answered 0 for this; the true value is 1e-200"
+    );
+
+    // The large half is unchanged, which is what makes the pair symmetric.
+    let expr = Expression::compile("(2^2000)^0.5").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::PowerOperandsTooLarge { .. })
+    ));
+
+    // And an integer exponent never goes near an f64, so neither applies.
+    let expr = Expression::compile("(1/(10^400))^2").expect("compiles");
+    assert!(expr.eval(&session).is_ok(), "the integer path is exact");
 }

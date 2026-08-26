@@ -16,7 +16,7 @@
 - **Never run `git stash` in this repository.** Two protected user stashes from June 2025 live here and must not be disturbed. If you need a clean tree, use `git worktree` and remove it when done.
 - After any edit, confirm the build actually recompiled: if `cargo test` output has no `Compiling yarer` line after a source change, run `cargo clean -p yarer` and try again.
 - Every task ends with `cargo test` green and `cargo fmt --check` clean.
-- **The 143 value-asserting macro invocations in `tests/integration_tests.rs` must survive verbatim.** Task 7 restructures the evaluation loop; they are the proof it changed no meaning. Check with a **superset test against the merge base**, never with a digest of the whole set — a digest changes when a test is legitimately added, and this plan adds many:
+- **The 146 value-asserting macro invocations in `tests/integration_tests.rs` must survive verbatim.** Task 7 restructures the evaluation loop; they are the proof it changed no meaning. Check with a **superset test against the merge base**, never with a digest of the whole set — a digest changes when a test is legitimately added, and this plan adds many:
   ```bash
   git show master:tests/integration_tests.rs \
     | grep -oP 'resolve(_natural|_decimal)?!\([^;]*\);' | sort > /tmp/baseline.txt
@@ -42,7 +42,10 @@ Put all three in Task 1's commit message body.
 
 ```bash
 grep -oP 'resolve(_natural|_decimal)?!\([^;]*\);' tests/integration_tests.rs | sort | md5sum
-# expected: a9904e579d888f7a0c6d22f96088ea6d  (143 invocations)
+# expected: 2dfe6804c7e1d31aa52afc52b2ed56aa  (146 invocations)
+# The 143 in Stage 2's records predates the operators, which added three
+# legitimately. The digest is recorded to detect an accident; the invariant
+# that actually holds across this branch is the superset check against master.
 
 cargo clean -p yarer >/dev/null 2>&1
 cargo clippy --all-targets --message-format=json 2>/dev/null \
@@ -1293,7 +1296,7 @@ Spec component D, the structural half. The register opened this entry when the o
 
 **Files:**
 - Modify: `src/expression.rs`
-- Test: none new — the 143 value assertions and the existing 92 integration tests are the proof this changed no meaning
+- Test: none new — the 146 value assertions and the existing 92 integration tests are the proof this changed no meaning
 
 **Interfaces:**
 - Produces, in `src/expression.rs`:
@@ -2129,7 +2132,7 @@ cargo tree --edges normal --prefix none --no-default-features \
   | awk '{print $1}' | sort -u | wc -l                      # about 41
 ```
 
-- The 143 value assertions present and unmodified, checked with `comm -23` against `master`, not with a digest.
+- The 146 value assertions present and unmodified, checked with `comm -23` against `master`, not with a digest.
 - `eval_with` and `apply_operator` both under 100 lines, with no `too_many_lines` suppression between them.
 - `log(1/(10^400))`, `ln(1/(10^400))` and `sqrt(1/(10^400))` raise `OperandTooSmallForFloat` with a span; the withdrawal of `sin(1/(10^400))` is in the CHANGELOG.
 - `yarer -e`, a pipe, and the REPL each covered by tests that spawn the binary.

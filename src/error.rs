@@ -102,10 +102,21 @@ pub enum EvalError {
     ExponentTooLarge { span: Option<Span> },
     #[error("power operands are too large for non-integer evaluation")]
     PowerOperandsTooLarge { span: Option<Span> },
+    /// An operand of a non-integer power is not zero, but is too small to be
+    /// represented as an `f64`. The mirror of
+    /// [`EvalError::PowerOperandsTooLarge`], and named for the operation for
+    /// the same reason: `(1/(10^400))^0.5` failing is about the power, not
+    /// about `1/(10^400)`, which is a perfectly good value.
+    #[error("power operands are too small for non-integer evaluation")]
+    PowerOperandsTooSmall { span: Option<Span> },
     #[error("invalid power operation")]
     InvalidPower { span: Option<Span> },
     #[error("operand is too large for floating-point evaluation")]
     OperandTooLargeForFloat { span: Option<Span> },
+    /// The operand is not zero, but is too small to be represented as an
+    /// `f64` and would otherwise have been silently replaced by zero.
+    #[error("operand is too small for floating-point evaluation")]
+    OperandTooSmallForFloat { span: Option<Span> },
     #[error("function result is not a real number")]
     NotARealNumber { span: Option<Span> },
     #[error("'{name}' is a built-in constant and is read-only")]
@@ -174,8 +185,10 @@ impl EvalError {
             | EvalError::FactorialOperandTooLarge { span }
             | EvalError::ExponentTooLarge { span }
             | EvalError::PowerOperandsTooLarge { span }
+            | EvalError::PowerOperandsTooSmall { span }
             | EvalError::InvalidPower { span }
             | EvalError::OperandTooLargeForFloat { span }
+            | EvalError::OperandTooSmallForFloat { span }
             | EvalError::NotARealNumber { span }
             | EvalError::ReadOnlyConstant { span, .. }
             | EvalError::AssignmentTargetMissing { span }
@@ -199,8 +212,10 @@ impl EvalError {
             | EvalError::FactorialOperandTooLarge { span: slot }
             | EvalError::ExponentTooLarge { span: slot }
             | EvalError::PowerOperandsTooLarge { span: slot }
+            | EvalError::PowerOperandsTooSmall { span: slot }
             | EvalError::InvalidPower { span: slot }
             | EvalError::OperandTooLargeForFloat { span: slot }
+            | EvalError::OperandTooSmallForFloat { span: slot }
             | EvalError::NotARealNumber { span: slot }
             | EvalError::ReadOnlyConstant { span: slot, .. }
             | EvalError::AssignmentTargetMissing { span: slot }
@@ -291,8 +306,10 @@ mod tests {
             EvalError::FactorialOperandTooLarge { span: None },
             EvalError::ExponentTooLarge { span: None },
             EvalError::PowerOperandsTooLarge { span: None },
+            EvalError::PowerOperandsTooSmall { span: None },
             EvalError::InvalidPower { span: None },
             EvalError::OperandTooLargeForFloat { span: None },
+            EvalError::OperandTooSmallForFloat { span: None },
             EvalError::NotARealNumber { span: None },
             EvalError::ReadOnlyConstant {
                 name: "pi".to_string(),

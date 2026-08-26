@@ -1,7 +1,7 @@
 //! Compiled expressions, and the loop that evaluates them.
 
 use crate::error::{EvalError, ParseError};
-use crate::functions::{decimal_from_f64, number_to_f64};
+use crate::functions::decimal_from_f64;
 use crate::limits::{self, Limits};
 use crate::{
     functions,
@@ -9,7 +9,7 @@ use crate::{
     session::Session,
     shunting,
     span::Spanned,
-    token::{Number, Operator, Token},
+    token::{narrow_to_f64, Narrowing, Number, Operator, Token},
     validate,
 };
 use log::debug;
@@ -44,6 +44,23 @@ pub struct Expression<'a> {
 /// built around one.
 fn boolean(truth: bool) -> Number {
     Number::NaturalNumber(BigInt::from(u8::from(truth)))
+}
+
+/// Narrows one operand of a non-integer power.
+///
+/// It does not go through [`functions::number_to_f64`] because the two report
+/// different things: a power's operands failing to fit is about the power, and
+/// `(2^2000)^0.5` says so rather than blaming `2^2000`, which is a fine value.
+/// A test pins that distinction. Both share [`narrow_to_f64`], which is the
+/// part that must not be duplicated — the mapping to an error is what differs.
+///
+/// # Errors
+/// [`EvalError::PowerOperandsTooLarge`] or [`EvalError::PowerOperandsTooSmall`].
+fn power_operand_to_f64(value: &Number) -> Result<f64, EvalError> {
+    narrow_to_f64(value).map_err(|why| match why {
+        Narrowing::TooLarge => EvalError::PowerOperandsTooLarge { span: None },
+        Narrowing::TooSmall => EvalError::PowerOperandsTooSmall { span: None },
+    })
 }
 
 /// Zero is false and everything else is true — including negative and
@@ -408,11 +425,8 @@ impl<'a> Expression<'a> {
         let value = if let Some(exponent) = right_value.as_integer() {
             Self::power_integer(left_value, exponent, limits)?
         } else {
-            let base = number_to_f64(&left_value, EvalError::PowerOperandsTooLarge { span: None })?;
-            let exponent = number_to_f64(
-                &right_value,
-                EvalError::PowerOperandsTooLarge { span: None },
-            )?;
+            let base = power_operand_to_f64(&left_value)?;
+            let exponent = power_operand_to_f64(&right_value)?;
             decimal_from_f64(base.powf(exponent), EvalError::InvalidPower { span: None })?
         };
 
