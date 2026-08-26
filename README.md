@@ -127,7 +127,7 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
 
 ```text
       $ yarer
-      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
+      Yarer v.0.4.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > (1+9)*(8+2)+0!
       101
@@ -158,131 +158,31 @@ An assignment prints the value assigned, because that is what the expression
 evaluates to.
 ## News and Updates
 
-### Version 0.3.0 — migrating from 0.2.0
+### What's new in 0.4.0
 
-Yarer 0.3.0 replaces the public API with one where every failure is a typed
-error carrying a position instead of a string, and adds ten operators. It is a
-breaking change; everything that moved is in this table.
+* `yarer -e "1+2"` and piped input, alongside the interactive REPL.
+* The CLI's dependencies are behind a feature that is on by default, so a
+  library-only build compiles 41 crates instead of 74.
+* A declared and CI-verified minimum Rust version.
+* An operand too small to be an `f64` is refused rather than silently zeroed —
+  `log(1/(10^400))` is `-400`, not an error.
 
-| Before | After |
-|---|---|
-| `session.process(s) -> RpnResolver` | `Expression::compile(s) -> Result<Expression, ParseError>` |
-| `resolver.resolve() -> anyhow::Result<Number>` | `expr.eval(&session) -> Result<Number, EvalError>` |
-| `RpnResolver::parse_with_borrowed_heap(..)` public | removed from the public surface |
-| `Parser`, `Token`, `Operator`, `Bracket`, `Associate` public | `pub(crate)` |
-| `yarer::token::{Number, ConversionError, MathFunction}` | `yarer::{Number, ConversionError, MathFunction}` |
-| `yarer::session::Session` | `yarer::Session` |
-| `a / b` on `Number`, panics when `b` is zero | `a.checked_div(&b) -> Option<Number>` |
-| `Token::compare_operator_priority` public, panics | internal, and total |
-| `session.set(..)` / `setf(..)` return `()` | return `Result<(), EvalError>` |
-| `Limits { max_value_bits: n }` | `Limits::default().with_max_value_bits(n)` |
-| errors are `anyhow::Error` strings | `Error`, `ParseError`, `EvalError`, with spans |
-| `ConversionError` is `Eq` and exhaustive | gains `NotFinite { value: f64 }`, loses `Eq`, becomes `#[non_exhaustive]` |
-| `MathFunction` is exhaustive | `#[non_exhaustive]`: an exhaustive `match` on it needs a `_` arm |
-| `Number::decimal` keeps an unreduced rational a decimal | it reduces first: `Number::decimal(BigRational::new_raw(4, 2))` is `NaturalNumber(2)` |
-| `!5` returns `120` | `ParseError::ExpectedValue` |
-| a function on an operand too large for `f64` returned the limit value there, for the functions that have one (`atan(10^400)` was `pi/2`; also `exp`, `cdf`, `pdf`) | `EvalError::OperandTooLargeForFloat` |
-| `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |
-| `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
-| `and`, `or`, `xor`, `not`, `mod` are valid variable names | reserved words, in every casing |
+**The full history, and the migration table for 0.2.0 → 0.3.0, is in
+[CHANGELOG.md](CHANGELOG.md).**
 
-Four of those rows want a sentence more than a cell.
+## Using it as a library only
 
-**Module paths.** `Number`, `Session`, `ConversionError` and `MathFunction`
-are unchanged as types, but `token`, `session` and `rpn_resolver` are no
-longer public modules — everything public is re-exported from the crate root,
-so one `use yarer::{..}` covers it. 0.2.0's own crate documentation told
-adopters to write `use yarer::{rpn_resolver::RpnResolver, session::Session,
-token::Number};`, so every 0.2.0 user has imports that need rewriting even
-where the type they name did not move.
+The command-line binary's dependencies are behind a feature that is on by
+default, so `cargo install yarer` works unchanged. A program that only wants
+the evaluator can turn it off:
 
-**`ConversionError` is no longer `Eq`.** The new `NotFinite { value: f64 }`
-carries an `f64`, which is not `Eq`, and no manual implementation can honestly
-supply one. `PartialEq` is unchanged, so `==` still works; a bound of `T: Eq`
-does not. It is also `#[non_exhaustive]` now, like every other public enum
-here, so an exhaustive `match` on it needs a `_` arm.
-
-**`Number::decimal` reduces.** It used to test `denom().is_one()` without
-reducing, so an externally built `Ratio::new_raw(4, 2)` was integral but
-unreduced and came back as a `DecimalNumber` — which also made `PartialEq` and
-`PartialOrd` disagree about it. Values built from yarer's own arithmetic are
-unaffected: `BigRational` reduces its own results.
-
-**Ten operators are new**, and one of them takes something away. `<` `>` `<=`
-`>=` `==` `<>`, `and` `or` `xor` `not`, and `mod` are described under
-[Operators](#operators) above. Everything about them is additive except the
-five words, which stop being usable as variable names — the one break in this
-half of the release. An expression that used `mod` or `and` as a variable now
-fails to compile with `ParseError::ExpectedValue` rather than silently reading
-the undefined variable as `0`, so the failure is loud and positioned.
-
-Nothing that evaluated before changes value. The precedence ladder grew from
-six levels to ten, but the six operators that predate the new ones keep their
-order relative to one another and no new level was interleaved between two old
-ones, so no existing expression re-groups. The suite's 143 value assertions are
-the test of that claim and are unmodified.
-
-Unchanged on purpose: undefined variables still read as `0`; `sin[5]` still
-evaluates; chained assignment (`x=y=5`) and chained expressions
-(`x=2; y=3; x*y`) are unaffected; every numeric result already documented
-above stays the same.
-
-### Version 0.2.0
-
-Yarer 0.2.0 is a correctness-focused release that includes a breaking API change.
-
-**Breaking change:** conversions from `Number` to `i32`, `i64`, `i128` and `f64` are now
-fallible. They are exposed via `TryFrom`/`TryInto` (returning a `ConversionError`) instead of
-the previous panicking `From`/`Into`. Conversion to `BigInt` remains infallible via `From`.
-Update `let n: i32 = result.into();` to `let n: i32 = result.try_into()?;` (or `.unwrap()`).
-
-Other changes:
-
-* Out-of-range numeric conversions now return an error instead of panicking.
-* `Number` → `BigInt` conversion is exact (truncates the rational toward zero) rather than round-tripping through `f64`, so precision is no longer silently lost.
-* A trailing `;` now returns the last segment's value instead of reporting a spurious "malformed expression" error after the assignment already took effect.
-* Malformed segments inside a `;`-chained expression are now rejected instead of being silently discarded.
-* Stricter parser validation: malformed expressions and unexpected tokens raise a clear error.
-* Removed an unused, internally-panicking `BitXor` implementation for `Number`.
-
-### Version 0.1.8
-
-Yarer 0.1.8 comes with several enhancements:
-
-* Decimal numbers are now represented using the `num-rational` crate for higher precision.
-* Added new math functions: `floor`, `ceil`, `round`, `exp`, `pdf` and `cdf`.
-* Expressions can be chained with semicolons, e.g. `x=2; y=3; x*y`.
-* Variable assignments inside expressions are handled more reliably.
-* This README includes a demonstration of the Black–Scholes formula.
-
-Starting with Yarer version 0.1.7, natural numbers are implemented internally using [BigInt](https://crates.io/crates/num-bigint) from the [num crate](https://crates.io/crates/num). Now it is possible to do calculations with arbitrarily large natural numbers.
-
-```text
-    $ yarer
-      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
-      License MIT OR Apache-2.0
-      > 78!
-      1132428117820629783145752115873204622873174957948825.....
-      > 2^78
-      302231454903657293676544
+```toml
+yarer = { version = "0.4", default-features = false }
 ```
 
-From Yarer version 0.1.5 it's possible to share a single session, and therefore a single heap of variables, for multiple compiled expressions. The library is not intended to be thread-safe.
-
-```rust
-    use yarer::{Expression, Session};
-
-    let session = Session::init();
-
-    let expr1 = Expression::compile("x ^ 2").unwrap();
-    let expr2 = Expression::compile("x! - (x-1)!").unwrap();
-
-    session.set("x", 10).unwrap();
-
-    if let (Ok(a), Ok(b)) = (expr1.eval(&session), expr2.eval(&session)) {
-        println!("{} {}", a, b); // 100 3265920
-    }
-```
+which drops `clap`, `rustyline`, `dirs` and `env_logger` and takes the
+dependency tree from 74 crates to 41 — no argument parser, no line editor, and
+no `jiff`, which `env_logger` pulls in to format timestamps.
 
 ## Operators
 
@@ -390,7 +290,7 @@ Using Yarer, the Black–Scholes formula for a European call option can be evalu
 
 ```text
       $ yarer
-      Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
+      Yarer v.0.4.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > S=100;K=100;T=1;r=0.05;sigma=0.2;
       0.2

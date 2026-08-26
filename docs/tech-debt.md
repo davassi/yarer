@@ -3,8 +3,10 @@
 Known structural and maintainability debt, and follow-up work deliberately left
 undone. Entries were verified against the source at `a7f1220`, the commit the
 production-ready-api stage (Stage 2 of the 0.3.0 plan)'s own code and
-documentation changes landed on, and re-verified against the comparison and
-logical operators work that followed it on the way to the same release. The fix
+documentation changes landed on, re-verified against the comparison and logical
+operators work that followed it into 0.3.0, and re-verified again against
+Stage 3 (surface) for 0.4.0, which closed three of these entries and corrected
+a fourth that turned out not to be reproducible. The fix
 wave that followed Stage 2's whole-branch review revisited two of them, and both
 revisions say so where they stand.
 
@@ -38,60 +40,38 @@ things worth fixing next, not things that are broken now.
 
 ## Structural
 
-**Four functions exceed the 100-line clippy `too_many_lines` threshold**,
-re-measured cold: `Expression::eval_with` at 216, `validate::validate` at 163,
-`functions::eval` at 110, and the `test_expressions` integration test at 115.
-The first two numbers moved twice. The fix wave after Stage 2's whole-branch
-review took `validate::validate` from 150 to 153, growing the check that
-refuses an expression made of nothing but `;`; the operators work took it to
-163 and `Expression::eval_with` from 146 to 216. `shunting::to_rpn` is still
-under the threshold, at 94 against 91 before, having gained only the guard
-that stops a prefix operator from popping. `too_many_lines` is part of
-`clippy::pedantic`, which is only turned on in `src/lib.rs`; the integration
-test crate doesn't inherit it, so `test_expressions` has never been
-clippy-flagged and this number is a manual line count, same as the original
-entry's 107.
+**Two functions exceed the 100-line clippy `too_many_lines` threshold**,
+re-measured cold for 0.4.0: `validate::validate` at 163 and `functions::eval`
+at 104. Both now carry `#[expect(clippy::too_many_lines, reason = "…")]` with a
+written justification, so CI can deny every warning and a suppression that
+stops being needed reports itself.
 
-Two of the four are Stage 1 holdovers under new names.
-`RpnResolver::resolve` (155 lines at Stage 1's close) became
-`Expression::eval_with` (146, and 216 now) when `rpn_resolver.rs` was renamed
-to `expression.rs`. `RpnResolver::reverse_polish_notation` (168 lines) became
-`shunting::to_rpn` — and dropped **under** the threshold, to 91, when Stage 2
-split the bracket/arity/comma bookkeeping out of it and into a dedicated
-validation pass. That pass is the third function on this list.
+The other two are gone. `Expression::eval_with` went from 216 to 60 when
+Stage 3 split it (see below), and the `test_expressions` integration test is no
+longer the outlier it was. `shunting::to_rpn` has never crossed the threshold
+and is at 94.
 
-`validate::validate` is new, and it was the longest function in the crate
-until the operators work pushed `Expression::eval_with` past it. It replaced
-logic that used to be scattered — partly inside the shunting yard,
-partly in a `mod_unary_operators` pass that had no way to refuse anything —
-with a single walk over the token stream that gives every rejection a
-position. That is the most visible thing Stage 2 did: five previously
-identical "malformed expression" failures are now five distinct, positioned
-diagnoses. The length is worth that. Structurally it is the same shape
-`reverse_polish_notation` had before its own split: one `match` over `Token`
-variants, with `Token::Bracket(Bracket::Close)` (~50 lines) the largest and
-most separable arm, `Token::Comma` and `Token::Operator` next. If this needs
-to shrink, that arm is where to start.
+`validate::validate` is the longest function in the crate again, now that
+`eval_with` is not. It replaced logic that used to be scattered — partly inside
+the shunting yard, partly in a `mod_unary_operators` pass that had no way to
+refuse anything — with a single walk over the token stream that gives every
+rejection a position. That is the most visible thing Stage 2 did: five
+previously identical "malformed expression" failures are now five distinct,
+positioned diagnoses. The length is worth that, and the `expect`'s reason says
+so. Structurally it is one `match` over `Token` variants, with
+`Token::Bracket(Bracket::Close)` (~50 lines) the largest and most separable
+arm. If it ever has to shrink, that arm is where to start.
 
-**`Expression::eval_with`'s 70-line growth is ten arms that differ by one
-line each.** The six comparisons and the four `and`/`or`/`xor`/`not` arms each
-spell out the same tail — build the value, `limits::check_size`, push it,
-push `None` beside it — which `Add`, `Sub`, `Mul`, `Div` and `Fac` already
-spelled out five times before this work. Fifteen copies of four lines is most
-of what makes this the longest function in the crate.
-
-The fix is not a helper function: `push_checked(value, limits, &mut
-result_stack, &mut var_stack)` takes four arguments and `rustfmt` wraps the
-call to more lines than it saves. It is to give the two stacks one owner — a
-small `Stacks { values, vars }` with a `push_checked(&mut self, value,
-limits)` method — after which every one of the fifteen arms is a single line
-saying only what its operator means, and the two stacks can no longer fall out
-of lockstep, which today is maintained by hand. That is a change to twenty-odd
-sites in the crate's central evaluation loop, which is why it was not done
-alongside adding the operators: the arms as written match the idiom of the
-five that were already there, and restructuring the loop is not something
-"add ten operators" implies. It is the first thing to do the next time this
-function is opened.
+**Stage 3 closed this entry, and the shape of the fix was not quite the one
+proposed.** `Expression::eval_with` was 216 lines; it is 60, and
+`apply_operator` — which holds what each operator means — is 95. `Stacks`
+exists as proposed, and its `push_checked`/`push_truth` pair is what reduced
+every operator arm to a single line. The proposal expected a third function
+holding the ten truth operators; it was not needed, and would have cost a
+nested match over ten operators plus an arm listing the other six unreachably.
+`apply_operator` has five lines of headroom, so a seventeenth operator tips it
+back over the threshold, and that third function is the answer already
+designed for when it does.
 
 **The numeric kernels behind `^` and `!` live in `expression.rs`, not
 `functions.rs`.** `Expression::power`, `power_integer`, `pow_big_int`,
@@ -122,10 +102,18 @@ measurement method; the scaling is the load-bearing fact, not the constant.)
 Bounded by input length and outside the size budget's reach, since the budget
 checks the value after it has been built.
 
-**`apply_functional_token_operation` clones its right operand needlessly.** It
-does `match (ln, rn.clone())` and the match consumes both by value, so the
-clone is never used. Under the 1 Mibit default budget that is up to roughly
-128 KiB copied on every `+`, `-`, `*` and `/`. Unchanged since Stage 1.
+**`apply_functional_token_operation`'s needless clone is gone, and the cost
+this entry claimed for it was never measured.** It did `match (ln, rn.clone())`
+where the match consumes both by value, so the clone was dead. This entry said
+that meant "up to roughly 128 KiB copied on every `+`, `-`, `*` and `/`" under
+the default budget. That is an upper bound on the *size* of a copy, not a
+measurement of its cost, and measuring does not support it: best of seven runs
+of 2000 evaluations of an expression with 60000-bit operands gives 14.7 ms
+without the clone and 15.4 ms with, while two runs without differ by 0.4 ms
+between themselves. The bignum arithmetic dominates. Removing it was right
+because it was dead code; it was not a performance fix, and the entry is kept
+in corrected form because a register that quietly restates a claim it could not
+reproduce is worth less than one that says so.
 
 **`Expression::factorial_helper` is the naive sequential product.** Binary
 splitting would decouple running time from the bit budget. Re-verified the
@@ -160,10 +148,12 @@ catch reduction getting slower on the case that actually costs the most.
 
 ## Polish
 
-**Two `#[allow]` attributes on `predicted_factorial_bits`**
-(`clippy::cast_precision_loss`, then `clippy::cast_possible_truncation` and
-`clippy::cast_sign_loss`), where `#[expect(...)]` would self-report once the
-casts stop needing suppression. Unchanged since Stage 1.
+**Done in Stage 3.** The two `#[allow]` attributes on
+`predicted_factorial_bits` are `#[expect]` now, with a written reason, as is
+the one on `Number::decimal`. Every suppression in the crate self-reports if it
+stops being needed — except `multiple_crate_versions` at the crate root, which
+must stay an `allow` because the lint fires from the manifest and has no span
+in the source to attach an `expect` to.
 
 **`MathFunction::None` is public and cannot be produced by parsing.**
 `Token::get_some` never yields it, so no expression compiles to one, and
@@ -224,6 +214,47 @@ is how this was noticed. The gap is additive to close — a `Session::get(&self,
 name: &str) -> Option<Number>` alongside `set` — and it is left open here only
 because adding a public method is a design decision for the release rather
 than part of adding operators.
+
+**`statrs` is 26 of the 41 crates a slim library build compiles**, for one
+import: `Normal`, used by `pdf` and `cdf`. It brings `nalgebra`,
+`matrixmultiply` and `rand`. It is a larger dependency than the entire CLI
+stack, which Stage 3 was able to put behind a feature precisely because it is
+optional to the library — `statrs` is not. Replacing it means hand-writing an
+erf approximation, which would move numbers the suite pins and the README's
+Black–Scholes example quotes, so it is a correctness change rather than a
+dependency one and wants its own design.
+
+**There is no coverage measurement.** The workflow uploaded to Codecov for
+years with no step generating a report, so whatever that badge showed was not
+measured. Stage 3 removed the upload rather than wiring it up. `cargo llvm-cov`
+is the obvious way back if coverage is wanted, and wiring it is a small piece
+of work that nobody should mistake for having been done.
+
+**The MSRV is declared in two places** — `rust-version` in `Cargo.toml` and the
+`msrv` job's toolchain line in `.github/workflows/rust.yml` — and nothing
+checks that they agree. Raising one without the other leaves CI verifying a
+claim the manifest is not making, or the reverse.
+
+**The floor is 1.88 because of a transitive dependency, not because of yarer.**
+The library alone builds on 1.86, where `Vec::pop_if` in the shunting yard is
+the newest thing it uses. `rustyline 16` requires `home ^0.5.12`, and `home`
+0.5.12 requires 1.88. `rust-version` is a single per-package value and takes
+the higher, so a library user on 1.86 or 1.87 is refused by cargo even though
+their build would work. Nothing to do about it while rustyline is a default
+dependency; worth knowing before anyone tries to lower the floor.
+
+**`src/token.rs` is over 1100 lines** and holds `Number`, `Operator`, `Token`,
+`MathFunction` and every conversion between them. `Number` and its conversions
+are the separable part. Stage 3 added about 35 lines to it and edited nine doc
+comments, neither of which is a reason to move four types between files during
+a release.
+
+**Script mode has no comment syntax**, which is the first thing a piped file of
+expressions wants. The README documented a `//` comment for three releases that
+never existed — `9801/(2206*sqrt(2)) // approx of PI` is a parse error — and
+Stage 3 deleted the claim rather than implementing it, because adding tokeniser
+syntax is a language change. If script mode gets used, this is the first thing
+it will ask for.
 
 ## A pattern worth remembering
 

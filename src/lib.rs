@@ -171,7 +171,7 @@
 //!
 //! ```ignore
 //! $ yarer
-//! Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
+//! Yarer v.0.4.0 - Yet Another Rust Expression Resolver.
 //! License MIT OR Apache-2.0
 //! > (1+9)*(8+2)
 //! 100
