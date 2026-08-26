@@ -35,6 +35,17 @@ pub struct Expression<'a> {
     rpn: VecDeque<Spanned<Token<'a>>>,
 }
 
+/// Truth as this crate represents it: `1` and `0`, as in GNU bc, which is the
+/// value model the README already names.
+///
+/// There is no boolean [`Number`] variant, and this is the whole of the price:
+/// `(1<2) + 5` is a legal expression worth 6. That is the accepted cost of not
+/// introducing a second kind of value into a crate whose entire surface is
+/// built around one.
+fn boolean(truth: bool) -> Number {
+    Number::NaturalNumber(BigInt::from(u8::from(truth)))
+}
+
 impl<'a> Expression<'a> {
     /// Compiles `source` into an expression.
     ///
@@ -194,13 +205,57 @@ impl<'a> Expression<'a> {
                             result_stack.push_back(right_value * minus_one.clone());
                             var_stack.push_back(None);
                         }
-                        Operator::Less
-                        | Operator::Greater
-                        | Operator::LessEq
-                        | Operator::GreaterEq
-                        | Operator::Equal
-                        | Operator::NotEqual
-                        | Operator::And
+                        // The six comparisons, in the order the precedence
+                        // table lists them. Each asks `Number`'s own
+                        // `PartialOrd`, which Stage 1 made agree with
+                        // `PartialEq` by comparing mathematical value rather
+                        // than enum variant — so `2 == 6/3` is true here with
+                        // no code of its own.
+                        //
+                        // Every one of them ends in the same three lines the
+                        // arithmetic arms above end in, including the size
+                        // check. That check cannot fail: 1 and 0 occupy one
+                        // bit. It is there because the rule this crate keeps
+                        // is that every arm which pushes a value checks it,
+                        // and the register records what happened the last time
+                        // that rule was given a reasonable-looking exception.
+                        Operator::Less => {
+                            let value = boolean(left_value < right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Greater => {
+                            let value = boolean(left_value > right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::LessEq => {
+                            let value = boolean(left_value <= right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::GreaterEq => {
+                            let value = boolean(left_value >= right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Equal => {
+                            let value = boolean(left_value == right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::NotEqual => {
+                            let value = boolean(left_value != right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::And
                         | Operator::Or
                         | Operator::Xor
                         | Operator::Not

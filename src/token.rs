@@ -251,6 +251,24 @@ impl Token<'_> {
             '#' => Some(Token::Operator(Operator::Une)),
             '!' => Some(Token::Operator(Operator::Fac)),
             '=' => Some(Token::Operator(Operator::Assign)),
+            '<' => Some(Token::Operator(Operator::Less)),
+            '>' => Some(Token::Operator(Operator::Greater)),
+            _ => None,
+        }
+    }
+
+    /// Converts a whole token to the [`Operator`] it spells, for the operators
+    /// written with two characters, or [`None`] if it spells none of them.
+    ///
+    /// This asks about the whole token rather than its first character, and is
+    /// asked before [`Token::from_operator`] is: the first character of `<=` is
+    /// `<`, which on its own is a perfectly good comparison.
+    fn from_two_char_operator(t: &str) -> Option<Operator> {
+        match t {
+            "<=" => Some(Operator::LessEq),
+            ">=" => Some(Operator::GreaterEq),
+            "==" => Some(Operator::Equal),
+            "<>" => Some(Operator::NotEqual),
             _ => None,
         }
     }
@@ -304,12 +322,25 @@ impl Token<'_> {
     ///
     #[must_use]
     pub(crate) fn tokenize(t: &str) -> Token<'_> {
-        if let Some(s) = t.chars().next() {
-            match s {
-                c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=' | '×' | '÷') => {
-                    return Token::from_operator(c).unwrap()
-                }
-                b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
+        // Ahead of the single-character route below, for the reason given on
+        // `from_two_char_operator`.
+        if let Some(op) = Token::from_two_char_operator(t) {
+            return Token::Operator(op);
+        }
+
+        // Asking the two converters directly, rather than listing the operator
+        // and bracket characters in a guard here and then unwrapping what they
+        // return, is what keeps each list in one place: the guard and the
+        // converter used to spell out the same set, and a character added to
+        // one and not the other turned that `unwrap` into a panic.
+        if let Some(c) = t.chars().next() {
+            if let Some(token) = Token::from_operator(c) {
+                return token;
+            }
+            if let Some(token) = Token::from_bracket(c) {
+                return token;
+            }
+            match c {
                 ',' => return Token::Comma,
                 ';' => return Token::SemiColon,
                 _ => (), // continue the flow
@@ -1087,6 +1118,12 @@ mod tests {
         assert_eq!(Token::tokenize("×"), Token::Operator(Operator::Mul));
         assert_eq!(Token::tokenize("÷"), Token::Operator(Operator::Div));
         assert_eq!(Token::tokenize("foo"), Token::Variable("foo"));
+        // Also unreachable from the pipeline — the regex has no '#' — and it
+        // moved when the two duplicated character lists became one. It used to
+        // fall through to a variable named "#"; it now spells the unary minus,
+        // which is how `Display` has always written it. Pinned so that the
+        // change is a decision rather than a side effect.
+        assert_eq!(Token::tokenize("#"), Token::Operator(Operator::Une));
     }
 
     #[test]

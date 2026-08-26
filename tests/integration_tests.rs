@@ -1309,3 +1309,109 @@ fn test_an_unreduced_rational_does_not_become_a_decimal() {
         Number::NaturalNumber(_)
     ));
 }
+
+// ---------------------------------------------------------------------------
+// Comparison and logical operators
+// ---------------------------------------------------------------------------
+
+/// A comparison yields 1 or 0, as in GNU bc. There is no boolean type: the
+/// price of that is that `(1<2) + 5` is a legal expression worth 6, and the
+/// benefit is that `Number` stays the crate's only kind of value.
+#[test]
+fn test_comparisons_yield_one_or_zero() {
+    let session = Session::init();
+    for (source, expected) in [
+        ("1 < 2", 1),
+        ("2 < 1", 0),
+        ("2 < 2", 0),
+        ("2 > 1", 1),
+        ("1 > 2", 0),
+        ("2 <= 2", 1),
+        ("3 <= 2", 0),
+        ("2 >= 2", 1),
+        ("1 >= 2", 0),
+        ("2 == 2", 1),
+        ("2 == 3", 0),
+        ("2 <> 3", 1),
+        ("2 <> 2", 0),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// Comparison asks the mathematical value, not the enum tag — the property
+/// Stage 1 established when it made `PartialEq` and `PartialOrd` agree. `6/3`
+/// is a `NaturalNumber` and `0.5` a `DecimalNumber`, and neither fact is
+/// visible to `<`.
+#[test]
+fn test_comparison_crosses_the_number_variants() {
+    let session = Session::init();
+    for source in ["2 == 6/3", "0.5 < 2/3", "1.0 >= 1", "1/2 == 0.5"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(1)),
+            "for {source}"
+        );
+    }
+}
+
+/// A two-character operator occupies two bytes, and its span must say so.
+/// Nothing else in the suite would notice if it did not: the message stays
+/// right while the caret moves one column left.
+#[test]
+fn test_a_two_character_operator_spans_two_bytes() {
+    let err = Expression::compile("1 <= ").unwrap_err();
+    assert_eq!(err.span().map(|s| (s.start, s.end)), Some((5, 5)));
+
+    let err = Expression::compile("1 <= <= 2").unwrap_err();
+    assert!(
+        matches!(err, ParseError::ExpectedValue { ref found, span }
+            if found == "<=" && (span.start, span.end) == (5, 7)),
+        "got {err:?}"
+    );
+}
+
+/// The ordered alternation in the regex, pinned from the outside. Written the
+/// other way round, `<=` tokenises as `<` followed by `=` — a comparison
+/// followed by an assignment, which then fails somewhere else with a message
+/// about the wrong thing. `1 <= 2` would become `1 < (= 2)` and be refused for
+/// a reason that has nothing to do with what the user typed.
+#[test]
+fn test_a_two_character_operator_is_not_read_as_two_one_character_ones() {
+    let session = Session::init();
+    for (source, expected) in [("1 <= 2", 1), ("1 >= 2", 0), ("1 == 1", 1), ("1 <> 1", 0)] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// `=` is still assignment and nothing about it moved.
+#[test]
+fn test_assignment_is_untouched_by_the_comparison_operators() {
+    let session = Session::init();
+    let expr = Expression::compile("x = 5").expect("compiles");
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::from(5))
+    );
+    let expr = Expression::compile("x == 5").expect("compiles");
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::from(1))
+    );
+    let expr = Expression::compile("x == 6").expect("compiles");
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::zero())
+    );
+}
