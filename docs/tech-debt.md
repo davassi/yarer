@@ -41,7 +41,11 @@ things worth fixing next, not things that are broken now.
 **Four functions exceed the 100-line clippy `too_many_lines` threshold**,
 re-measured cold against `a7f1220`: `Expression::eval_with` at 146,
 `validate::validate` at 150, `functions::eval` at 110, and the
-`test_expressions` integration test at 115. `too_many_lines` is part of
+`test_expressions` integration test at 115. The fix wave after the
+whole-branch review moved one of those numbers: `validate::validate` is 153,
+having grown the check that refuses an expression made of nothing but `;`.
+`shunting::to_rpn` was re-measured in the same pass and is still 91.
+`too_many_lines` is part of
 `clippy::pedantic`, which is only turned on in `src/lib.rs`; the integration
 test crate doesn't inherit it, so `test_expressions` has never been
 clippy-flagged and this number is a manual line count, same as the original
