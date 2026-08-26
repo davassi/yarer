@@ -2428,6 +2428,26 @@ Expected: all green. If one of these fails, it has found a real defect — none 
 them is a new requirement, they all pin behaviour the crate is supposed to have
 already.
 
+- [ ] **Step 3b: Two documentation gaps the previous task's review found**
+
+Both are short, and both are about the reader discovering something that
+exists. Neither is a code change.
+
+- **The validation pass is nowhere in the documentation.** The README's
+  "Internal Implementation" section names two steps inside
+  `Expression::compile` — the parser, then the shunting yard — but there are
+  three: `Parser::parse` → `validate::validate` → `shunting::to_rpn`. The middle
+  one is the component that gives five previously-identical malformed
+  expressions five diagnoses, which is the most visible thing this whole stage
+  did. Name it, in one sentence, and say what it is for.
+- **Nothing in the guided path shows how to bound an untrusted expression.**
+  `Expression::eval_with` and `Limits` are documented on their own pages, but a
+  newcomer reading the crate-root doc or the README never learns they exist. For
+  a library that evaluates text supplied by someone else, that is the wrong
+  thing to leave undiscovered. Add a short section — the tight-budget/loose-budget
+  case, with `Limits::default().with_max_value_bits(..)` and `eval_with`, and a
+  word about the 107-bit floor the built-in constants impose.
+
 - [ ] **Step 4: Update `docs/tech-debt.md`**
 
 Remove the entries this stage closed: both public panics, the `Session` limits
