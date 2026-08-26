@@ -774,6 +774,47 @@ fn test_oversized_exponent_reports_its_own_message() {
     ));
 }
 
+/// `OperandTooLargeForFloat` and `PowerOperandsTooLarge` used to be
+/// unreachable. Both were produced only through `number_to_f64`'s `ok_or`,
+/// and `to_f64` answers `Some(±inf)` on overflow rather than `None`, so the
+/// `ok_or` never fired. The infinity flowed on and was caught downstream by
+/// `decimal_from_f64`'s finiteness test, under a different name:
+/// `sqrt(2^5000)` said "function result is not a real number" about a number
+/// that is perfectly real, and `(2^2000)^0.5` said "invalid power operation".
+/// What failed in both is that the operand does not fit in an f64 — which is
+/// what these two variants say, and neither could say it.
+#[test]
+fn test_an_operand_too_large_for_an_f64_reports_that_and_not_something_else() {
+    let session = Session::init();
+
+    let expr = Expression::compile("sqrt(2^5000)").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::OperandTooLargeForFloat { .. })
+    ));
+
+    let expr = Expression::compile("(2^2000)^0.5").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::PowerOperandsTooLarge { .. })
+    ));
+
+    // The two conditions those were misreported as are still reachable in
+    // their own right, from operands an f64 holds perfectly well — so the fix
+    // narrowed the diagnosis rather than moving it wholesale.
+    let expr = Expression::compile("ln(0)").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::NotARealNumber { .. })
+    ));
+
+    let expr = Expression::compile("(-1)^0.5").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::InvalidPower { .. })
+    ));
+}
+
 #[test]
 fn test_degenerate_power_bases_are_not_refused() {
     // 1^n, 0^n and (-1)^n all stay tiny no matter how large n is, and are cheap to

@@ -138,10 +138,21 @@ pub(crate) fn eval(
     Ok(result)
 }
 
+/// Narrows a [`Number`] to an [`f64`], or reports `on_error` when none can
+/// hold it.
+///
+/// The finiteness filter is what makes `on_error` reachable at all.
+/// `BigInt::to_f64` and `BigRational::to_f64` answer `Some(±inf)` when the
+/// value overflows a double, never `None`, so an `ok_or` on its own never
+/// fired: the infinity flowed on and was caught downstream by
+/// [`decimal_from_f64`]'s own finiteness test, under a different name.
+/// `sqrt(2^5000)` reported "function result is not a real number" about a
+/// number that is perfectly real; what had actually failed is the narrowing
+/// here.
 pub(crate) fn number_to_f64(value: &Number, on_error: EvalError) -> Result<f64, EvalError> {
     match value {
-        Number::NaturalNumber(v) => v.to_f64().ok_or(on_error),
-        Number::DecimalNumber(v) => v.to_f64().ok_or(on_error),
+        Number::NaturalNumber(v) => v.to_f64().filter(|f| f.is_finite()).ok_or(on_error),
+        Number::DecimalNumber(v) => v.to_f64().filter(|f| f.is_finite()).ok_or(on_error),
     }
 }
 
