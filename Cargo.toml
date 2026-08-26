@@ -24,18 +24,31 @@ keywords = [
 ]
 
 [dependencies]
-clap = { version = "4.4.2", features = ["derive"] }
-regex = "1.9.3"
-rustyline = "16.0.0"
+# The library. `log` is a facade the evaluator's own debug! calls need and
+# pulls nothing, so it stays unconditional.
 log = "0.4"
-env_logger = "0.11.2"
-thiserror = "2.0.12"
-dirs = "6.0.0"
 num = "0.4.1"
 num-bigint = "0.4.4"
 num-traits = "0.2.18"
 num-rational = "0.4"
+regex = "1.9.3"
 statrs = "0.18.0"
+thiserror = "2.0.12"
+
+# The command-line binary only. Optional, so that a program using yarer as a
+# library does not compile an argument parser, a line editor, and — through
+# env_logger — jiff, a complete datetime library.
+clap = { version = "4.4.2", features = ["derive"], optional = true }
+rustyline = { version = "16.0.0", optional = true }
+env_logger = { version = "0.11.2", optional = true }
+dirs = { version = "6.0.0", optional = true }
+
+[features]
+# On by default so that `cargo install yarer` keeps working exactly as it did
+# and no existing library user has to change anything. A program that only
+# wants the evaluator opts out with `default-features = false`.
+default = ["cli"]
+cli = ["dep:clap", "dep:rustyline", "dep:env_logger", "dep:dirs"]
 
 [profile.release]
 opt-level = 3
@@ -44,6 +57,7 @@ debug = true
 [[bin]]
 name = "yarer"
 path = "src/bin/main.rs"
+required-features = ["cli"]
 
 [lib]
 name = "yarer"
