@@ -9,7 +9,7 @@ use regex::Regex;
 /// to parse the math expression with a Regex and to tokenise the math &[str] expression
 ///
 #[derive(Debug)]
-pub struct Parser;
+pub(crate) struct Parser;
 
 static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=\[\]×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*)")

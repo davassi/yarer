@@ -19,7 +19,7 @@ use std::collections::VecDeque;
 /// caller popped the top of the stack and postfix order puts the second argument
 /// there. What this function pops from `result_stack` is therefore the *first*
 /// argument, keeping `var_stack` in step. Both stacks belong to the evaluation
-/// loop in [`crate::expression::Expression::eval_with`].
+/// loop in [`crate::Expression::eval_with`].
 pub(crate) fn eval(
     fun: MathFunction,
     value: Number,

@@ -27,6 +27,7 @@ use num_traits::ToPrimitive;
 /// text — it consults no session and touches no variable heap — so one
 /// `Expression` can be evaluated against several sessions, and under several
 /// budgets.
+#[derive(Debug, Clone)]
 pub struct Expression<'a> {
     rpn: VecDeque<Spanned<Token<'a>>>,
 }

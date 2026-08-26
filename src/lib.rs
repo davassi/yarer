@@ -6,7 +6,7 @@
 //! # Example of usage of the library:
 //!
 //!  ```
-//!     use yarer::{expression::Expression, session::Session, token::Number};
+//!     use yarer::{Expression, Session, Number};
 //!
 //!     let exp = "((10 + 5) - 3 * ( 9 / 3 )) + 2";
 //!     let session = Session::init();
@@ -16,18 +16,18 @@
 //!     println!("The result of {} is {}", exp, result);
 //!  ```
 //!
-//! All that's needed is to compile the expression into an [`Expression`](crate::expression::Expression) and evaluate it against a [`Session`](crate::session::Session).
-//! The library returns a [`Number`](crate::token::Number), and the value decides which variant, not the
+//! All that's needed is to compile the expression into an [`Expression`] and evaluate it against a [`Session`].
+//! The library returns a [`Number`], and the value decides which variant, not the
 //! expression that produced it. An integral result always comes back as
-//! [`Number::NaturalNumber`](crate::token::Number::NaturalNumber), whatever it came from — `2.5+2.5` is `5`,
-//! `1/cos(0)` is `1`, `6/3` is `2`. [`Number::DecimalNumber`](crate::token::Number::DecimalNumber) appears only
+//! [`Number::NaturalNumber`], whatever it came from — `2.5+2.5` is `5`,
+//! `1/cos(0)` is `1`, `6/3` is `2`. [`Number::DecimalNumber`] appears only
 //! when the value genuinely has a fractional part, as in `0.1+0.2` or `1/3`. Every mathematical value therefore
 //! has exactly one representation.
 //!
 //! Yarer can handle also variables and functions. Here an example:
 //!
 //! ```
-//! # use yarer::{expression::Expression, session::Session};
+//! # use yarer::{Expression, Session};
 //!
 //! let session: Session = Session::init();
 //! let expr = Expression::compile("1/cos(x^2)").unwrap();
@@ -39,7 +39,7 @@
 //! and of course, the expression can be re-evaluated if the variable changes.
 //!
 //! ```
-//! # use yarer::{expression::Expression, session::Session};
+//! # use yarer::{Expression, Session};
 //! # let session: Session = Session::init();
 //! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
@@ -53,7 +53,7 @@
 //! The result can be simply converted into a i32 or a f64 (if decimal) simply with
 //!
 //! ```
-//! # use yarer::{expression::Expression, session::Session, token::Number};
+//! # use yarer::{Expression, Session, Number};
 //! # let session: Session = Session::init();
 //! # let expr = Expression::compile("1/cos(x^2)").unwrap();
 //!
@@ -119,23 +119,20 @@
 //! ```
 //!
 //! Function arguments are always parenthesised: `sqrt(16)`, `max(1,2)`.
-/// Typed errors
-pub mod error;
-/// Compiled expressions
-pub mod expression;
-/// Built-in function evaluation
+mod error;
+mod expression;
 mod functions;
-/// Evaluation limits
 pub mod limits;
-/// Parser
-pub mod parser;
-/// Session
-pub mod session;
+mod parser;
+mod session;
 mod shunting;
 mod span;
-/// Token
-pub mod token;
+mod token;
 mod validate;
 
 pub use error::{Error, EvalError, ParseError};
+pub use expression::Expression;
+pub use limits::Limits;
+pub use session::Session;
 pub use span::Span;
+pub use token::{ConversionError, MathFunction, Number};

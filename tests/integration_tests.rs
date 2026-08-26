@@ -1,9 +1,5 @@
 use num::BigInt;
-use yarer::expression::Expression;
-use yarer::limits::Limits;
-use yarer::session::Session;
-use yarer::token::*;
-use yarer::{EvalError, ParseError};
+use yarer::{EvalError, Expression, Limits, Number, ParseError, Session};
 
 #[test]
 fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
@@ -96,17 +92,6 @@ macro_rules! resolve_err {
     () => {
         panic!("Expected an error, but got a valid result.")
     };
-}
-
-/// The [`ParseError`] that `source` fails to compile with.
-///
-/// `Result::unwrap_err` needs the `Ok` type to be `Debug`, and a compiled
-/// `Expression` is not, so this is how a compile failure is unwrapped.
-fn compile_err(source: &str) -> ParseError {
-    match Expression::compile(source) {
-        Err(err) => err,
-        Ok(_) => panic!("{source} was expected not to compile"),
-    }
 }
 
 #[test]
@@ -843,7 +828,7 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
 #[test]
 fn test_wrong_arity_is_diagnosed_by_name() {
     for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {
-        let err = compile_err(expr);
+        let err = Expression::compile(expr).unwrap_err();
         assert!(
             matches!(err, ParseError::WrongArity { expected: e, given: g, .. }
                      if e == expected && g == given),
@@ -854,7 +839,7 @@ fn test_wrong_arity_is_diagnosed_by_name() {
 
 #[test]
 fn test_empty_argument_list_is_diagnosed() {
-    let err = compile_err("max()");
+    let err = Expression::compile("max()").unwrap_err();
     assert!(
         matches!(err, ParseError::WrongArity { given: 0, .. }),
         "reported: {err:?}"
@@ -863,7 +848,7 @@ fn test_empty_argument_list_is_diagnosed() {
 
 #[test]
 fn test_comma_outside_a_function_call_is_diagnosed() {
-    let err = compile_err("1,2");
+    let err = Expression::compile("1,2").unwrap_err();
     assert!(
         matches!(err, ParseError::CommaOutsideCall { .. }),
         "reported: {err:?}"
@@ -876,7 +861,7 @@ fn test_a_function_name_requires_parentheses() {
     // boundary either: the mandatory-parenthesis check fires on the very next
     // token, whatever it is, before the ';' arm ever runs.
     for expr in ["sin 5", "sqrt 16", "cos", "sin;"] {
-        let err = compile_err(expr);
+        let err = Expression::compile(expr).unwrap_err();
         assert!(
             matches!(err, ParseError::FunctionRequiresParentheses { .. }),
             "{expr} reported: {err:?}"
@@ -900,7 +885,7 @@ fn test_unclosed_bracket_before_semicolon_is_diagnosed() {
     // naming the real problem.
     // The variant also carries what the old message assertion said it was not:
     // a WrongArity is not a BracketUnclosedAtSemicolon.
-    let err = compile_err("max(1; 2)");
+    let err = Expression::compile("max(1; 2)").unwrap_err();
     assert!(
         matches!(err, ParseError::BracketUnclosedAtSemicolon { .. }),
         "reported: {err:?}"
@@ -912,7 +897,7 @@ fn test_empty_argument_slot_is_diagnosed() {
     // A comma with nothing before or after it must be its own diagnosis, not
     // silently absorbed into the argument count.
     for expr in ["max(,1)", "max(1,)"] {
-        let err = compile_err(expr);
+        let err = Expression::compile(expr).unwrap_err();
         assert!(
             matches!(err, ParseError::EmptyArgument { .. }),
             "{expr} reported: {err:?}"
@@ -924,7 +909,7 @@ fn test_empty_argument_slot_is_diagnosed() {
 fn test_nested_empty_group_does_not_fake_an_argument() {
     // The inner "()" is empty and must not be counted as content for the
     // outer call's only argument slot.
-    let err = compile_err("sin(())");
+    let err = Expression::compile("sin(())").unwrap_err();
     assert!(
         matches!(err, ParseError::EmptyGroup { .. }),
         "reported: {err:?}"
@@ -933,7 +918,7 @@ fn test_nested_empty_group_does_not_fake_an_argument() {
 
 #[test]
 fn test_unbalanced_closing_bracket_is_diagnosed() {
-    let err = compile_err("1+2)");
+    let err = Expression::compile("1+2)").unwrap_err();
     assert!(
         matches!(err, ParseError::UnbalancedBracket { .. }),
         "reported: {err:?}"
@@ -949,7 +934,7 @@ fn test_unbalanced_opening_bracket_is_diagnosed() {
     // The variant carries the negative claim too: UnbalancedBracket is not
     // ParseError::Malformed.
     for expr in ["(1+2", "max(1,2"] {
-        let err = compile_err(expr);
+        let err = Expression::compile(expr).unwrap_err();
         assert!(
             matches!(err, ParseError::UnbalancedBracket { .. }),
             "{expr} reported: {err:?}"
@@ -959,7 +944,7 @@ fn test_unbalanced_opening_bracket_is_diagnosed() {
 
 #[test]
 fn test_single_argument_function_called_empty_is_diagnosed() {
-    let err = compile_err("sin()");
+    let err = Expression::compile("sin()").unwrap_err();
     assert!(
         matches!(
             err,
@@ -975,7 +960,7 @@ fn test_single_argument_function_called_empty_is_diagnosed() {
 
 #[test]
 fn test_comma_inside_nested_plain_group_within_a_call_is_diagnosed() {
-    let err = compile_err("max((1,2),3)");
+    let err = Expression::compile("max((1,2),3)").unwrap_err();
     assert!(
         matches!(err, ParseError::CommaInPlainBracket { .. }),
         "reported: {err:?}"

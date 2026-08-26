@@ -3,7 +3,7 @@
 /// A half-open range of bytes in the source expression.
 ///
 /// Offsets are in bytes because that is what the tokeniser produces. Turning
-/// them into terminal columns is [`crate::error::Error::render`]'s job, and it
+/// them into terminal columns is [`crate::Error::render`]'s job, and it
 /// is not a cast: `×` is two bytes and one column.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Span {

@@ -5,7 +5,7 @@ use num_bigint::BigInt;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 /// A [`Session`] is an object that holds a variable heap in the form of a [`HashMap`]
-/// that every [`Expression`](crate::expression::Expression) evaluated against it
+/// that every [`Expression`](crate::Expression) evaluated against it
 /// reads and writes.
 ///
 /// Example
@@ -23,7 +23,7 @@ impl Session {
     /// # Examples
     ///
     /// ```
-    /// #    use yarer::{expression::Expression, session::Session};
+    /// #    use yarer::{Expression, Session};
     ///
     ///      let exp = "4 + 4 * 2 / ( 1 - 5 )";
     ///      let session = Session::init();
@@ -52,7 +52,7 @@ impl Session {
         }
     }
 
-    /// The limits every [`Expression::eval`](crate::expression::Expression::eval)
+    /// The limits every [`Expression::eval`](crate::Expression::eval)
     /// against this session uses.
     #[must_use]
     pub fn limits(&self) -> Limits {
@@ -60,8 +60,14 @@ impl Session {
     }
 
     /// The value of `name`, or [`None`] if it has never been set.
+    ///
+    /// Lowercases `name` itself, like [`Session::assign`] does, so a caller
+    /// never has to pre-lowercase before looking a variable up.
     pub(crate) fn lookup(&self, name: &str) -> Option<Number> {
-        self.variable_heap.borrow().get(name).cloned()
+        self.variable_heap
+            .borrow()
+            .get(&name.to_lowercase())
+            .cloned()
     }
 
     /// Writes `value` into the heap, refusing the built-in constants.
@@ -111,7 +117,7 @@ impl Session {
         local_heap
     }
 
-    pub(crate) fn is_constant_name(key: &str) -> bool {
+    fn is_constant_name(key: &str) -> bool {
         BUILTIN_CONSTANTS.contains(&key)
     }
 

@@ -32,7 +32,7 @@ pub enum Number {
 /// A binary or unary Math [`Operator`]
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Operator {
+pub(crate) enum Operator {
     /// Binary Add ('1+1')
     Add,
     /// Binary Sub ('2-1')
@@ -55,7 +55,7 @@ pub enum Operator {
 /// in which operations of equal precedence are evaluated when they appear
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Associate {
+pub(crate) enum Associate {
     /// If an operator is left-associative, then operations are evaluated from left to right.
     /// Example: -a^b, -1, -(-3)
     ///
@@ -69,7 +69,7 @@ pub enum Associate {
 /// Just [`Token::Bracket`]s. They change the order of evaluation of an expression.
 ///
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum Bracket {
+pub(crate) enum Bracket {
     /// either '(' or '['
     Open,
     /// either ')' or ']'
@@ -86,7 +86,7 @@ pub enum Bracket {
 /// [`Token::Variable`] as any variable name such as x,y,ab,foo,... whatever
 ///
 #[derive(Debug, PartialEq, Clone)]
-pub enum Token<'a> {
+pub(crate) enum Token<'a> {
     /// Natural numbers (1,2,3,4...) or their decimals (1.1, 2.3, 4.4 ...)
     Operand(Number),
     /// Operators +,-,/,*,^...

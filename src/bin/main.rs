@@ -4,9 +4,9 @@ use clap::Parser;
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
 
-use yarer::expression::Expression;
-use yarer::session::*;
 use yarer::Error;
+use yarer::Expression;
+use yarer::Session;
 
 use log::debug;
 

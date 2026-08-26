@@ -63,7 +63,7 @@ impl Limits {
     /// The same limits with a different size budget.
     ///
     /// ```
-    /// # use yarer::limits::Limits;
+    /// # use yarer::Limits;
     /// let tight = Limits::default().with_max_value_bits(4096);
     /// ```
     #[must_use]
