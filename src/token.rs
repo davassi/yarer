@@ -6,7 +6,7 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-/// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
+/// Enum Type [Number]. Either an `BigInt` integer [`Number::NaturalNumber`]
 /// or a [`BigRational`] rational number [`Number::DecimalNumber`]
 ///
 /// # Invariant
@@ -28,9 +28,9 @@ use std::{
 /// [`Number::decimal`].
 #[derive(Debug, Clone)]
 pub enum Number {
-    /// an Integer [BigInt]
+    /// an Integer [`BigInt`]
     NaturalNumber(BigInt),
-    /// a Rational number [BigRational]
+    /// a Rational number [`BigRational`]
     DecimalNumber(BigRational),
 }
 
@@ -437,12 +437,11 @@ impl Token<'_> {
         }
     }
 
-    /// Checks if an operator has priority over another one
+    /// Checks if an operator has priority over another one.
     ///
-    /// i.e.
-    /// * has priority over +
-    /// ^ has priority over *
-    /// unary - has priority over ^
+    /// For example `*` has priority over `+`, `^` over `*`, and unary `-` over
+    /// `^`. The operators need their backticks: without them rustdoc read the
+    /// `*` as a list marker and rendered the three examples as one bullet.
     ///
     #[must_use]
     pub(crate) fn compare_operator_priority(op1: Operator, op2: Operator) -> bool {
@@ -469,7 +468,13 @@ impl Number {
     /// constructor's signature out of step with its callers and its sibling
     /// [`Number::decimal_unchecked`].
     #[must_use]
-    #[allow(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "taken by value to match every other public numeric \
+                  constructor on Number, and its sibling decimal_unchecked; \
+                  the body borrows through BigRational::reduced, which clones \
+                  internally regardless."
+    )]
     pub fn decimal(value: BigRational) -> Number {
         let value = value.reduced();
         if value.denom().is_one() {
@@ -613,7 +618,7 @@ impl Display for Number {
 /// 3. Decimal (op) Decimal returns Decimal
 /// 4. Decimal (op) Natural returns Decimal
 ///
-/// (op) can be [Add], [Mul], [Sub], [BitXor], ...
+/// (op) can be [Add], [Mul], [Sub], [`BitXor`], ...
 ///
 /// We define 2 closures: 1 specialised for Natural Numbers and the other one specialised for Decimals.
 ///
@@ -625,7 +630,10 @@ where
     // `df` is always `+`, `-` or `*` on `BigRational`, and `num-rational`
     // reduces the result of every one of its own arithmetic ops — so the
     // value handed to `Number::decimal_unchecked` here is already reduced.
-    match (ln, rn.clone()) {
+    // `rn` was cloned here and the clone was never used: the match consumes
+    // both operands by value, so the copy — up to about 128 KiB on every `+`,
+    // `-` and `*` under the default budget — was pure waste.
+    match (ln, rn) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
             Number::decimal_unchecked(df(BigRational::from(v1), v2))
@@ -698,19 +706,19 @@ impl Number {
     }
 }
 
-/// PartialOrd between [Number]s with the required conversions.
+/// `PartialOrd` between [Number]s with the required conversions.
 ///
 impl PartialOrd for Number {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
-            (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(&v2),
+            (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => v1.partial_cmp(v2),
             (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
                 BigRational::from(v1.clone()).partial_cmp(v2)
             }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
                 v1.partial_cmp(&BigRational::from(v2.clone()))
             }
-            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => v1.partial_cmp(&v2),
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => v1.partial_cmp(v2),
         }
     }
 }
@@ -916,7 +924,7 @@ mod tests {
 
     #[test]
     fn test_tokenise_operators() {
-        let v = vec!["1", "+", "2.1"];
+        let v = ["1", "+", "2.1"];
         assert_eq!(Token::tokenize(v[1]), Token::Operator(Operator::Add));
         assert_eq!(
             Token::tokenize(v[0]),

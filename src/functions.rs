@@ -20,6 +20,12 @@ use std::collections::VecDeque;
 /// there. What this function pops from `result_stack` is therefore the *first*
 /// argument, keeping `var_stack` in step. Both stacks belong to the evaluation
 /// loop in [`crate::Expression::eval_with`].
+#[expect(
+    clippy::too_many_lines,
+    reason = "a flat dispatch over eighteen built-ins; splitting it buys line \
+              count and costs the ability to read the whole function table at \
+              once."
+)]
 pub(crate) fn eval(
     fun: MathFunction,
     value: Number,

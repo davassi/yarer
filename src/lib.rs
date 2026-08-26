@@ -1,6 +1,15 @@
 //#![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 #![warn(clippy::cargo)]
+// Three duplicates, none of them resolvable from this repository: bitflags
+// 1.3.2 against 2.13.1, syn 2.0.119 against 3.0.4, and windows-sys 0.59.0
+// against 0.61.2, all reached transitively. The lint reads the whole
+// dependency graph from the manifest rather than the features actually
+// resolved, so it fires for `--no-default-features` too and gating the CLI
+// behind a feature does not silence it. `expect` is not usable here: the lint
+// has no span in this source to attach to. Re-check when those dependencies
+// bump, and delete this if the list ever empties.
+#![allow(clippy::multiple_crate_versions)]
 //! Yarer (Yet another (Rusty || Rpn) expression resolver) is a flexible library, written in Rust, for the processing, compilation and evaluation of mathematical expressions using Reverse Polish Notation.
 //!
 //! # Example of usage of the library:

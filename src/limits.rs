@@ -147,8 +147,15 @@ pub(crate) fn check_predicted_size(predicted_bits: u128, limits: Limits) -> Resu
 /// before the cast, and a saturating cast is the correct outcome for an `n` so
 /// large that the estimate would not fit anyway.
 #[must_use]
-#[allow(clippy::cast_precision_loss)]
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[expect(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "Stirling's series on an f64, then rounded up to a bit count. \
+              The casts are the point of the approximation, and `expect` \
+              rather than `allow` so that this reports itself if they ever \
+              stop needing suppression."
+)]
 pub(crate) fn predicted_factorial_bits(n: u64) -> u128 {
     if n < 2 {
         return 1;

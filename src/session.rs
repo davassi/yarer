@@ -105,7 +105,7 @@ impl Session {
         local_heap.insert(
             "phi".to_string(),
             Number::decimal(
-                num_rational::BigRational::from_float((1.0 + 5.0f64.sqrt()) / 2.0).unwrap(),
+                num_rational::BigRational::from_float(f64::midpoint(1.0, 5.0f64.sqrt())).unwrap(),
             ),
         );
         local_heap.insert(

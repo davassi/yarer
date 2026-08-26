@@ -64,6 +64,13 @@ impl Content {
 /// which belong to the tokeniser and the shunting yard. `EmptyExpression` is
 /// shared with the tokeniser: it raises it for input holding no tokens, this
 /// pass for input holding nothing but separators.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one match over Token variants, and the length is what buys five \
+              distinct positioned diagnoses where there used to be five \
+              identical 'malformed expression' failures. The Bracket(Close) \
+              arm is the separable part if this ever has to shrink."
+)]
 pub(crate) fn validate<'a>(
     tokens: &[Spanned<Token<'a>>],
     source: &str,

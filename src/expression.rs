@@ -304,7 +304,7 @@ fn apply_operator(
         // `2^100000000` without computing it, so it does not go through
         // `push_checked`.
         Operator::Pow => {
-            let value = power(left_value, right_value, limits).map_err(at)?;
+            let value = power(left_value, &right_value, limits).map_err(at)?;
             stacks.values.push_back(value);
             stacks.vars.push_back(None);
         }
@@ -409,14 +409,16 @@ fn factorial(operand: &Number, span: Span, limits: Limits) -> Result<Number, Eva
         .ok_or(EvalError::FactorialOperandTooLarge { span: Some(span) })?;
     limits::check_predicted_size(limits::predicted_factorial_bits(n), limits)
         .map_err(|e| e.at(span))?;
-    Ok(Number::NaturalNumber(factorial_helper(n.into()).into()))
+    Ok(Number::NaturalNumber(
+        factorial_helper(&BigUint::from(n)).into(),
+    ))
 }
 
-fn factorial_helper(n: BigUint) -> BigUint {
+fn factorial_helper(n: &BigUint) -> BigUint {
     let mut acc = BigUint::one();
     let mut current = BigUint::one();
 
-    while current <= n {
+    while current <= *n {
         acc *= &current;
         current += BigUint::one();
     }
@@ -424,12 +426,12 @@ fn factorial_helper(n: BigUint) -> BigUint {
     acc
 }
 
-fn power(left_value: Number, right_value: Number, limits: Limits) -> Result<Number, EvalError> {
+fn power(left_value: Number, right_value: &Number, limits: Limits) -> Result<Number, EvalError> {
     let value = if let Some(exponent) = right_value.as_integer() {
         power_integer(left_value, exponent, limits)?
     } else {
         let base = power_operand_to_f64(&left_value)?;
-        let exponent = power_operand_to_f64(&right_value)?;
+        let exponent = power_operand_to_f64(right_value)?;
         decimal_from_f64(base.powf(exponent), EvalError::InvalidPower { span: None })?
     };
 
@@ -534,7 +536,7 @@ mod tests {
 
     #[test]
     fn test_factorial() {
-        assert_eq!(factorial_helper(BigUint::from(5u8)), BigUint::from(120u16));
+        assert_eq!(factorial_helper(&BigUint::from(5u8)), BigUint::from(120u16));
     }
 
     #[test]
