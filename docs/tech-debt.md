@@ -5,7 +5,8 @@ undone. Every entry below was verified against the source at `a7f1220`, the
 commit the production-ready-api stage (Stage 2 of the 0.3.0 plan)'s own code
 and documentation changes land on. This file's own commit adds and reorganises
 tests, and adds two short documentation sections; nothing it touches changes
-any claim below.
+any claim below. The fix wave that followed the whole-branch review revisited
+two of them, and both revisions say so where they stand.
 
 Entries name files and symbols rather than line numbers: line numbers drift,
 and half of those recorded during Stage 1 were stale within a day. Several
@@ -14,10 +15,26 @@ Stage 2 — `RpnResolver` is gone; its two former responsibilities are now
 `Expression::eval_with` and `shunting::to_rpn` — so this revision updates
 those names too, not just the numbers attached to them.
 
-Nothing here is a known wrong answer. Neither stage's review found an
-incorrect result, a reachable panic on any evaluation path, or a way to route
-an expression around a size guard. These are the things worth fixing next, not
-things that are broken now.
+Nothing here is a known wrong answer — but that sentence needs its history
+attached, because the one that used to follow it was false. It read "neither
+stage's review found an incorrect result", and the whole-branch review that
+read Stage 2 end to end found one: `Display for Number` printed `inf` for
+`(10^400)/3` and `0` for `1/(10^400)`. Both values were held exactly and
+computed correctly — `(10^400)/3 * 3` returned the right 401-digit integer —
+and only the printed form was wrong, because the `numer/denom` fallback was
+guarded on `BigRational::to_f64` answering `None`, which it does not do: it
+answers `Some(inf)` on overflow and `Some(0.0)` on underflow. Nothing
+signalled the loss, and `f64::try_from` inherited it, reporting `value 'inf'
+is out of range` for a value that is neither infinite nor NaN. It is fixed and
+pinned, in `token::tests` and in
+`test_a_rational_no_f64_can_hold_prints_as_a_ratio_not_as_infinity`.
+
+The claim is kept rather than deleted because it is worth being able to make,
+and the correction is kept next to it because a register that quietly drops a
+falsified claim is worth less than one that records what falsified it. What
+still holds unqualified is the rest: no reachable panic on any evaluation
+path, and no way to route an expression around a size guard. These are the
+things worth fixing next, not things that are broken now.
 
 ## Structural
 

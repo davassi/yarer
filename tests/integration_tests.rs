@@ -456,6 +456,41 @@ fn test_large_integer_division_and_negative_power_do_not_panic() {
     );
 }
 
+/// The one wrong *answer* the whole-branch review found. `(10^400)/3` is held
+/// exactly and multiplies back out to the right 401-digit integer, but it
+/// printed as `inf`, and `1/(10^400)` printed as `0`: `Display`'s
+/// `numer/denom` fallback was guarded on `to_f64()` returning `None`, and
+/// `BigRational::to_f64` answers `Some(inf)` on overflow and `Some(0.0)` on
+/// underflow. Nothing signalled the loss.
+#[test]
+fn test_a_rational_no_f64_can_hold_prints_as_a_ratio_not_as_infinity() {
+    let session = Session::init();
+
+    let expr = Expression::compile("(10^400)/3").expect("compiles");
+    let value = expr.eval(&session).expect("evaluates");
+    assert_eq!(value.to_string(), format!("1{}/3", "0".repeat(400)));
+
+    // The value was always right; only its rendering was not.
+    let exact = Expression::compile("(10^400)/3 * 3").expect("compiles");
+    assert_eq!(
+        exact.eval(&session).unwrap().to_string(),
+        format!("1{}", "0".repeat(400))
+    );
+
+    // Underflow is the same defect mirrored.
+    let tiny = Expression::compile("1/(10^400)").expect("compiles");
+    assert_eq!(
+        tiny.eval(&session).unwrap().to_string(),
+        format!("1/1{}", "0".repeat(400))
+    );
+
+    // And the leak: `TryFrom<Number> for f64` builds its message through
+    // `Display`, so it used to report "value 'inf' is out of range" about a
+    // value that is neither infinite nor NaN.
+    let message = f64::try_from(value).unwrap_err().to_string();
+    assert!(!message.contains("inf"), "message was: {message}");
+}
+
 #[test]
 fn test_builtin_constants_are_read_only() {
     let session = Session::init();

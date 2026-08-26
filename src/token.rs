@@ -390,6 +390,15 @@ impl PartialEq for Number {
 
 /// Let's display a [`Number::NaturalNumber`] or a [`Number::DecimalNumber`] properly
 ///
+/// A [`Number::DecimalNumber`] is shown as an `f64` when one can carry it, and
+/// as `numer/denom` when one cannot. The test for "cannot" is not
+/// `to_f64() == None`: [`BigRational::to_f64`] answers `Some(±inf)` on overflow
+/// and `Some(0.0)` on underflow rather than `None`, so a fallback guarded on
+/// `None` alone never fires and an exactly held value such as `(10^400)/3`
+/// prints as `inf`. The predicate below asks instead whether the `f64` is a
+/// faithful rendering of the rational. Its second half is what keeps a genuine
+/// zero printing as `0`: only a *non-zero* rational that has underflowed to
+/// `0.0` needs the ratio.
 impl Display for Number {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -397,7 +406,10 @@ impl Display for Number {
             Number::DecimalNumber(v) => {
                 if v.denom().is_one() {
                     write!(f, "{}", v.to_integer())
-                } else if let Some(fl) = v.to_f64() {
+                } else if let Some(fl) = v
+                    .to_f64()
+                    .filter(|x| x.is_finite() && (*x != 0.0 || v.numer().is_zero()))
+                {
                     write!(f, "{fl}")
                 } else {
                     write!(f, "{}/{}", v.numer(), v.denom())
@@ -954,6 +966,40 @@ mod tests {
         // 1/3 is not a finite decimal, so it is rendered via its f64 approximation
         let third = Number::DecimalNumber(BigRational::new(BigInt::from(1), BigInt::from(3)));
         assert_eq!(third.to_string(), format!("{}", 1.0_f64 / 3.0));
+    }
+
+    /// `(10^400)/3` and `1/(10^400)` are held exactly and compute correctly —
+    /// only their printed form was wrong. `BigRational::to_f64` answers
+    /// `Some(inf)` and `Some(0.0)` rather than `None` for them, so the
+    /// `numer/denom` fallback, guarded on `None`, never ran: the first printed
+    /// `inf` and the second `0`, with nothing signalling the loss.
+    #[test]
+    fn test_display_falls_back_to_a_ratio_when_no_f64_can_carry_the_value() {
+        let huge = BigInt::from(10).pow(400_u32);
+
+        let overflows = Number::DecimalNumber(BigRational::new(huge.clone(), BigInt::from(3)));
+        assert_eq!(overflows.to_string(), format!("{huge}/3"));
+
+        let underflows = Number::DecimalNumber(BigRational::new(BigInt::from(1), huge.clone()));
+        assert_eq!(underflows.to_string(), format!("1/{huge}"));
+
+        // Negative overflow takes the same route: `to_f64` answers Some(-inf).
+        let negative = Number::DecimalNumber(BigRational::new(-huge.clone(), BigInt::from(3)));
+        assert_eq!(negative.to_string(), format!("-{huge}/3"));
+    }
+
+    /// The other direction of the same predicate. A rational that underflows to
+    /// `0.0` must take the fallback, but one that *is* zero must still print
+    /// `0` — the two are indistinguishable by their `f64` alone, which is why
+    /// the numerator is consulted as well.
+    #[test]
+    fn test_display_still_prints_a_genuine_zero_as_zero() {
+        assert_eq!(Number::NaturalNumber(BigInt::zero()).to_string(), "0");
+        // new_raw skips reduction, so this reaches the f64 branch with a
+        // denominator that is not 1 — the only way a zero gets that far.
+        let unreduced_zero =
+            Number::DecimalNumber(BigRational::new_raw(BigInt::zero(), BigInt::from(3)));
+        assert_eq!(unreduced_zero.to_string(), "0");
     }
 
     #[test]
