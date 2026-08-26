@@ -99,17 +99,17 @@ impl<'a> Expression<'a> {
 
                     var_stack.pop_back();
 
-                    let left_value = if op != &Operator::Une && op != &Operator::Fac {
+                    let left_value = if op.is_unary() {
+                        zero.clone()
+                    } else {
                         result_stack
                             .pop_back()
                             .ok_or(EvalError::Malformed { span: Some(t.span) })?
-                    } else {
-                        zero.clone()
                     };
-                    let left_var = if op != &Operator::Une && op != &Operator::Fac {
-                        var_stack.pop_back().unwrap_or(None)
-                    } else {
+                    let left_var = if op.is_unary() {
                         None
+                    } else {
+                        var_stack.pop_back().unwrap_or(None)
                     };
 
                     match op {
@@ -145,7 +145,7 @@ impl<'a> Expression<'a> {
                             );
                             var_stack.push_back(None);
                         }
-                        Operator::Eql => {
+                        Operator::Assign => {
                             if let Some(var) = left_var {
                                 // `assign` decides the refusal, here and for
                                 // `set`/`setf` alike; the loop only supplies the
@@ -193,6 +193,23 @@ impl<'a> Expression<'a> {
                             //# unary neg
                             result_stack.push_back(right_value * minus_one.clone());
                             var_stack.push_back(None);
+                        }
+                        Operator::Less
+                        | Operator::Greater
+                        | Operator::LessEq
+                        | Operator::GreaterEq
+                        | Operator::Equal
+                        | Operator::NotEqual
+                        | Operator::And
+                        | Operator::Or
+                        | Operator::Xor
+                        | Operator::Not
+                        | Operator::Mod => {
+                            // Unreachable: the tokeniser cannot yet spell any of
+                            // these, so no expression compiles to one. The tasks
+                            // that follow replace this arm with the real ones;
+                            // it exists so that this one compiles on its own.
+                            return Err(EvalError::Malformed { span: Some(t.span) });
                         }
                     }
                 }
