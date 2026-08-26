@@ -1,5 +1,6 @@
-use num::BigInt;
-use yarer::{EvalError, Expression, Limits, Number, ParseError, Session};
+use num::{BigInt, Zero};
+use num_rational::BigRational;
+use yarer::{EvalError, Expression, Limits, MathFunction, Number, ParseError, Session};
 
 #[test]
 fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
@@ -92,6 +93,83 @@ macro_rules! resolve_err {
     () => {
         panic!("Expected an error, but got a valid result.")
     };
+}
+
+/// Canonicalisation made `2.0!` return 2 where it used to error, and nothing
+/// pinned it.
+#[test]
+fn test_factorial_accepts_an_integral_decimal_literal() {
+    let session = Session::init();
+    let expr = Expression::compile("2.0!").expect("compiles");
+    assert_eq!(
+        expr.eval(&session).unwrap(),
+        Number::NaturalNumber(BigInt::from(2))
+    );
+}
+
+/// `1/0` is tested; `1/0.0` — the form that actually used to panic, before
+/// canonicalisation turned the literal into a NaturalNumber — was not.
+#[test]
+fn test_dividing_by_a_decimal_zero_is_an_error_not_a_panic() {
+    let session = Session::init();
+    let expr = Expression::compile("1/0.0").expect("compiles");
+    assert!(matches!(
+        expr.eval(&session),
+        Err(EvalError::DivisionByZero { .. })
+    ));
+}
+
+/// The doc comment on `checked_div` says the zero test reaches across both
+/// variants. This is what makes that a claim the suite can falsify: a
+/// `DecimalNumber` holding zero, which no internal path produces — `decimal`
+/// normalises it — but which any caller can build, because the variants are
+/// public.
+#[test]
+fn test_checked_div_catches_a_zero_in_either_variant() {
+    let one = Number::NaturalNumber(BigInt::from(1));
+    let decimal_zero = Number::DecimalNumber(BigRational::new_raw(BigInt::zero(), BigInt::from(3)));
+    assert_eq!(one.checked_div(&decimal_zero), None);
+}
+
+/// Only the even-exponent degenerate case was pinned, and it cannot tell a
+/// correct sign from a discarded one.
+#[test]
+fn test_a_negative_base_keeps_its_sign_for_an_odd_exponent() {
+    let session = Session::init();
+    for (source, expected) in [("(-1)^3", -1), ("(-1)^4", 1), ("(-2)^3", -8)] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(expected)),
+            "for {source}"
+        );
+    }
+}
+
+/// The early returns: exponent zero, and the two factorial base cases.
+#[test]
+fn test_the_degenerate_cases_return_one() {
+    let session = Session::init();
+    for source in ["5^0", "0!", "1!", "0^0"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval(&session).unwrap(),
+            Number::NaturalNumber(BigInt::from(1)),
+            "for {source}"
+        );
+    }
+}
+
+/// The budget is documented as a limit, not a threshold: a value that occupies
+/// exactly the budget is admitted. 15 needs 4 bits, 16 needs 5.
+#[test]
+fn test_a_value_landing_exactly_on_the_budget_is_admitted() {
+    let session = Session::with_limits(Limits::default().with_max_value_bits(4));
+    assert!(Expression::compile("15").unwrap().eval(&session).is_ok());
+    assert!(matches!(
+        Expression::compile("16").unwrap().eval(&session),
+        Err(EvalError::ValueTooLarge { .. })
+    ));
 }
 
 #[test]
@@ -324,12 +402,19 @@ fn test_malformed_segment_in_chain_is_rejected() {
     ));
 }
 
+/// These four are all parse failures: assert that `Expression::compile`
+/// refuses each, not merely that the pipeline fails somewhere. `resolve_err!`
+/// accepts failure at either step, which would stay green if one of these
+/// started being accepted by `compile` and refused by `eval` instead — a real
+/// change in behaviour nothing would report.
 #[test]
 fn test_invalid_input_is_rejected() {
-    resolve_err!("1@2");
-    resolve_err!("1 2");
-    resolve_err!("(1+2");
-    resolve_err!("1+2)");
+    for source in ["1@2", "1 2", "(1+2", "1+2)"] {
+        assert!(
+            Expression::compile(source).is_err(),
+            "{source} was expected to fail to compile"
+        );
+    }
 }
 
 #[test]
@@ -430,14 +515,18 @@ fn test_factorial_and_abs_edge_cases() {
     resolve_decimal!("exp(0)", 1.0);
 }
 
+/// `resolve_err!` accepts failure at either step, which is what `is_err()`
+/// meant before `compile` and `eval` were separable. It cannot mean that any
+/// more: these five are evaluation failures, and the test would stay green if
+/// one of them started being refused at compile time instead — a real change
+/// in behaviour that nothing would report.
 #[test]
 fn test_domain_errors_are_rejected() {
-    resolve_err!("sqrt(-1)");
-    resolve_err!("ln(0)");
-    resolve_err!("ln(-5)");
-    resolve_err!("log(0)");
-    resolve_err!("1/0");
-    resolve_err!("5/(3-3)");
+    let session = Session::init();
+    for source in ["ln(0)", "1/0", "0^-1", "sqrt(-1)", "asin(2)"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert!(expr.eval(&session).is_err(), "{source} was accepted");
+    }
 }
 
 #[test]
@@ -535,7 +624,20 @@ fn test_factorial_accepts_integral_results_of_functions() {
 #[test]
 fn test_integral_results_are_natural_numbers() {
     let session = Session::init();
-    for expr in ["6/3", "floor(3.7)", "exp(0)", "max(1,2)", "sqrt(16)"] {
+    // "0.5+0.5", "1.5/0.5" and "(0.5)^-1" are the only inputs that reach
+    // `checked_div`'s Decimal/Decimal arm, `apply_functional_token_operation`'s
+    // decimal arms, and `power_integer`'s decimal arms respectively; without
+    // them the canonicalisation invariant is unchecked on all three.
+    for expr in [
+        "6/3",
+        "floor(3.7)",
+        "exp(0)",
+        "max(1,2)",
+        "sqrt(16)",
+        "0.5+0.5",
+        "1.5/0.5",
+        "(0.5)^-1",
+    ] {
         let result = Expression::compile(expr).unwrap().eval(&session).unwrap();
         assert!(
             matches!(result, Number::NaturalNumber(_)),
@@ -825,13 +927,21 @@ fn test_a_tiny_budget_rejects_the_builtin_constants() {
     }
 }
 
+/// Binds `function` and checks it, unlike the substring assertion this test
+/// used to make: `max(1)` and `sin(1,2)` differ only in which function is
+/// named, and `expected`/`given` alone can't tell a report that named the
+/// wrong function from one that got it right.
 #[test]
 fn test_wrong_arity_is_diagnosed_by_name() {
-    for (expr, expected, given) in [("max(1)", 2, 1), ("max(1,2,3)", 2, 3), ("sin(1,2)", 1, 2)] {
+    for (expr, fun, expected, given) in [
+        ("max(1)", MathFunction::Max, 2, 1),
+        ("max(1,2,3)", MathFunction::Max, 2, 3),
+        ("sin(1,2)", MathFunction::Sin, 1, 2),
+    ] {
         let err = Expression::compile(expr).unwrap_err();
         assert!(
-            matches!(err, ParseError::WrongArity { expected: e, given: g, .. }
-                     if e == expected && g == given),
+            matches!(err, ParseError::WrongArity { function, expected: e, given: g, .. }
+                     if function == fun && e == expected && g == given),
             "{expr} reported: {err:?}"
         );
     }

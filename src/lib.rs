@@ -95,6 +95,32 @@
 //! );
 //! ```
 //!
+//! ## Limits
+//!
+//! [`Expression::eval`] runs under the session's own [`Limits`].
+//! [`Expression::eval_with`] runs the *same* compiled expression under a
+//! different budget instead, against the same variables — which is how to
+//! give text you don't control a tight budget and text you do a loose one,
+//! without maintaining two sessions.
+//!
+//! ```
+//! use yarer::{Expression, Session, Limits};
+//!
+//! let session = Session::init();
+//! let expr = Expression::compile("2^1000").unwrap();
+//!
+//! // A tight budget for text you don't control...
+//! let tight = Limits::default().with_max_value_bits(64);
+//! assert!(expr.eval_with(&session, tight).is_err());
+//!
+//! // ...and the session's own, looser budget for text you do.
+//! assert!(expr.eval(&session).is_ok());
+//! ```
+//!
+//! Mind the floor the built-in constants impose: `pi`, `e`, `tau`, `phi` and
+//! `gamma` are held as exact rationals that cost up to 107 bits, so a budget
+//! under that refuses a value the caller never actually supplied.
+//!
 //! Yarer can be used also from command line, and behaves in a very similar manner to GNU bc
 //!
 //! ```ignore

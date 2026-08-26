@@ -436,16 +436,49 @@ mod tests {
     /// `NaturalNumber(2) == DecimalNumber(2/1)`, so a value-only assertion passes
     /// whichever variant comes back. That is exactly how this test used to read
     /// as "max returns a decimal" and stay green under either behaviour.
+    ///
+    /// Each expression used to share one loop and one failure message; a
+    /// failure on the first hid whether the other two passed. Splitting them
+    /// into their own tests means each runs, and reports, independently.
     #[test]
-    fn test_max_min() {
+    fn test_max_of_two_naturals_returns_a_natural_number() {
         let session = Session::init();
-        for (expr, expected) in [("max(1,2)", 2), ("min(1,2)", 1), ("min(max(1,2),3)", 2)] {
-            let result = Expression::compile(expr).unwrap().eval(&session).unwrap();
-            assert_eq!(result, Number::NaturalNumber(BigInt::from(expected)));
-            assert!(
-                matches!(result, Number::NaturalNumber(_)),
-                "{expr} produced {result:?}, expected a NaturalNumber"
-            );
-        }
+        let result = Expression::compile("max(1,2)")
+            .unwrap()
+            .eval(&session)
+            .unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(2)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "max(1,2) produced {result:?}, expected a NaturalNumber"
+        );
+    }
+
+    #[test]
+    fn test_min_of_two_naturals_returns_a_natural_number() {
+        let session = Session::init();
+        let result = Expression::compile("min(1,2)")
+            .unwrap()
+            .eval(&session)
+            .unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(1)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "min(1,2) produced {result:?}, expected a NaturalNumber"
+        );
+    }
+
+    #[test]
+    fn test_nested_min_of_max_returns_a_natural_number() {
+        let session = Session::init();
+        let result = Expression::compile("min(max(1,2),3)")
+            .unwrap()
+            .eval(&session)
+            .unwrap();
+        assert_eq!(result, Number::NaturalNumber(BigInt::from(2)));
+        assert!(
+            matches!(result, Number::NaturalNumber(_)),
+            "min(max(1,2),3) produced {result:?}, expected a NaturalNumber"
+        );
     }
 }

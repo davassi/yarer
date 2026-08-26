@@ -101,6 +101,26 @@ Parse error: expected a value, found '*'
         ^
 ```
 
+## Limits
+
+`expr.eval(&session)` runs under the session's own `Limits`. `expr.eval_with(&session, limits)` runs the *same* compiled expression under a different budget instead, against the same variables — which is how to give text you don't control a tight budget and text you do a loose one, without maintaining two sessions:
+
+```rust
+      use yarer::{Expression, Session, Limits};
+
+      let session = Session::init();
+      let expr = Expression::compile("2^1000").unwrap();
+
+      // A tight budget for text you don't control...
+      let tight = Limits::default().with_max_value_bits(64);
+      assert!(expr.eval_with(&session, tight).is_err());
+
+      // ...and the session's own, looser budget for text you do.
+      assert!(expr.eval(&session).is_ok());
+```
+
+Mind the floor the built-in constants impose: `pi`, `e`, `tau`, `phi` and `gamma` are held as exact rationals that cost up to 107 bits, so a budget under that refuses a value the caller never actually supplied.
+
 ## CLI
 
 Yarer can also be used from the command line and behaves similarly to GNU bc
@@ -294,13 +314,15 @@ cargo install --path .
 
 ## Internal Implementation
 
-Each expression goes through the following steps, the first two run by `Expression::compile` and the third by `Expression::eval`:
+Each expression goes through the following steps, the first three run by `Expression::compile` and the fourth by `Expression::eval`:
 
 Step 1 - Parser: A string is "regexed" and converted into a token array.
 
-Step 2 - Shunting yard: the token array is converted from infix to postfix (RPN) notation, becoming a compiled `Expression`.
+Step 2 - Validation: the token array is walked once, checking that it describes a well-formed expression — brackets balance, calls get the right number of arguments, values and operators alternate correctly — and rewriting unary operators along the way. This is the pass that turns five previously-identical "malformed expression" failures into five distinct, positioned diagnoses.
 
-Step 3 - Expression: The resulting RPN (Reverse Polish Notation) expression is evaluated against a `Session`.
+Step 3 - Shunting yard: the validated token array is converted from infix to postfix (RPN) notation, becoming a compiled `Expression`.
+
+Step 4 - Expression: The resulting RPN (Reverse Polish Notation) expression is evaluated against a `Session`.
 
 It's worth mentioning that the Session is responsible for storing all variables (and constants) that are borrowed by every `Expression` evaluated against it.
 
