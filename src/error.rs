@@ -113,8 +113,18 @@ pub enum EvalError {
     AssignmentTargetMissing { span: Option<Span> },
     #[error("{value} is not a finite number")]
     NotFinite { value: f64 },
-    /// The evaluation stack did not end with exactly one value. Same status as
-    /// [`ParseError::Malformed`]: a broken invariant, not a user mistake.
+    /// The evaluation stack did not end with exactly one value, or an operator
+    /// found no operand beneath it.
+    ///
+    /// This describes a stack condition, not an input. Nothing typed is meant
+    /// to produce it: a malformed token sequence is refused by the validation
+    /// pass, at compile time and with a position. The earlier wording went
+    /// further and called it "a broken invariant, not a user mistake", which
+    /// was false — `";"` reached it, by typing one character, and now compiles
+    /// to [`ParseError::EmptyExpression`] instead. Whether any input still
+    /// reaches it is not something this crate can currently claim: proving
+    /// that by exhaustion is what fuzzing is for, and until then this is what
+    /// the evaluation loop answers.
     #[error("the expression is malformed")]
     Malformed { span: Option<Span> },
 }

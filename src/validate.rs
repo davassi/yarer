@@ -33,12 +33,37 @@ enum Expect {
     Operator,
 }
 
+/// Whether anything content-bearing has been seen — within the current
+/// `;`-separated segment, and anywhere in the input at all.
+///
+/// `segment` resets at every `;`: a leading or trailing separator leaves an
+/// empty segment, which has always been legal, while an incomplete one —
+/// `"1+;"` — has not. `any` never resets, and is what an expression made of
+/// nothing but separators trips over. Asking only the per-segment question let
+/// `";"` validate, reach the evaluator, produce no value and land in the
+/// positionless `EvalError::Malformed` — the generic message the rest of this
+/// pass exists to eliminate.
+#[derive(Default)]
+struct Content {
+    segment: bool,
+    any: bool,
+}
+
+impl Content {
+    fn mark(&mut self) {
+        self.segment = true;
+        self.any = true;
+    }
+}
+
 /// Checks that the token sequence is a well-formed expression, and rewrites the
 /// unary operators while it is there.
 ///
 /// # Errors
-/// Every [`ParseError`] variant except `UnexpectedCharacter`, `EmptyExpression`
-/// and `Malformed`, which belong to the tokeniser and the shunting yard.
+/// Every [`ParseError`] variant except `UnexpectedCharacter` and `Malformed`,
+/// which belong to the tokeniser and the shunting yard. `EmptyExpression` is
+/// shared with the tokeniser: it raises it for input holding no tokens, this
+/// pass for input holding nothing but separators.
 pub(crate) fn validate<'a>(
     tokens: &[Spanned<Token<'a>>],
     source: &str,
@@ -47,10 +72,7 @@ pub(crate) fn validate<'a>(
     let mut expect = Expect::Value;
     let mut frames: Vec<Frame> = Vec::new();
     let mut pending_function: Option<(MathFunction, Span)> = None;
-    // Whether the current ';'-separated segment has anything in it. A leading
-    // or trailing ';' leaves an empty segment, which has always been legal; an
-    // incomplete one — "1+;" — has not.
-    let mut segment_has_content = false;
+    let mut content = Content::default();
 
     for t in tokens {
         // A function name must be followed by an opening bracket. Checked here
@@ -69,14 +91,14 @@ pub(crate) fn validate<'a>(
             Token::Operand(_) | Token::Variable(_) => {
                 require_value_position(&expect, t, source)?;
                 expect = Expect::Operator;
-                mark_content(&mut frames, &mut segment_has_content);
+                mark_content(&mut frames, &mut content);
                 out.push(t.clone());
             }
 
             Token::Function(fun) => {
                 require_value_position(&expect, t, source)?;
                 pending_function = Some((*fun, t.span));
-                mark_content(&mut frames, &mut segment_has_content);
+                mark_content(&mut frames, &mut content);
                 out.push(t.clone());
             }
 
@@ -139,19 +161,19 @@ pub(crate) fn validate<'a>(
                 // told apart from one that did — and that bookkeeping is gone,
                 // because an empty group is now an error in its own right.
                 expect = Expect::Operator;
-                mark_content(&mut frames, &mut segment_has_content);
+                mark_content(&mut frames, &mut content);
                 out.push(t.clone());
             }
 
             Token::Operator(op) => match (&expect, op) {
                 // A '+' in value position has never meant anything.
                 (Expect::Value, Operator::Add) => {
-                    mark_content(&mut frames, &mut segment_has_content);
+                    mark_content(&mut frames, &mut content);
                 }
                 // A '-' in value position is the unary operator, and inherits
                 // the position of the '-' it replaces.
                 (Expect::Value, Operator::Sub) => {
-                    mark_content(&mut frames, &mut segment_has_content);
+                    mark_content(&mut frames, &mut content);
                     out.push(Spanned::new(Token::Operator(Operator::Une), t.span));
                 }
                 (Expect::Value, _) => {
@@ -195,14 +217,14 @@ pub(crate) fn validate<'a>(
                 if !frames.is_empty() {
                     return Err(ParseError::BracketUnclosedAtSemicolon { span: t.span });
                 }
-                if expect == Expect::Value && segment_has_content {
+                if expect == Expect::Value && content.segment {
                     return Err(ParseError::ExpectedValue {
                         found: text_at(source, t.span),
                         span: t.span,
                     });
                 }
                 expect = Expect::Value;
-                segment_has_content = false;
+                content.segment = false;
                 out.push(t.clone());
             }
         }
@@ -217,7 +239,13 @@ pub(crate) fn validate<'a>(
     if let Some(frame) = frames.last() {
         return Err(ParseError::UnbalancedBracket { span: frame.open });
     }
-    if expect == Expect::Value && segment_has_content {
+    // Separators and nothing else: every segment was empty, so no segment was
+    // ever incomplete and the check below cannot speak for this. `";"` is as
+    // empty an expression as `""`, and gets the same answer.
+    if !content.any {
+        return Err(ParseError::EmptyExpression);
+    }
+    if expect == Expect::Value && content.segment {
         // Nothing to underline, but somewhere to point: a zero-width span at
         // the end of the source, which `render` widens to a single caret.
         let end = source.len();
@@ -245,13 +273,13 @@ fn require_value_position(
     Ok(())
 }
 
-/// Records that the innermost argument slot, and the current segment, are no
-/// longer empty.
-fn mark_content(frames: &mut [Frame], segment_has_content: &mut bool) {
+/// Records that the innermost argument slot, and the input, are no longer
+/// empty.
+fn mark_content(frames: &mut [Frame], content: &mut Content) {
     if let Some(frame) = frames.last_mut() {
         frame.has_content = true;
     }
-    *segment_has_content = true;
+    content.mark();
 }
 
 /// The text the user actually typed for this token. The fallback cannot be
@@ -435,6 +463,23 @@ mod tests {
         ];
         for (source, expected) in cases {
             assert_eq!(check(source), Err(expected), "for input {source}");
+        }
+    }
+
+    /// An expression of nothing but separators used to validate.
+    /// `Content::segment` is per-segment and never became true, so the
+    /// end-of-input check could not speak for it; the token stream reached the
+    /// evaluator, produced no value, and landed in the positionless
+    /// `EvalError::Malformed` — a sixth malformed input in the bucket the
+    /// other five were taken out of. It is as empty as `""`, and now says so.
+    #[test]
+    fn test_an_expression_of_only_separators_is_empty_not_malformed() {
+        for source in [";", ";;", " ; ", " ;; "] {
+            assert_eq!(
+                check(source),
+                Err(ParseError::EmptyExpression),
+                "for input {source}"
+            );
         }
     }
 

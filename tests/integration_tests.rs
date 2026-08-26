@@ -10,6 +10,22 @@ fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
     ));
 }
 
+/// An expression of only separators compiled, then failed at evaluation with
+/// the generic positionless message this stage exists to eliminate. It is
+/// empty, it is a parse failure, and `compile` is where it is reported.
+#[test]
+fn test_an_expression_of_only_separators_is_refused_by_compile() {
+    for source in [";", ";;", " ; "] {
+        assert!(
+            matches!(
+                Expression::compile(source),
+                Err(ParseError::EmptyExpression)
+            ),
+            "{source} was not refused as empty"
+        );
+    }
+}
+
 #[test]
 fn test_a_compiled_expression_survives_a_change_of_variable() {
     let session = Session::init();
