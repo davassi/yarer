@@ -1,6 +1,8 @@
 use num::{BigInt, Zero};
 use num_rational::BigRational;
-use yarer::{EvalError, Expression, Limits, MathFunction, Number, ParseError, Session};
+use yarer::{
+    Error, EvalError, Expression, Limits, MathFunction, Number, ParseError, Session, Span,
+};
 
 #[test]
 fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
@@ -8,6 +10,48 @@ fn test_a_parse_failure_is_reported_by_compile_not_by_eval() {
         Expression::compile("1+"),
         Err(ParseError::ExpectedValue { .. })
     ));
+}
+
+/// Both halves of the span plumbing are tested — the parser records offsets,
+/// the shunting yard carries them through the reordering, `EvalError::at`
+/// stamps them — and until now the join was not. Change `expression.rs`'s
+/// `let at = |e: EvalError| e.at(t.span)` to stamp any other token in scope
+/// and the rest of the suite stays green: every number is still right, and
+/// only the caret moves. That is the exact failure mode the span tests one
+/// layer down were written to prevent, and only an end-to-end assertion sees
+/// it.
+///
+/// Each expectation is read off the source text, not off the output. In
+/// `"1/0"` the `/` is byte 1 and ends at 2. In `"ln(0)"` the function name
+/// occupies bytes 0..2, and it is the function token that raises the error.
+/// In `"(-1)^0.5"` the `^` is byte 4, after `(`, `-`, `1`, `)`.
+#[test]
+fn test_an_evaluation_error_carries_the_position_of_the_token_that_raised_it() {
+    let session = Session::init();
+    for (source, start, end) in [("1/0", 1, 2), ("ln(0)", 0, 2), ("(-1)^0.5", 4, 5)] {
+        let expr = Expression::compile(source).expect("compiles");
+        let err = expr.eval(&session).expect_err("must fail");
+        assert_eq!(
+            err.span(),
+            Some(Span::new(start, end)),
+            "for input {source}, error {err:?}"
+        );
+    }
+}
+
+/// The commonest parse error there is, rendered end to end. `1+` produces a
+/// zero-width span at the end of the source — there is nothing to underline —
+/// and `render`'s `.max(1)` is what still gives it a caret. No other test
+/// renders a zero-width span, so nothing else would notice that `.max(1)`
+/// going away.
+#[test]
+fn test_an_error_at_end_of_input_still_gets_a_caret() {
+    let err = Expression::compile("1+").expect_err("must fail");
+    assert_eq!(err.span(), Some(Span::new(2, 2)));
+    assert_eq!(
+        Error::Parse(err).render("1+"),
+        "Parse error: expected a value, found 'end of expression'\n  1+\n    ^"
+    );
 }
 
 /// An expression of only separators compiled, then failed at evaluation with
