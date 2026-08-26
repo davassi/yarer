@@ -178,6 +178,7 @@ a string. It is a breaking change; everything that moved is in this table.
 | a function on an operand too large for `f64` returned the limit value there, for the functions that have one (`atan(10^400)` was `pi/2`; also `exp`, `cdf`, `pdf`) | `EvalError::OperandTooLargeForFloat` |
 | `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |
 | `max(1,(2,3))` claims no call is open | `ParseError::CommaInPlainBracket` |
+| `and`, `or`, `xor`, `not`, `mod` are valid variable names | reserved words, in every casing |
 
 Three of those rows want a sentence more than a cell.
 
@@ -200,6 +201,20 @@ reducing, so an externally built `Ratio::new_raw(4, 2)` was integral but
 unreduced and came back as a `DecimalNumber` — which also made `PartialEq` and
 `PartialOrd` disagree about it. Values built from yarer's own arithmetic are
 unaffected: `BigRational` reduces its own results.
+
+**Ten operators are new**, and one of them takes something away. `<` `>` `<=`
+`>=` `==` `<>`, `and` `or` `xor` `not`, and `mod` are described under
+[Operators](#operators) above. Everything about them is additive except the
+five words, which stop being usable as variable names — the one break in this
+half of the release. An expression that used `mod` or `and` as a variable now
+fails to compile with `ParseError::ExpectedValue` rather than silently reading
+the undefined variable as `0`, so the failure is loud and positioned.
+
+Nothing that evaluated before changes value. The precedence ladder grew from
+six levels to ten, but the six operators that predate the new ones keep their
+order relative to one another and no new level was interleaved between two old
+ones, so no existing expression re-groups. The suite's 143 value assertions are
+the test of that claim and are unmodified.
 
 Unchanged on purpose: undefined variables still read as `0`; `sin[5]` still
 evaluates; chained assignment (`x=y=5`) and chained expressions
@@ -262,6 +277,64 @@ From Yarer version 0.1.5 it's possible to share a single session, and therefore 
         println!("{} {}", a, b); // 100 3265920
     }
 ```
+
+## Operators
+
+| | operators | associativity |
+|---|---|---|
+| weakest | `=` assignment | right |
+| | `or` `xor` | left |
+| | `and` | left |
+| | `not` (prefix) | right |
+| | `<` `>` `<=` `>=` `==` `<>` | left |
+| | `+` `-` | left |
+| | `*` `/` `mod` | left |
+| | `^` | right |
+| | unary `-` | right |
+| strongest | `!` factorial (postfix) | left |
+
+A comparison yields `1` or `0`, as in GNU bc — there is no boolean type, and
+`(1<2) + 5` is a legal expression worth 6. The logical operators read **any**
+non-zero value as true, fractions and negatives included, so `1/3 and 2` is 1
+and only zero is false.
+
+Because the answer is a number, a comparison doubles as a mask, which is how to
+write a branch in a language that has none:
+
+```text
+      > S=120; K=100
+      > (S > K) * (S - K)
+      20
+      > S=80
+      > (S > K) * (S - K)
+      0
+```
+
+`mod` truncates toward zero, so the result takes the sign of the dividend:
+`-7 mod 3` is `-1` and `7 mod -3` is `1`, the convention of C, Rust, bc and
+BASIC. It is defined on rationals too — `7.5 mod 2` is `1.5`.
+
+`not` binds more weakly than the comparisons, as in Python and unlike C, so
+`not a == b` reads the way its spelling suggests: `not (a == b)`.
+
+**There is no `!=`.** `!` is the postfix factorial, so `5!=3` could be read as
+`(5!) = 3` or as `5 != 3`. `<>` is unambiguous, and that is why it is the
+spelling. For the same reason `not` is a word: the symbol is taken.
+
+**`and`, `or`, `xor`, `not` and `mod` are reserved words**, in every casing, and
+can no longer be used as variable names. Like the function names, they are
+matched case-insensitively: `and`, `And` and `AND` are the same operator.
+
+Because yarer holds decimals as exact rationals, comparison answers what
+floating point cannot: `0.1+0.2 == 0.3` is `1`, and so is
+`1/3 + 1/3 + 1/3 == 1`. There is no epsilon to choose because there is no
+rounding error to absorb.
+
+There is no short-circuit evaluation. `0 and (2^1000000)` evaluates its right
+operand — a stack machine has both operands before it sees the operator — so
+that expression is refused by the size budget rather than answering `0`, and
+`0 and 1/0` is a division-by-zero error rather than `0`. `and` and `or` combine
+two values; they do not guard one with the other.
 
 ## Built-in Defined Functions
 

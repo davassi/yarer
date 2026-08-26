@@ -35,6 +35,27 @@ pub struct Expression<'a> {
     rpn: VecDeque<Spanned<Token<'a>>>,
 }
 
+/// Truth as this crate represents it: `1` and `0`, as in GNU bc, which is the
+/// value model the README already names.
+///
+/// There is no boolean [`Number`] variant, and this is the whole of the price:
+/// `(1<2) + 5` is a legal expression worth 6. That is the accepted cost of not
+/// introducing a second kind of value into a crate whose entire surface is
+/// built around one.
+fn boolean(truth: bool) -> Number {
+    Number::NaturalNumber(BigInt::from(u8::from(truth)))
+}
+
+/// Zero is false and everything else is true — including negative and
+/// fractional values, which is why this asks the value rather than the variant.
+///
+/// [`Number`]'s [`PartialEq`] compares mathematically, so a `DecimalNumber`
+/// holding zero is false too — exactly as [`Number::checked_div`] relies on
+/// for its divisor test.
+fn is_truthy(value: &Number) -> bool {
+    value != &Number::NaturalNumber(BigInt::zero())
+}
+
 impl<'a> Expression<'a> {
     /// Compiles `source` into an expression.
     ///
@@ -99,17 +120,17 @@ impl<'a> Expression<'a> {
 
                     var_stack.pop_back();
 
-                    let left_value = if op != &Operator::Une && op != &Operator::Fac {
+                    let left_value = if op.is_unary() {
+                        zero.clone()
+                    } else {
                         result_stack
                             .pop_back()
                             .ok_or(EvalError::Malformed { span: Some(t.span) })?
-                    } else {
-                        zero.clone()
                     };
-                    let left_var = if op != &Operator::Une && op != &Operator::Fac {
-                        var_stack.pop_back().unwrap_or(None)
-                    } else {
+                    let left_var = if op.is_unary() {
                         None
+                    } else {
+                        var_stack.pop_back().unwrap_or(None)
                     };
 
                     match op {
@@ -145,7 +166,7 @@ impl<'a> Expression<'a> {
                             );
                             var_stack.push_back(None);
                         }
-                        Operator::Eql => {
+                        Operator::Assign => {
                             if let Some(var) = left_var {
                                 // `assign` decides the refusal, here and for
                                 // `set`/`setf` alike; the loop only supplies the
@@ -192,6 +213,112 @@ impl<'a> Expression<'a> {
                         Operator::Une => {
                             //# unary neg
                             result_stack.push_back(right_value * minus_one.clone());
+                            var_stack.push_back(None);
+                        }
+                        // The six comparisons, in the order the precedence
+                        // table lists them. Each asks `Number`'s own
+                        // `PartialOrd`, which Stage 1 made agree with
+                        // `PartialEq` by comparing mathematical value rather
+                        // than enum variant — so `2 == 6/3` is true here with
+                        // no code of its own.
+                        //
+                        // Every one of them ends in the same three lines the
+                        // arithmetic arms above end in, including the size
+                        // check — because the rule this crate keeps is that
+                        // every arm which pushes a value checks it.
+                        //
+                        // The design took that check to be unreachable here,
+                        // on the grounds that 1 and 0 occupy one bit. It is
+                        // not: `Limits::with_max_value_bits` has no lower
+                        // bound, so under a zero-bit budget `0 == 0` has two
+                        // operands costing nothing and an answer costing one,
+                        // and this line is what refuses it.
+                        Operator::Less => {
+                            let value = boolean(left_value < right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Greater => {
+                            let value = boolean(left_value > right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::LessEq => {
+                            let value = boolean(left_value <= right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::GreaterEq => {
+                            let value = boolean(left_value >= right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Equal => {
+                            let value = boolean(left_value == right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::NotEqual => {
+                            let value = boolean(left_value != right_value);
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        // The three binary logical operators. Both operands
+                        // are already on the stack when the arm runs, so the
+                        // `&&` below short-circuits nothing: the right-hand
+                        // expression was evaluated before this line was
+                        // reached. That is a property of the stack machine and
+                        // not of this line — `0 and (2^1000000)` evaluates its
+                        // right operand and is refused by the size budget
+                        // rather than answering 0.
+                        Operator::And => {
+                            let value = boolean(is_truthy(&left_value) && is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Or => {
+                            let value = boolean(is_truthy(&left_value) || is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Xor => {
+                            let value = boolean(is_truthy(&left_value) != is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        // Prefix, so the operand is the one `is_unary` left in
+                        // `right_value`; `left_value` is the placeholder zero.
+                        Operator::Not => {
+                            let value = boolean(!is_truthy(&right_value));
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
+                            var_stack.push_back(None);
+                        }
+                        Operator::Mod => {
+                            // The zero check is `checked_div`'s, which is the
+                            // one place this crate decides what a division by
+                            // zero is — consolidated there from three copies.
+                            let quotient = left_value
+                                .checked_div(&right_value)
+                                .ok_or(EvalError::DivisionByZero { span: Some(t.span) })?;
+                            // `From<Number> for BigInt` truncates toward zero
+                            // rather than flooring, which is exactly what makes
+                            // `-7 mod 3` be -1 and not 2 — the convention of C,
+                            // Rust, bc and BASIC, every language whose spelling
+                            // this borrows.
+                            let truncated = Number::NaturalNumber(BigInt::from(quotient));
+                            let value = left_value - right_value * truncated;
+                            limits::check_size(&value, limits).map_err(at)?;
+                            result_stack.push_back(value);
                             var_stack.push_back(None);
                         }
                     }

@@ -176,6 +176,14 @@ pub(crate) fn validate<'a>(
                     mark_content(&mut frames, &mut content);
                     out.push(Spanned::new(Token::Operator(Operator::Une), t.span));
                 }
+                // `not` is prefix: it wants a value on its right and takes
+                // nothing on its left, so it belongs exactly where a value
+                // belongs and leaves the state where it found it. That is what
+                // makes `not not 1` and `not (1 < 2)` legal.
+                (Expect::Value, Operator::Not) => {
+                    mark_content(&mut frames, &mut content);
+                    out.push(t.clone());
+                }
                 (Expect::Value, _) => {
                     return Err(ParseError::ExpectedValue {
                         found: text_at(source, t.span),
@@ -185,6 +193,17 @@ pub(crate) fn validate<'a>(
                 // '!' is postfix: it consumes the value on its left and leaves
                 // one in its place, so the state does not move.
                 (Expect::Operator, Operator::Fac) => out.push(t.clone()),
+                // `not` is not a binary operator, and the catch-all below
+                // would accept it as one. `1 not 2` would then validate,
+                // reach the evaluator, and fail there with a complaint about
+                // a stack — which is the defect `max(1,*2)` had before this
+                // pass existed, reintroduced by a new operator.
+                (Expect::Operator, Operator::Not) => {
+                    return Err(ParseError::ExpectedOperator {
+                        found: text_at(source, t.span),
+                        span: t.span,
+                    })
+                }
                 (Expect::Operator, _) => {
                     expect = Expect::Value;
                     out.push(t.clone());

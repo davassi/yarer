@@ -64,6 +64,43 @@
 //! let float : f64 = result.try_into().unwrap();
 //! ```
 //!
+//! ## Operators
+//!
+//! Weakest to strongest: `=`, then `or` `xor`, `and`, `not`, the six
+//! comparisons `<` `>` `<=` `>=` `==` `<>`, `+` `-`, `*` `/` `mod`, `^`,
+//! unary `-`, and postfix `!`. `=`, `^` and `not` associate to the right and
+//! the rest to the left.
+//!
+//! A comparison yields `1` or `0`, as in GNU bc: there is no boolean type, and
+//! [`Number`] does not grow a variant. Because the answer is a number, a
+//! comparison doubles as a mask — which is how to write a branch in a language
+//! that has none.
+//!
+//! ```
+//! use yarer::{Expression, Number, Session};
+//!
+//! let session = Session::init();
+//! // The payoff of a European call at expiry, max(S-K, 0), with no branch:
+//! // the comparison is 1 when the option is in the money and 0 when it is not.
+//! let payoff = Expression::compile("(S > K) * (S - K)").unwrap();
+//!
+//! session.set("K", 100).unwrap();
+//!
+//! session.set("S", 120).unwrap();
+//! assert_eq!(payoff.eval(&session).unwrap().to_string(), "20");
+//!
+//! session.set("S", 80).unwrap();
+//! assert_eq!(payoff.eval(&session).unwrap().to_string(), "0");
+//! ```
+//!
+//! The logical operators read **any** non-zero value as true, fractions and
+//! negatives included, so `1/3 and 2` is 1 and only zero is false. `mod`
+//! truncates toward zero, so the result takes the sign of the dividend:
+//! `-7 mod 3` is `-1`. There is no `!=`, because `!` is the factorial and
+//! `5!=3` would be ambiguous; `<>` is the spelling. And `and`, `or`, `xor`,
+//! `not` and `mod` are reserved words in every casing, so they cannot be
+//! variable names.
+//!
 //! ## Errors
 //!
 //! Two kinds, kept apart in the type system rather than in a message prefix:

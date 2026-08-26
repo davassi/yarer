@@ -36,7 +36,7 @@ pub enum Number {
 
 /// A binary or unary Math [`Operator`]
 ///
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum Operator {
     /// Binary Add ('1+1')
     Add,
@@ -52,8 +52,60 @@ pub(crate) enum Operator {
     Une,
     /// Factorial ('0!')
     Fac,
-    /// Binary Assignment ('A=1')
-    Eql,
+    /// Binary Assignment ('a=1'). Named for what it does: [`Operator::Equal`]
+    /// is the comparison, and the two must not be confusable at a glance.
+    Assign,
+    /// Less than ('1<2')
+    Less,
+    /// Greater than ('2>1')
+    Greater,
+    /// Less than or equal ('1<=1')
+    LessEq,
+    /// Greater than or equal ('1>=1')
+    GreaterEq,
+    /// Equality ('1==1'). Not assignment; see [`Operator::Assign`].
+    Equal,
+    /// Inequality ('1<>2'). Spelled `<>` rather than `!=` because `!` is the
+    /// postfix factorial, which would make `5!=3` ambiguous.
+    NotEqual,
+    /// Logical and ('1 and 0')
+    And,
+    /// Logical or ('1 or 0')
+    Or,
+    /// Logical exclusive or ('1 xor 0')
+    Xor,
+    /// Logical negation ('not 0'). Prefix, and spelled as a word because `!` is taken.
+    Not,
+    /// Remainder, truncating toward zero ('7 mod 3')
+    Mod,
+}
+
+impl Operator {
+    /// Whether this operator takes no left operand.
+    ///
+    /// The evaluation loop asks twice — once for the value and once for the
+    /// variable name beside it — and spelled the answer out both times before
+    /// this existed.
+    pub(crate) const fn is_unary(self) -> bool {
+        matches!(self, Operator::Une | Operator::Fac | Operator::Not)
+    }
+
+    /// Whether this operator is written before its operand.
+    ///
+    /// A prefix operator appears where a *value* appears, so every operator
+    /// already waiting on the shunting yard's stack is still short of its own
+    /// right operand and none of them may be displaced — whatever the
+    /// precedence arithmetic says. [`Operator::Une`] never had to state this:
+    /// at the second-strongest level it is stronger than anything it could
+    /// displace. [`Operator::Not`] is the weakest of the three unary
+    /// operators, and without the rule `1 - not 0` pops the `-` before its
+    /// right operand exists.
+    ///
+    /// [`Operator::Fac`] is unary but *postfix* — it consumes the value on its
+    /// left — so it is not one of these, and popping on its behalf is correct.
+    pub(crate) const fn is_prefix(self) -> bool {
+        matches!(self, Operator::Une | Operator::Not)
+    }
 }
 
 /// The "associativity" of an operator dictates the direction
@@ -215,7 +267,45 @@ impl Token<'_> {
             '^' => Some(Token::Operator(Operator::Pow)),
             '#' => Some(Token::Operator(Operator::Une)),
             '!' => Some(Token::Operator(Operator::Fac)),
-            '=' => Some(Token::Operator(Operator::Eql)),
+            '=' => Some(Token::Operator(Operator::Assign)),
+            '<' => Some(Token::Operator(Operator::Less)),
+            '>' => Some(Token::Operator(Operator::Greater)),
+            _ => None,
+        }
+    }
+
+    /// Converts a whole token to the [`Operator`] it spells, for the operators
+    /// written as words, or [`None`] if it spells none of them.
+    ///
+    /// Case-insensitive, because every other word in this language is: `and`,
+    /// `And` and `AND` all work, exactly as `sin`, `Sin` and `SIN` do. Lower
+    /// case is the canonical spelling for documentation and error messages.
+    ///
+    /// Asked before [`Token::get_some`] and long before the fall-through to
+    /// [`Token::Variable`], which is what makes these five words reserved.
+    fn from_word_operator(t: &str) -> Option<Operator> {
+        match t.to_lowercase().as_str() {
+            "and" => Some(Operator::And),
+            "or" => Some(Operator::Or),
+            "xor" => Some(Operator::Xor),
+            "not" => Some(Operator::Not),
+            "mod" => Some(Operator::Mod),
+            _ => None,
+        }
+    }
+
+    /// Converts a whole token to the [`Operator`] it spells, for the operators
+    /// written with two characters, or [`None`] if it spells none of them.
+    ///
+    /// This asks about the whole token rather than its first character, and is
+    /// asked before [`Token::from_operator`] is: the first character of `<=` is
+    /// `<`, which on its own is a perfectly good comparison.
+    fn from_two_char_operator(t: &str) -> Option<Operator> {
+        match t {
+            "<=" => Some(Operator::LessEq),
+            ">=" => Some(Operator::GreaterEq),
+            "==" => Some(Operator::Equal),
+            "<>" => Some(Operator::NotEqual),
             _ => None,
         }
     }
@@ -269,12 +359,25 @@ impl Token<'_> {
     ///
     #[must_use]
     pub(crate) fn tokenize(t: &str) -> Token<'_> {
-        if let Some(s) = t.chars().next() {
-            match s {
-                c @ ('+' | '-' | '*' | '/' | '^' | '!' | '=' | '×' | '÷') => {
-                    return Token::from_operator(c).unwrap()
-                }
-                b @ ('(' | ')' | '[' | ']') => return Token::from_bracket(b).unwrap(),
+        // Ahead of the single-character route below, for the reason given on
+        // `from_two_char_operator`.
+        if let Some(op) = Token::from_two_char_operator(t) {
+            return Token::Operator(op);
+        }
+
+        // Asking the two converters directly, rather than listing the operator
+        // and bracket characters in a guard here and then unwrapping what they
+        // return, is what keeps each list in one place: the guard and the
+        // converter used to spell out the same set, and a character added to
+        // one and not the other turned that `unwrap` into a panic.
+        if let Some(c) = t.chars().next() {
+            if let Some(token) = Token::from_operator(c) {
+                return token;
+            }
+            if let Some(token) = Token::from_bracket(c) {
+                return token;
+            }
+            match c {
                 ',' => return Token::Comma,
                 ';' => return Token::SemiColon,
                 _ => (), // continue the flow
@@ -289,6 +392,10 @@ impl Token<'_> {
             return Token::Operand(Number::decimal(v));
         }
 
+        if let Some(op) = Token::from_word_operator(t) {
+            return Token::Operator(op);
+        }
+
         if let Some(fun) = Token::get_some(t) {
             return Token::Function(fun);
         }
@@ -298,6 +405,13 @@ impl Token<'_> {
 
     /// The precedence and associativity of an operator.
     ///
+    /// Ten levels, weakest first. The six operators that predate the comparison
+    /// and logical set keep their order relative to one another — assignment
+    /// below addition below multiplication below power below unary minus below
+    /// factorial — so renumbering them cannot change how any existing
+    /// expression groups. The new levels all sit below addition, except
+    /// [`Operator::Mod`], which joins an existing level rather than creating one.
+    ///
     /// This takes an [`Operator`] rather than a [`Token`] because that is its
     /// domain. The wider parameter is what forced the `_ => panic!` arm it used to
     /// carry: a function that accepts brackets and commas has to say something when
@@ -305,12 +419,21 @@ impl Token<'_> {
     /// nothing left to refuse.
     fn operator_priority(o: Operator) -> (u8, Associate) {
         match o {
-            Operator::Add | Operator::Sub => (1, Associate::LeftAssociative),
-            Operator::Mul | Operator::Div => (2, Associate::LeftAssociative),
-            Operator::Pow => (3, Associate::RightAssociative),
-            Operator::Une => (4, Associate::RightAssociative),
-            Operator::Fac => (5, Associate::LeftAssociative),
-            Operator::Eql => (0, Associate::RightAssociative),
+            Operator::Assign => (0, Associate::RightAssociative),
+            Operator::Or | Operator::Xor => (1, Associate::LeftAssociative),
+            Operator::And => (2, Associate::LeftAssociative),
+            Operator::Not => (3, Associate::RightAssociative),
+            Operator::Less
+            | Operator::Greater
+            | Operator::LessEq
+            | Operator::GreaterEq
+            | Operator::Equal
+            | Operator::NotEqual => (4, Associate::LeftAssociative),
+            Operator::Add | Operator::Sub => (5, Associate::LeftAssociative),
+            Operator::Mul | Operator::Div | Operator::Mod => (6, Associate::LeftAssociative),
+            Operator::Pow => (7, Associate::RightAssociative),
+            Operator::Une => (8, Associate::RightAssociative),
+            Operator::Fac => (9, Associate::LeftAssociative),
         }
     }
 
@@ -672,7 +795,18 @@ impl Display for Operator {
             Operator::Pow => write!(f, "^"),
             Operator::Une => write!(f, "#"),
             Operator::Fac => write!(f, "!"),
-            Operator::Eql => write!(f, "="),
+            Operator::Assign => write!(f, "="),
+            Operator::Less => write!(f, "<"),
+            Operator::Greater => write!(f, ">"),
+            Operator::LessEq => write!(f, "<="),
+            Operator::GreaterEq => write!(f, ">="),
+            Operator::Equal => write!(f, "=="),
+            Operator::NotEqual => write!(f, "<>"),
+            Operator::And => write!(f, "and"),
+            Operator::Or => write!(f, "or"),
+            Operator::Xor => write!(f, "xor"),
+            Operator::Not => write!(f, "not"),
+            Operator::Mod => write!(f, "mod"),
         }
     }
 }
@@ -869,44 +1003,123 @@ mod tests {
         assert!(f64::try_from(huge).is_err());
     }
 
+    /// The whole safety argument for renumbering the ladder. Every operator that
+    /// existed before the comparison and logical set keeps its position relative
+    /// to the others, so no expression that evaluates today can change meaning.
+    /// If this ever goes red, some existing expression has quietly been
+    /// re-parsed.
+    ///
+    /// It asserts the order rather than the numbers on purpose: the numbers are
+    /// an implementation detail that a later operator may shift again, and a
+    /// test restating them would have to be edited every time — which is how a
+    /// test stops being able to fail.
     #[test]
-    fn test_operator_priority() {
-        assert_eq!(
-            Token::operator_priority(Operator::Add),
-            (1, Associate::LeftAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Sub),
-            (1, Associate::LeftAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Mul),
-            (2, Associate::LeftAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Div),
-            (2, Associate::LeftAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Pow),
-            (3, Associate::RightAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Une),
-            (4, Associate::RightAssociative)
-        );
-        assert_eq!(
-            Token::operator_priority(Operator::Fac),
-            (5, Associate::LeftAssociative)
+    fn test_the_existing_operators_keep_their_relative_order() {
+        let ascending = [
+            Operator::Assign,
+            Operator::Add,
+            Operator::Mul,
+            Operator::Pow,
+            Operator::Une,
+            Operator::Fac,
+        ];
+        let levels: Vec<u8> = ascending
+            .iter()
+            .map(|o| Token::operator_priority(*o).0)
+            .collect();
+        assert!(
+            levels.windows(2).all(|pair| pair[0] < pair[1]),
+            "levels were {levels:?}, which is not strictly ascending"
         );
     }
 
+    /// Associativity is the other half of how an expression groups, and the
+    /// order test above says nothing about it. These four are the ones an
+    /// existing expression depends on: `-2^-2` needs `^` right-associative,
+    /// `x=y=5` needs `=` right-associative, and `2-3-4` needs `-` left.
     #[test]
-    fn test_operator_priority_for_assignment() {
+    fn test_the_existing_operators_keep_their_associativity() {
+        for (op, associativity) in [
+            (Operator::Assign, Associate::RightAssociative),
+            (Operator::Add, Associate::LeftAssociative),
+            (Operator::Sub, Associate::LeftAssociative),
+            (Operator::Mul, Associate::LeftAssociative),
+            (Operator::Div, Associate::LeftAssociative),
+            (Operator::Pow, Associate::RightAssociative),
+            (Operator::Une, Associate::RightAssociative),
+            (Operator::Fac, Associate::LeftAssociative),
+        ] {
+            assert_eq!(
+                Token::operator_priority(op).1,
+                associativity,
+                "for operator {op}"
+            );
+        }
+    }
+
+    /// `mod` shares a level with `*` and `/` rather than getting one of its own,
+    /// so `7 mod 3 * 2` groups left to right.
+    #[test]
+    fn test_mod_sits_with_multiplication() {
         assert_eq!(
-            Token::operator_priority(Operator::Eql),
-            (0, Associate::RightAssociative)
+            Token::operator_priority(Operator::Mod),
+            Token::operator_priority(Operator::Mul)
         );
+    }
+
+    /// The three prefix and postfix operators take no left operand. The
+    /// evaluation loop asks this question twice, and before this function
+    /// existed it spelled the answer out both times.
+    #[test]
+    fn test_only_the_three_unary_operators_report_as_unary() {
+        for unary in [Operator::Une, Operator::Fac, Operator::Not] {
+            assert!(unary.is_unary(), "{unary} should be unary");
+        }
+        for binary in [
+            Operator::Add,
+            Operator::Sub,
+            Operator::Mul,
+            Operator::Div,
+            Operator::Pow,
+            Operator::Assign,
+            Operator::Less,
+            Operator::Greater,
+            Operator::LessEq,
+            Operator::GreaterEq,
+            Operator::Equal,
+            Operator::NotEqual,
+            Operator::And,
+            Operator::Or,
+            Operator::Xor,
+            Operator::Mod,
+        ] {
+            assert!(!binary.is_unary(), "{binary} should be binary");
+        }
+    }
+
+    /// Every operator renders as the text a user would type, which is what the
+    /// `found '{}'` half of a parse error shows. `Une` is the exception and
+    /// stays one: it is a rewrite of `-` that no user ever types, and `#` is
+    /// how the debug output has always spelled it.
+    #[test]
+    fn test_the_new_operators_render_as_they_are_written() {
+        let pairs = [
+            (Operator::Less, "<"),
+            (Operator::Greater, ">"),
+            (Operator::LessEq, "<="),
+            (Operator::GreaterEq, ">="),
+            (Operator::Equal, "=="),
+            (Operator::NotEqual, "<>"),
+            (Operator::And, "and"),
+            (Operator::Or, "or"),
+            (Operator::Xor, "xor"),
+            (Operator::Not, "not"),
+            (Operator::Mod, "mod"),
+            (Operator::Assign, "="),
+        ];
+        for (op, text) in pairs {
+            assert_eq!(op.to_string(), text);
+        }
     }
 
     /// The reason this exists: `a / b` panicked here, inside a public `std::ops`
@@ -946,6 +1159,12 @@ mod tests {
         assert_eq!(Token::tokenize("×"), Token::Operator(Operator::Mul));
         assert_eq!(Token::tokenize("÷"), Token::Operator(Operator::Div));
         assert_eq!(Token::tokenize("foo"), Token::Variable("foo"));
+        // Also unreachable from the pipeline — the regex has no '#' — and it
+        // moved when the two duplicated character lists became one. It used to
+        // fall through to a variable named "#"; it now spells the unary minus,
+        // which is how `Display` has always written it. Pinned so that the
+        // change is a decision rather than a side effect.
+        assert_eq!(Token::tokenize("#"), Token::Operator(Operator::Une));
     }
 
     #[test]

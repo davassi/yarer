@@ -12,7 +12,11 @@ use regex::Regex;
 pub(crate) struct Parser;
 
 static EXPRESSION_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"(\d+\.?\d*|\.\d+|[-+*/^(),=\[\]×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*)")
+    // The two-character operators come first because regex alternation is
+    // ordered: written after the character class, `<=` would match as `<`
+    // followed by `=` — a comparison and then an assignment, which fails
+    // somewhere else with a message about the wrong thing.
+    Regex::new(r"(<=|>=|==|<>|\d+\.?\d*|\.\d+|[-+*/^(),=<>\[\]×÷!;]|[a-zA-Z_][a-zA-Z0-9_]*)")
         .expect("Should compile regex")
 });
 
