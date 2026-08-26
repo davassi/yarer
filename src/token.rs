@@ -17,10 +17,15 @@ use std::{
 /// describe the same number.
 ///
 /// [`Number::decimal`] is the constructor that maintains this, degrading an
-/// integral rational to [`Number::NaturalNumber`]; everything inside the crate
-/// builds decimals through it. Both variants are nevertheless publicly
-/// constructible, so code that builds a [`Number::DecimalNumber`] directly is
-/// responsible for upholding the rule itself — prefer [`Number::decimal`].
+/// integral rational to [`Number::NaturalNumber`], and it is the one to reach
+/// for from outside. Four paths inside the crate — `checked_div`, the shared
+/// `Add`/`Sub`/`Mul` closure, `power_integer` and `decimal_from_f64` — use a
+/// `decimal_unchecked` that skips the reduction, because `BigRational` has
+/// already reduced the value they hand it; the invariant holds on those paths
+/// too, just without paying for a second gcd. Both variants are nevertheless
+/// publicly constructible, so code that builds a [`Number::DecimalNumber`]
+/// directly is responsible for upholding the rule itself — prefer
+/// [`Number::decimal`].
 #[derive(Debug, Clone)]
 pub enum Number {
     /// an Integer [BigInt]
