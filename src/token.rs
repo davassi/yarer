@@ -275,12 +275,6 @@ impl Token<'_> {
     }
 
     /// Converts a whole token to the [`Operator`] it spells, for the operators
-    /// written with two characters, or [`None`] if it spells none of them.
-    ///
-    /// This asks about the whole token rather than its first character, and is
-    /// asked before [`Token::from_operator`] is: the first character of `<=` is
-    /// `<`, which on its own is a perfectly good comparison.
-    /// Converts a whole token to the [`Operator`] it spells, for the operators
     /// written as words, or [`None`] if it spells none of them.
     ///
     /// Case-insensitive, because every other word in this language is: `and`,
@@ -300,6 +294,12 @@ impl Token<'_> {
         }
     }
 
+    /// Converts a whole token to the [`Operator`] it spells, for the operators
+    /// written with two characters, or [`None`] if it spells none of them.
+    ///
+    /// This asks about the whole token rather than its first character, and is
+    /// asked before [`Token::from_operator`] is: the first character of `<=` is
+    /// `<`, which on its own is a perfectly good comparison.
     fn from_two_char_operator(t: &str) -> Option<Operator> {
         match t {
             "<=" => Some(Operator::LessEq),

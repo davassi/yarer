@@ -1714,3 +1714,53 @@ fn test_the_old_operators_still_group_as_they_did() {
         );
     }
 }
+
+/// The size check on a comparison's result is neither decoration nor
+/// unreachable — which is what the design assumed, and what this test exists
+/// to have found out.
+///
+/// `Limits::with_max_value_bits` has no lower bound, so a budget of zero bits
+/// is constructible. Under it both operands of `0 == 0` cost nothing and the
+/// answer, `1`, costs one bit: the check fires, and the span lands on the
+/// operator that produced the value rather than on either operand. That is the
+/// only shape of input that separates "the check runs" from "the check is
+/// shadowed by the operand check upstream", which is the difference between a
+/// guard that is tested and one that merely looks tested.
+///
+/// It does *not* hold for `and`, `or`, `xor` and `mod`. Each of those can only
+/// answer 1 if an operand was already worth at least a bit, and the operand
+/// check runs first — so for those four the rule really is maintained by
+/// review, and the register says so rather than this test pretending otherwise.
+#[test]
+fn test_a_truth_answered_from_nothing_is_still_checked_against_the_budget() {
+    let session = Session::init();
+    let nothing = Limits::default().with_max_value_bits(0);
+
+    for (source, start, end) in [
+        ("0 == 0", 2, 4),
+        ("0 <= 0", 2, 4),
+        ("0 >= 0", 2, 4),
+        ("not 0", 0, 3),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        let err = expr
+            .eval_with(&session, nothing)
+            .expect_err("one bit does not fit in a budget of none");
+        assert!(
+            matches!(err, EvalError::ValueTooLarge { bits: 1, limit: 0, span: Some(s) }
+                if (s.start, s.end) == (start, end)),
+            "for {source}, got {err:?}"
+        );
+    }
+
+    // The same operators answering 0 cost nothing and pass, which is what makes
+    // the cases above about the value and not about the operator.
+    for source in ["0 < 0", "0 > 0", "0 <> 0", "0 and 0", "0 or 0", "0 xor 0"] {
+        let expr = Expression::compile(source).expect("compiles");
+        assert_eq!(
+            expr.eval_with(&session, nothing).unwrap(),
+            Number::NaturalNumber(BigInt::zero()),
+            "for {source}"
+        );
+    }
+}

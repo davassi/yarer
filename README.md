@@ -325,9 +325,16 @@ spelling. For the same reason `not` is a word: the symbol is taken.
 can no longer be used as variable names. Like the function names, they are
 matched case-insensitively: `and`, `And` and `AND` are the same operator.
 
+Because yarer holds decimals as exact rationals, comparison answers what
+floating point cannot: `0.1+0.2 == 0.3` is `1`, and so is
+`1/3 + 1/3 + 1/3 == 1`. There is no epsilon to choose because there is no
+rounding error to absorb.
+
 There is no short-circuit evaluation. `0 and (2^1000000)` evaluates its right
 operand — a stack machine has both operands before it sees the operator — so
-that expression is refused by the size budget rather than answering `0`.
+that expression is refused by the size budget rather than answering `0`, and
+`0 and 1/0` is a division-by-zero error rather than `0`. `and` and `or` combine
+two values; they do not guard one with the other.
 
 ## Built-in Defined Functions
 

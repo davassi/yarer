@@ -182,17 +182,29 @@ public enum is a design change, not a fix, and this fix wave was scoped to
 fixes; `#[non_exhaustive]` on `MathFunction`, added in the same wave, is what
 makes the removal additive-cost rather than a second break when it happens.
 
-**The size check on a comparison's result cannot fail, and no test can say
-so.** Every arm of the evaluation loop that pushes a value calls
-`limits::check_size` on it. For the ten operators that answer a truth the
-result is `1` or `0`, which occupies one bit and fits inside any budget the
-`Limits` builder will accept, so the call is unreachable in its failing branch
-and is maintained by review rather than by test. Recorded rather than dropped
-because the alternative is a reasonable-looking exception to the rule, and the
-entry two paragraphs up in this file's history is what happened the last time
-one was made: `floor(exp(1))!` slipped a two-bit result past a one-bit budget
-because a function result was "bounded by construction" and therefore not
-checked.
+**The size check on `and`, `or`, `xor` and `mod`'s results is shadowed by the
+operand check, and no test can reach it.** Every arm of the evaluation loop
+that pushes a value calls `limits::check_size` on it, the new ones included.
+
+The design assumed this was unreachable for all ten operators that answer a
+truth — "1 and 0 occupy one bit, so the call cannot fail" — and recorded it as
+a rule to be maintained by review. That was wrong, and the branch review found
+it by running the library rather than reading it. `Limits::with_max_value_bits`
+has no lower bound, so a zero-bit budget is constructible; under it both
+operands of `0 == 0` cost nothing while the answer costs one bit, and the check
+fires with the span on the `==`. The six comparisons and `not` are therefore
+testable and are tested, in
+`test_a_truth_answered_from_nothing_is_still_checked_against_the_budget`.
+
+What remains genuinely unreachable is the other four. `and`, `or` and `xor` can
+only answer 1 if an operand was already worth at least a bit, and `mod`'s
+result is bounded by a divisor that must be non-zero and so costs a bit too —
+in every case the operand check upstream fires first. Those four are the entry.
+They are recorded rather than exempted because the alternative is a
+reasonable-looking exception to a rule, and this file already records what
+happened the last time one was made: `floor(exp(1))!` slipped a two-bit result
+past a one-bit budget because a function result was "bounded by construction"
+and therefore not checked.
 
 **No short-circuit evaluation.** `0 and (2^1000000)` evaluates its right
 operand and is refused by the size budget rather than answering `0`. This is a

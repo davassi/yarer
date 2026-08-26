@@ -224,11 +224,15 @@ impl<'a> Expression<'a> {
                         //
                         // Every one of them ends in the same three lines the
                         // arithmetic arms above end in, including the size
-                        // check. That check cannot fail: 1 and 0 occupy one
-                        // bit. It is there because the rule this crate keeps
-                        // is that every arm which pushes a value checks it,
-                        // and the register records what happened the last time
-                        // that rule was given a reasonable-looking exception.
+                        // check — because the rule this crate keeps is that
+                        // every arm which pushes a value checks it.
+                        //
+                        // The design took that check to be unreachable here,
+                        // on the grounds that 1 and 0 occupy one bit. It is
+                        // not: `Limits::with_max_value_bits` has no lower
+                        // bound, so under a zero-bit budget `0 == 0` has two
+                        // operands costing nothing and an answer costing one,
+                        // and this line is what refuses it.
                         Operator::Less => {
                             let value = boolean(left_value < right_value);
                             limits::check_size(&value, limits).map_err(at)?;

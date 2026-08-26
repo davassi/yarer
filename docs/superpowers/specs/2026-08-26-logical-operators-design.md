@@ -1,8 +1,25 @@
 # Design — Comparison and Logical Operators
 
 Date: 2026-08-26
-Status: approved, not yet implemented
+Status: implemented on branch `logical-operators`.
 Target release: 0.3.0, together with Stages 1 and 2.
+
+Two claims below did not survive implementation, and are left standing with
+this note rather than quietly edited, because a design record that revises
+itself to match the outcome stops being evidence of anything.
+
+- **Component C is incomplete.** It says the validation pass is the only one
+  `not` affects. The shunting yard is the other: a *prefix* operator arrives
+  where a value arrives, so nothing on its operator stack has a right operand
+  yet and nothing may be popped for it — a rule `Une` never needed, being
+  stronger than anything it could displace. Without it `1 - not 0` pops the
+  `-` and hands the evaluator a binary minus with one operand.
+- **The "one rule stays untestable" claim under Testing is false.** The size
+  check on a comparison's result *is* reachable: `Limits::with_max_value_bits`
+  has no lower bound, and under a zero-bit budget `0 == 0` has two operands
+  costing nothing and an answer costing one bit. It is reachable for the six
+  comparisons and for `not`, and shadowed by the operand check for `and`,
+  `or`, `xor` and `mod`. The register carries the corrected version.
 
 ## Context
 
