@@ -1,12 +1,12 @@
 # Tech debt
 
 Known structural and maintainability debt, and follow-up work deliberately left
-undone. Every entry below was verified against the source at `a7f1220`, the
-commit the production-ready-api stage (Stage 2 of the 0.3.0 plan)'s own code
-and documentation changes land on. This file's own commit adds and reorganises
-tests, and adds two short documentation sections; nothing it touches changes
-any claim below. The fix wave that followed the whole-branch review revisited
-two of them, and both revisions say so where they stand.
+undone. Entries were verified against the source at `a7f1220`, the commit the
+production-ready-api stage (Stage 2 of the 0.3.0 plan)'s own code and
+documentation changes landed on, and re-verified against the comparison and
+logical operators work that followed it on the way to the same release. The fix
+wave that followed Stage 2's whole-branch review revisited two of them, and both
+revisions say so where they stand.
 
 Entries name files and symbols rather than line numbers: line numbers drift,
 and half of those recorded during Stage 1 were stale within a day. Several
@@ -39,13 +39,14 @@ things worth fixing next, not things that are broken now.
 ## Structural
 
 **Four functions exceed the 100-line clippy `too_many_lines` threshold**,
-re-measured cold against `a7f1220`: `Expression::eval_with` at 146,
-`validate::validate` at 150, `functions::eval` at 110, and the
-`test_expressions` integration test at 115. The fix wave after the
-whole-branch review moved one of those numbers: `validate::validate` is 153,
-having grown the check that refuses an expression made of nothing but `;`.
-`shunting::to_rpn` was re-measured in the same pass and is still 91.
-`too_many_lines` is part of
+re-measured cold: `Expression::eval_with` at 216, `validate::validate` at 163,
+`functions::eval` at 110, and the `test_expressions` integration test at 115.
+The first two numbers moved twice. The fix wave after Stage 2's whole-branch
+review took `validate::validate` from 150 to 153, growing the check that
+refuses an expression made of nothing but `;`; the operators work took it to
+163 and `Expression::eval_with` from 146 to 216. `shunting::to_rpn` is still
+under the threshold, at 94 against 91 before, having gained only the guard
+that stops a prefix operator from popping. `too_many_lines` is part of
 `clippy::pedantic`, which is only turned on in `src/lib.rs`; the integration
 test crate doesn't inherit it, so `test_expressions` has never been
 clippy-flagged and this number is a manual line count, same as the original
@@ -53,14 +54,15 @@ entry's 107.
 
 Two of the four are Stage 1 holdovers under new names.
 `RpnResolver::resolve` (155 lines at Stage 1's close) became
-`Expression::eval_with` (146) when `rpn_resolver.rs` was renamed to
-`expression.rs`. `RpnResolver::reverse_polish_notation` (168 lines) became
+`Expression::eval_with` (146, and 216 now) when `rpn_resolver.rs` was renamed
+to `expression.rs`. `RpnResolver::reverse_polish_notation` (168 lines) became
 `shunting::to_rpn` — and dropped **under** the threshold, to 91, when Stage 2
 split the bracket/arity/comma bookkeeping out of it and into a dedicated
 validation pass. That pass is the third function on this list.
 
-`validate::validate` is new, and it is the longest function in the crate. It
-replaced logic that used to be scattered — partly inside the shunting yard,
+`validate::validate` is new, and it was the longest function in the crate
+until the operators work pushed `Expression::eval_with` past it. It replaced
+logic that used to be scattered — partly inside the shunting yard,
 partly in a `mod_unary_operators` pass that had no way to refuse anything —
 with a single walk over the token stream that gives every rejection a
 position. That is the most visible thing Stage 2 did: five previously
@@ -70,6 +72,26 @@ diagnoses. The length is worth that. Structurally it is the same shape
 variants, with `Token::Bracket(Bracket::Close)` (~50 lines) the largest and
 most separable arm, `Token::Comma` and `Token::Operator` next. If this needs
 to shrink, that arm is where to start.
+
+**`Expression::eval_with`'s 70-line growth is ten arms that differ by one
+line each.** The six comparisons and the four `and`/`or`/`xor`/`not` arms each
+spell out the same tail — build the value, `limits::check_size`, push it,
+push `None` beside it — which `Add`, `Sub`, `Mul`, `Div` and `Fac` already
+spelled out five times before this work. Fifteen copies of four lines is most
+of what makes this the longest function in the crate.
+
+The fix is not a helper function: `push_checked(value, limits, &mut
+result_stack, &mut var_stack)` takes four arguments and `rustfmt` wraps the
+call to more lines than it saves. It is to give the two stacks one owner — a
+small `Stacks { values, vars }` with a `push_checked(&mut self, value,
+limits)` method — after which every one of the fifteen arms is a single line
+saying only what its operator means, and the two stacks can no longer fall out
+of lockstep, which today is maintained by hand. That is a change to twenty-odd
+sites in the crate's central evaluation loop, which is why it was not done
+alongside adding the operators: the arms as written match the idiom of the
+five that were already there, and restructuring the loop is not something
+"add ten operators" implies. It is the first thing to do the next time this
+function is opened.
 
 **The numeric kernels behind `^` and `!` live in `expression.rs`, not
 `functions.rs`.** `Expression::power`, `power_integer`, `pow_big_int`,
@@ -159,6 +181,37 @@ it. It is left alone here because removing a variant from a
 public enum is a design change, not a fix, and this fix wave was scoped to
 fixes; `#[non_exhaustive]` on `MathFunction`, added in the same wave, is what
 makes the removal additive-cost rather than a second break when it happens.
+
+**The size check on a comparison's result cannot fail, and no test can say
+so.** Every arm of the evaluation loop that pushes a value calls
+`limits::check_size` on it. For the ten operators that answer a truth the
+result is `1` or `0`, which occupies one bit and fits inside any budget the
+`Limits` builder will accept, so the call is unreachable in its failing branch
+and is maintained by review rather than by test. Recorded rather than dropped
+because the alternative is a reasonable-looking exception to the rule, and the
+entry two paragraphs up in this file's history is what happened the last time
+one was made: `floor(exp(1))!` slipped a two-bit result past a one-bit budget
+because a function result was "bounded by construction" and therefore not
+checked.
+
+**No short-circuit evaluation.** `0 and (2^1000000)` evaluates its right
+operand and is refused by the size budget rather than answering `0`. This is a
+property of the evaluation model, not of the `and` arm: a stack machine has
+both operands on the stack before it sees the operator that combines them.
+Short-circuiting would need jumps in the compiled form — a conditional in the
+RPN, and an evaluator that can skip over a span of it — which is a change to
+what a compiled `Expression` *is*, not an operator. Documented in the README
+so that nobody discovers it by timing out.
+
+**`Session` has no public way to read a variable back.** `Session::set` and
+`setf` write; `Session::lookup` is `pub(crate)`, so a caller holding a session
+that has just evaluated `x = 0 or 1` can only learn what `x` is by compiling
+and evaluating the expression `"x"`. That is what
+`test_assignment_still_binds_more_weakly_than_everything` does, and writing it
+is how this was noticed. The gap is additive to close — a `Session::get(&self,
+name: &str) -> Option<Number>` alongside `set` — and it is left open here only
+because adding a public method is a design decision for the release rather
+than part of adding operators.
 
 ## A pattern worth remembering
 
