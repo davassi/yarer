@@ -509,6 +509,59 @@ mod tests {
         }
     }
 
+    /// Master's `test_multiple_unary_ops2`, restored against this pass. It
+    /// pinned the multi-token unary rewrite *by value* — `-(+(-5*-5))` becomes
+    /// `#((#5*#5))` — and was deleted along with `mod_unary_operators` without
+    /// a replacement. Since then only the single-token `-5` was pinned by
+    /// value, while `--5` and `5--3` appeared solely in a test asserting
+    /// `is_ok()`, which cannot tell a correct rewrite from a wrong one.
+    ///
+    /// It runs through the whole front end rather than over hand-built tokens,
+    /// so it pins what a user typing those characters actually gets.
+    #[test]
+    fn test_the_unary_rewrite_holds_across_nesting_and_repetition() {
+        let une = || Token::Operator(Operator::Une);
+        let open = || Token::Bracket(Bracket::Open);
+        let close = || Token::Bracket(Bracket::Close);
+        let num = |n: u8| Token::Operand(Number::NaturalNumber(BigInt::from(n)));
+
+        let cases: Vec<(&str, Vec<Token>)> = vec![
+            // The leading '+' is dropped, and each of the three '-' in value
+            // position becomes the unary operator; the '*' keeps its own.
+            (
+                "-(+(-5*-5))",
+                vec![
+                    une(),
+                    open(),
+                    open(),
+                    une(),
+                    num(5),
+                    Token::Operator(Operator::Mul),
+                    une(),
+                    num(5),
+                    close(),
+                    close(),
+                ],
+            ),
+            ("--5", vec![une(), une(), num(5)]),
+            // The first '-' follows a value, so it stays binary; only the
+            // second is rewritten.
+            (
+                "5--3",
+                vec![num(5), Token::Operator(Operator::Sub), une(), num(3)],
+            ),
+        ];
+
+        for (source, expected) in cases {
+            let actual: Vec<Token> = check(source)
+                .unwrap_or_else(|e| panic!("{source} was refused: {e}"))
+                .into_iter()
+                .map(|t| t.node)
+                .collect();
+            assert_eq!(actual, expected, "for input {source}");
+        }
+    }
+
     /// The unary rewrite is unchanged apart from its address, and the token it
     /// produces inherits the position of the '-' it replaces.
     #[test]
