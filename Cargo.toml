@@ -6,6 +6,12 @@ repository = "https://github.com/davassi/yarer"
 homepage = "https://github.com/davassi/yarer"
 license = "MIT OR Apache-2.0"
 edition = "2021"
+# The floor for the default feature set, which is the higher of the two this
+# crate has. The library alone compiles on 1.86 — Vec::pop_if in the shunting
+# yard is the newest thing it uses — and the extra two versions come from the
+# CLI: rustyline 16 requires home ^0.5.12, which requires 1.88. Verified in CI
+# at exactly this toolchain, because an unverified rust-version is a comment.
+rust-version = "1.88"
 authors = ["Copyright © 2024–2025 Gianluigi Davassi <gianluigi.davassi@gmail.com>"]
 categories = ["command-line-interface","algorithms","mathematics","parsing"]
 readme = "README.md"
