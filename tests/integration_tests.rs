@@ -1231,14 +1231,15 @@ fn test_setting_a_built_in_constant_is_refused_out_loud() {
 #[test]
 fn test_setting_a_variable_to_a_non_number_is_refused_out_loud() {
     let session = Session::init();
-    assert!(matches!(
-        session.setf("x", f64::NAN),
-        Err(EvalError::NotFinite { .. })
-    ));
-    assert!(matches!(
-        session.setf("x", f64::INFINITY),
-        Err(EvalError::NotFinite { .. })
-    ));
+    // All three of the values `f64::is_finite` refuses, in one array, so that
+    // adding the next one is one word rather than another copied block —
+    // NEG_INFINITY was missing precisely because it needed a third block.
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(
+            matches!(session.setf("x", value), Err(EvalError::NotFinite { .. })),
+            "setf accepted {value}"
+        );
+    }
 }
 
 #[test]
