@@ -1022,3 +1022,36 @@ fn test_one_expression_can_be_evaluated_under_two_budgets() {
     // The session's own budget is untouched by the tighter evaluation.
     assert!(expr.eval(&session).is_ok());
 }
+
+/// Not an assertion: a measurement, for the decision recorded in component H
+/// of the spec. Run before and after adding `.reduced()` to `Number::decimal`.
+///
+/// Run with: cargo test --release -- --ignored --nocapture
+#[test]
+#[ignore = "timing"]
+fn measure_the_cost_of_reducing_every_decimal() {
+    let session = Session::init();
+    for (name, source, rounds) in [
+        ("small rationals", "1/3 + 1/7 + 1/11", 20_000),
+        ("one large rational", "(2^60000)/3", 200),
+    ] {
+        let expr = Expression::compile(source).expect("compiles");
+        let start = std::time::Instant::now();
+        for _ in 0..rounds {
+            expr.eval(&session).expect("evaluates");
+        }
+        println!("{name}: {rounds} evaluations in {:?}", start.elapsed());
+    }
+}
+
+#[test]
+fn test_an_unreduced_rational_does_not_become_a_decimal() {
+    // Ratio::new_raw skips reduction, so 4/2 arrives integral but unreduced.
+    // Number::decimal is the constructor that upholds the invariant, and it
+    // has to reduce to see that this value is a whole number.
+    let unreduced = num_rational::BigRational::new_raw(BigInt::from(4), BigInt::from(2));
+    assert!(matches!(
+        Number::decimal(unreduced),
+        Number::NaturalNumber(_)
+    ));
+}

@@ -318,8 +318,35 @@ impl Number {
     /// This is the only sanctioned way to build a [`Number::DecimalNumber`]:
     /// it upholds the invariant that a decimal never carries a denominator of 1,
     /// so a given mathematical value has exactly one representation.
+    ///
+    /// `value` is taken by value, matching every other public numeric
+    /// constructor on [`Number`], even though the body only ever borrows it
+    /// through [`BigRational::reduced`] (which clones internally regardless);
+    /// taking `&BigRational` here would save nothing and would put this
+    /// constructor's signature out of step with its callers and its sibling
+    /// [`Number::decimal_unchecked`].
     #[must_use]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn decimal(value: BigRational) -> Number {
+        let value = value.reduced();
+        if value.denom().is_one() {
+            Number::NaturalNumber(value.to_integer())
+        } else {
+            Number::DecimalNumber(value)
+        }
+    }
+
+    /// Builds a decimal number without reducing first, degrading to
+    /// [`Number::NaturalNumber`] when the rational is already a whole number.
+    ///
+    /// Measurement showed `.reduced()` costing well over 5% on both the
+    /// harness's small- and large-rational cases (see the commit that
+    /// introduced this function for the numbers), so [`Number::decimal`]'s
+    /// gcd is skipped here. Safe only where `value` is already known to be in
+    /// lowest terms — every caller must be a path where `value` came straight
+    /// out of `BigRational`'s own arithmetic, which reduces its own results.
+    #[must_use]
+    pub(crate) fn decimal_unchecked(value: BigRational) -> Number {
         if value.denom().is_one() {
             Number::NaturalNumber(value.to_integer())
         } else {
@@ -396,15 +423,20 @@ where
     NF: Fn(BigInt, BigInt) -> BigInt,
     DF: Fn(BigRational, BigRational) -> BigRational,
 {
+    // `df` is always `+`, `-` or `*` on `BigRational`, and `num-rational`
+    // reduces the result of every one of its own arithmetic ops — so the
+    // value handed to `Number::decimal_unchecked` here is already reduced.
     match (ln, rn.clone()) {
         (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => Number::NaturalNumber(nf(v1, v2)),
         (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-            Number::decimal(df(BigRational::from(v1), v2))
+            Number::decimal_unchecked(df(BigRational::from(v1), v2))
         }
         (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-            Number::decimal(df(v1, BigRational::from(v2)))
+            Number::decimal_unchecked(df(v1, BigRational::from(v2)))
         }
-        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(df(v1, v2)),
+        (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
+            Number::decimal_unchecked(df(v1, v2))
+        }
     }
 }
 
@@ -447,17 +479,22 @@ impl Number {
         if rhs == &Number::NaturalNumber(BigInt::zero()) {
             return None;
         }
+        // `BigRational::new` reduces on construction, and `/` on `BigRational`
+        // reduces its result the same way `+`, `-` and `*` do — every branch
+        // here hands `Number::decimal_unchecked` an already-reduced value.
         Some(match (self.clone(), rhs.clone()) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::decimal(BigRational::new(v1, v2))
+                Number::decimal_unchecked(BigRational::new(v1, v2))
             }
             (Number::NaturalNumber(v1), Number::DecimalNumber(v2)) => {
-                Number::decimal(BigRational::from(v1) / v2)
+                Number::decimal_unchecked(BigRational::from(v1) / v2)
             }
             (Number::DecimalNumber(v1), Number::NaturalNumber(v2)) => {
-                Number::decimal(v1 / BigRational::from(v2))
+                Number::decimal_unchecked(v1 / BigRational::from(v2))
             }
-            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(v1 / v2),
+            (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => {
+                Number::decimal_unchecked(v1 / v2)
+            }
         })
     }
 }

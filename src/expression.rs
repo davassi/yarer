@@ -328,7 +328,9 @@ impl<'a> Expression<'a> {
                 }
             }
             Number::DecimalNumber(base) => {
-                let value = Number::decimal(Self::pow_big_rational(base, exponent));
+                // `pow_big_rational` accumulates via `*=` on `BigRational`,
+                // which reduces its own result, so `value` is already reduced.
+                let value = Number::decimal_unchecked(Self::pow_big_rational(base, exponent));
                 if is_negative {
                     Number::NaturalNumber(BigInt::one())
                         .checked_div(&value)

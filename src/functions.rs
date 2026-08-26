@@ -150,8 +150,11 @@ pub(crate) fn decimal_from_f64(value: f64, on_error: EvalError) -> Result<Number
         return Err(on_error);
     }
 
+    // `BigRational::from_float` builds its result through `Ratio::new`
+    // (or `Ratio::from_integer` when the exponent is non-negative), both of
+    // which reduce before returning, so the value is already reduced.
     BigRational::from_float(value)
-        .map(Number::decimal)
+        .map(Number::decimal_unchecked)
         .ok_or(on_error)
 }
 
