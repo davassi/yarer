@@ -105,7 +105,15 @@ pub(crate) enum Token<'a> {
 
 /// The [`MathFunction`] enum. It represents a common math function.
 ///
+/// `#[non_exhaustive]`, and for a sharper reason than the other public enums
+/// here: this is the one the README explicitly commits to growing ("More to
+/// come!"), and it is public only because it appears inside
+/// [`crate::ParseError::WrongArity`]. Payload inside a `#[non_exhaustive]`
+/// error enum still breaks a caller who matched it exhaustively, so adding a
+/// function in a later stage would have been a breaking change by the back
+/// door. Match with a `_` arm.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[non_exhaustive]
 pub enum MathFunction {
     /// Trigonometric Sine
     Sin,
@@ -143,7 +151,14 @@ pub enum MathFunction {
     Pdf,
     /// Standard Normal cumulative distribution function
     Cdf,
-    /// No function expected
+    /// No function expected.
+    ///
+    /// It cannot occur through parsing: `Token::get_some` never yields it, so
+    /// no expression compiles to a `MathFunction::None`, and the evaluator
+    /// answers [`crate::EvalError::Malformed`] if one somehow arrives. It is
+    /// public and unconstructible-by-parsing, which the register proposes
+    /// removing; that is a design change rather than a fix, so it stays for
+    /// now.
     None,
 }
 

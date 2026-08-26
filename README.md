@@ -172,6 +172,7 @@ a string. It is a breaking change; everything that moved is in this table.
 | `Limits { max_value_bits: n }` | `Limits::default().with_max_value_bits(n)` |
 | errors are `anyhow::Error` strings | `Error`, `ParseError`, `EvalError`, with spans |
 | `ConversionError` is `Eq` and exhaustive | gains `NotFinite { value: f64 }`, loses `Eq`, becomes `#[non_exhaustive]` |
+| `MathFunction` is exhaustive | `#[non_exhaustive]`: an exhaustive `match` on it needs a `_` arm |
 | `Number::decimal` keeps an unreduced rational a decimal | it reduces first: `Number::decimal(BigRational::new_raw(4, 2))` is `NaturalNumber(2)` |
 | `!5` returns `120` | `ParseError::ExpectedValue` |
 | `()`, `2 3`, `2(3+4)`, `1+`, `max(1,*2)` all "malformed" | five distinct errors, each with a caret position |

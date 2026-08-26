@@ -139,6 +139,23 @@ catch reduction getting slower on the case that actually costs the most.
 `clippy::cast_sign_loss`), where `#[expect(...)]` would self-report once the
 casts stop needing suppression. Unchanged since Stage 1.
 
+**`MathFunction::None` is public and cannot be produced by parsing.**
+`Token::get_some` never yields it, so no expression compiles to one, and
+`functions::eval` answers `EvalError::Malformed` for it — an arm that exists
+only to keep the `match` exhaustive over a variant no input reaches. It costs
+more than a dead arm, because `MathFunction` is public payload inside
+`ParseError::WrongArity`: an embedder matching on it sees a variant the
+documentation has to explain cannot occur, and `arity()` has to answer
+something for it (it answers 1, deliberately, rather than panicking). The
+tokeniser's `Token::get_some` already returns `Option<MathFunction>`, so the
+"no function here" answer `None` stands in for is carried elsewhere already:
+removing the variant means deleting its declaration, its arm in `arity()`, its
+arm in `functions::eval`, and the two doc paragraphs that exist to explain
+it. It is left alone here because removing a variant from a
+public enum is a design change, not a fix, and this fix wave was scoped to
+fixes; `#[non_exhaustive]` on `MathFunction`, added in the same wave, is what
+makes the removal additive-cost rather than a second break when it happens.
+
 ## A pattern worth remembering
 
 Four times during Stage 1, a test passed for a reason other than the one it
