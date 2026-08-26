@@ -109,7 +109,11 @@ pub(crate) fn to_rpn<'a>(
                         found_open = true;
                         break;
                     }
-                    postfix_stack.push_back(operators_stack.pop().expect("It should not happen."));
+                    // The loop condition just read `last()` and got `Some`, and
+                    // nothing between there and here touches `operators_stack`,
+                    // so this `pop` cannot be `None`.
+                    postfix_stack
+                        .push_back(operators_stack.pop().expect("the stack was not empty"));
                 }
                 // Same invariant as the closing-bracket arm above: `validate`
                 // only lets a `,` reach here inside a call it has already
@@ -135,13 +139,19 @@ pub(crate) fn to_rpn<'a>(
             Token::Operator(op) => {
                 let op1: Spanned<Token<'_>> = t.clone();
 
-                while !operators_stack.is_empty() {
-                    let op2: &Spanned<Token> = operators_stack.last().unwrap();
+                // Peeking with `while let` rather than testing `is_empty()` and
+                // unwrapping: the emptiness check and the value that depends on
+                // it are then the same expression, and cannot drift apart.
+                // Both `expect`s below rest on the same fact — the loop
+                // condition has just read `last()` and got `Some`, and nothing
+                // between there and the `pop` touches `operators_stack`, so
+                // neither can be `None`.
+                while let Some(op2) = operators_stack.last() {
                     match op2.node {
                         Token::Operator(op2_op) => {
                             if Token::compare_operator_priority(op, op2_op) {
                                 postfix_stack.push_back(
-                                    operators_stack.pop().expect("It should not happen."),
+                                    operators_stack.pop().expect("the stack was not empty"),
                                 );
                             } else {
                                 break;
@@ -149,7 +159,7 @@ pub(crate) fn to_rpn<'a>(
                         }
                         Token::Function(_) => {
                             postfix_stack
-                                .push_back(operators_stack.pop().expect("It should not happen."));
+                                .push_back(operators_stack.pop().expect("the stack was not empty"));
                         }
                         _ => break,
                     }
