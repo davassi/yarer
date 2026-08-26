@@ -128,10 +128,9 @@ impl<'a> Expression<'a> {
                             var_stack.push_back(None);
                         }
                         Operator::Div => {
-                            if right_value == zero {
-                                return Err(EvalError::DivisionByZero { span: Some(t.span) });
-                            }
-                            let value = left_value / right_value;
+                            let value = left_value
+                                .checked_div(&right_value)
+                                .ok_or(EvalError::DivisionByZero { span: Some(t.span) })?;
                             limits::check_size(&value, limits).map_err(at)?;
                             result_stack.push_back(value);
                             var_stack.push_back(None);
@@ -319,27 +318,23 @@ impl<'a> Expression<'a> {
 
         match base {
             Number::NaturalNumber(base) => {
+                let value = Number::NaturalNumber(Self::pow_big_int(base, exponent));
                 if is_negative {
-                    if base.is_zero() {
-                        return Err(EvalError::DivisionByZero { span: None });
-                    }
-
-                    let value = Self::pow_big_int(base, exponent);
-                    Ok(Number::decimal(BigRational::new(BigInt::one(), value)))
+                    Number::NaturalNumber(BigInt::one())
+                        .checked_div(&value)
+                        .ok_or(EvalError::DivisionByZero { span: None })
                 } else {
-                    Ok(Number::NaturalNumber(Self::pow_big_int(base, exponent)))
+                    Ok(value)
                 }
             }
             Number::DecimalNumber(base) => {
-                if is_negative && base.is_zero() {
-                    return Err(EvalError::DivisionByZero { span: None });
-                }
-
-                let value = Self::pow_big_rational(base, exponent);
+                let value = Number::decimal(Self::pow_big_rational(base, exponent));
                 if is_negative {
-                    Ok(Number::decimal(value.recip()))
+                    Number::NaturalNumber(BigInt::one())
+                        .checked_div(&value)
+                        .ok_or(EvalError::DivisionByZero { span: None })
                 } else {
-                    Ok(Number::decimal(value))
+                    Ok(value)
                 }
             }
         }

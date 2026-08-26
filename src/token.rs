@@ -3,7 +3,7 @@ use num_rational::BigRational;
 use num_traits::{One, ToPrimitive, Zero};
 use std::{
     fmt::Display,
-    ops::{Add, Div, Mul, Sub},
+    ops::{Add, Mul, Sub},
 };
 
 /// Enum Type [Number]. Either an BigInt integer [`Number::NaturalNumber`]
@@ -276,17 +276,21 @@ impl Token<'_> {
         Token::Variable(t)
     }
 
-    /// Founding out the priority and the associative precedence of an operator
+    /// The precedence and associativity of an operator.
     ///
-    fn operator_priority(o: Token) -> (u8, Associate) {
+    /// This takes an [`Operator`] rather than a [`Token`] because that is its
+    /// domain. The wider parameter is what forced the `_ => panic!` arm it used to
+    /// carry: a function that accepts brackets and commas has to say something when
+    /// it gets one. With the narrow type the match is exhaustive and there is
+    /// nothing left to refuse.
+    fn operator_priority(o: Operator) -> (u8, Associate) {
         match o {
-            Token::Operator(Operator::Add | Operator::Sub) => (1, Associate::LeftAssociative),
-            Token::Operator(Operator::Mul | Operator::Div) => (2, Associate::LeftAssociative),
-            Token::Operator(Operator::Pow) => (3, Associate::RightAssociative),
-            Token::Operator(Operator::Une) => (4, Associate::RightAssociative),
-            Token::Operator(Operator::Fac) => (5, Associate::LeftAssociative),
-            Token::Operator(Operator::Eql) => (0, Associate::RightAssociative),
-            _ => panic!("Operator '{o}' not recognised. This must not happen!"),
+            Operator::Add | Operator::Sub => (1, Associate::LeftAssociative),
+            Operator::Mul | Operator::Div => (2, Associate::LeftAssociative),
+            Operator::Pow => (3, Associate::RightAssociative),
+            Operator::Une => (4, Associate::RightAssociative),
+            Operator::Fac => (5, Associate::LeftAssociative),
+            Operator::Eql => (0, Associate::RightAssociative),
         }
     }
 
@@ -298,7 +302,7 @@ impl Token<'_> {
     /// unary - has priority over ^
     ///
     #[must_use]
-    pub fn compare_operator_priority(op1: Token, op2: Token) -> bool {
+    pub(crate) fn compare_operator_priority(op1: Operator, op2: Operator) -> bool {
         let v_op1: (u8, Associate) = self::Token::operator_priority(op1);
         let v_op2: (u8, Associate) = self::Token::operator_priority(op2);
 
@@ -383,7 +387,7 @@ impl Display for Number {
 /// 3. Decimal (op) Decimal returns Decimal
 /// 4. Decimal (op) Natural returns Decimal
 ///
-/// (op) can be [Add], [Mul], [Sub], [Div], [BitXor], ...
+/// (op) can be [Add], [Mul], [Sub], [BitXor], ...
 ///
 /// We define 2 closures: 1 specialised for Natural Numbers and the other one specialised for Decimals.
 ///
@@ -428,11 +432,22 @@ impl Mul for Number {
     }
 }
 
-impl Div for Number {
-    type Output = Number;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
+impl Number {
+    /// Divides, or answers [`None`] when `rhs` is zero.
+    ///
+    /// There is no `impl Div for Number`: division is partial, and a
+    /// `std::ops` impl has nowhere to say so. [`Add`], [`Sub`] and [`Mul`] are
+    /// total and stay.
+    ///
+    /// The zero test compares by value, so it catches a `DecimalNumber(0/1)`
+    /// as well as a `NaturalNumber(0)` — [`Number`]'s [`PartialEq`] has
+    /// compared by value since Stage 1.
+    #[must_use]
+    pub fn checked_div(&self, rhs: &Number) -> Option<Number> {
+        if rhs == &Number::NaturalNumber(BigInt::zero()) {
+            return None;
+        }
+        Some(match (self.clone(), rhs.clone()) {
             (Number::NaturalNumber(v1), Number::NaturalNumber(v2)) => {
                 Number::decimal(BigRational::new(v1, v2))
             }
@@ -443,7 +458,7 @@ impl Div for Number {
                 Number::decimal(v1 / BigRational::from(v2))
             }
             (Number::DecimalNumber(v1), Number::DecimalNumber(v2)) => Number::decimal(v1 / v2),
-        }
+        })
     }
 }
 
@@ -761,31 +776,31 @@ mod tests {
     #[test]
     fn test_operator_priority() {
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Add)),
+            Token::operator_priority(Operator::Add),
             (1, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Sub)),
+            Token::operator_priority(Operator::Sub),
             (1, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Mul)),
+            Token::operator_priority(Operator::Mul),
             (2, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Div)),
+            Token::operator_priority(Operator::Div),
             (2, Associate::LeftAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Pow)),
+            Token::operator_priority(Operator::Pow),
             (3, Associate::RightAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Une)),
+            Token::operator_priority(Operator::Une),
             (4, Associate::RightAssociative)
         );
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Fac)),
+            Token::operator_priority(Operator::Fac),
             (5, Associate::LeftAssociative)
         );
     }
@@ -793,8 +808,31 @@ mod tests {
     #[test]
     fn test_operator_priority_for_assignment() {
         assert_eq!(
-            Token::operator_priority(Token::Operator(Operator::Eql)),
+            Token::operator_priority(Operator::Eql),
             (0, Associate::RightAssociative)
+        );
+    }
+
+    /// The reason this exists: `a / b` panicked here, inside a public `std::ops`
+    /// impl, on an input any caller can supply.
+    #[test]
+    fn test_dividing_by_zero_answers_none_instead_of_panicking() {
+        let one = Number::NaturalNumber(BigInt::from(1));
+        let zero = Number::NaturalNumber(BigInt::from(0));
+        assert_eq!(one.checked_div(&zero), None);
+        assert_eq!(
+            Number::decimal(BigRational::new(BigInt::from(1), BigInt::from(2))).checked_div(&zero),
+            None
+        );
+    }
+
+    #[test]
+    fn test_checked_div_still_divides() {
+        let six = Number::NaturalNumber(BigInt::from(6));
+        let three = Number::NaturalNumber(BigInt::from(3));
+        assert_eq!(
+            six.checked_div(&three),
+            Some(Number::NaturalNumber(BigInt::from(2)))
         );
     }
 

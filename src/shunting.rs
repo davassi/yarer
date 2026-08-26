@@ -132,15 +132,14 @@ pub(crate) fn to_rpn<'a>(
                 postfix_stack.push_back(t.clone());
             }
 
-            Token::Operator(_op) => {
+            Token::Operator(op) => {
                 let op1: Spanned<Token<'_>> = t.clone();
 
                 while !operators_stack.is_empty() {
                     let op2: &Spanned<Token> = operators_stack.last().unwrap();
                     match op2.node {
-                        Token::Operator(_) => {
-                            if Token::compare_operator_priority(op1.node.clone(), op2.node.clone())
-                            {
+                        Token::Operator(op2_op) => {
+                            if Token::compare_operator_priority(op, op2_op) {
                                 postfix_stack.push_back(
                                     operators_stack.pop().expect("It should not happen."),
                                 );
