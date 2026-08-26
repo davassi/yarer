@@ -132,8 +132,9 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
       > (1+9)*(8+2)+0!
       101
       > (1./2)+atan(10)
-      1.1483608274590869
+      1.9711276743037347
       > x=10
+      10
       > 3/sin(5*x^2)
       -6.41338354698791
       > ln(1)
@@ -146,10 +147,15 @@ Yarer can also be used from the command line and behaves similarly to GNU bc
       4
       > 4.5+7.9*2.2
       21.88
-      > 9801/(2206*sqrt(2)) // approx of PI
+      > 9801/(2206*sqrt(2))
       3.1415927300133055
-      
 ```
+
+That last one is Ramanujan's approximation of pi. Yarer has no comment
+syntax, so the note lives here rather than after the expression.
+
+An assignment prints the value assigned, because that is what the expression
+evaluates to.
 ## News and Updates
 
 ### Version 0.3.0 — migrating from 0.2.0
@@ -303,9 +309,11 @@ write a branch in a language that has none:
 
 ```text
       > S=120; K=100
+      100
       > (S > K) * (S - K)
       20
       > S=80
+      80
       > (S > K) * (S - K)
       0
 ```
@@ -385,10 +393,13 @@ Using Yarer, the Black–Scholes formula for a European call option can be evalu
       Yarer v.0.3.0 - Yet Another Rust Expression Resolver.
       License MIT OR Apache-2.0
       > S=100;K=100;T=1;r=0.05;sigma=0.2;
+      0.2
       > d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))
+      0.35
       > d2=d1-sigma*sqrt(T)
+      0.15
       > S*cdf(d1)-K*exp(-r*T)*cdf(d2)
-      10.450583572185565
+      10.45058357218556
 ```
 
 ## Execute

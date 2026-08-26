@@ -1,3 +1,4 @@
+use std::io::{self, BufRead, IsTerminal};
 use std::process::ExitCode;
 
 use clap::Parser;
@@ -69,6 +70,34 @@ fn report(session: &Session, line: &str) -> bool {
 /// first failure.
 fn run_expressions(session: &Session, expressions: &[String]) -> ExitCode {
     for line in expressions {
+        if !report(session, line) {
+            return ExitCode::FAILURE;
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// Stream mode: one expression per line from standard input, against one
+/// session, stopping at the first failure.
+///
+/// Lines are read and evaluated one at a time rather than slurped, so a long
+/// pipe reports its first few results before its producer has finished.
+fn run_stream(session: &Session) -> ExitCode {
+    for line in io::stdin().lock().lines() {
+        let line = match line {
+            Ok(line) => line,
+            Err(err) => {
+                eprintln!("Error reading standard input: {err}");
+                return ExitCode::FAILURE;
+            }
+        };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if line.eq_ignore_ascii_case("quit") {
+            break;
+        }
         if !report(session, line) {
             return ExitCode::FAILURE;
         }
@@ -157,9 +186,17 @@ fn main() -> ExitCode {
 
     let session = Session::init();
 
-    // A caller who passed an expression asked for that expression.
+    // A caller who passed an expression asked for that expression, and
+    // whatever happens to be on stdin is not an instruction.
     if !cli.expr.is_empty() {
         return run_expressions(&session, &cli.expr);
+    }
+
+    // Not a terminal means something is feeding us: a pipe, a redirect, a
+    // here-doc. Starting a line editor on that would be wrong, and printing a
+    // banner into it would be worse.
+    if !io::stdin().is_terminal() {
+        return run_stream(&session);
     }
 
     run_repl(&session, cli.quiet)
