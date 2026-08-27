@@ -4,3 +4,4 @@ Cargo.lock
 .yarer_history
 /vendor
 .idea
+/docs/tech-debt.md

@@ -344,9 +344,7 @@ As of 0.4.0 Yarer is production ready: every failure it can report is a typed
 error carrying a position, no evaluation path panics, and no expression can be
 routed around the size guards. What that claim rests on is 196 tests, a fuzz
 corpus replayed on every push, and a CI that denies every clippy warning, pins
-the minimum Rust version and builds the library without its CLI. What the crate
-is known to be weak at is written down in
-[docs/tech-debt.md](docs/tech-debt.md), which ships with it.
+the minimum Rust version and builds the library without its CLI.
 
 Production ready is not the same as finished. If you have suggestions for
 features (i.e. more math functions to implement), or if you find any issues in

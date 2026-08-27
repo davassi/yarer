@@ -18,8 +18,7 @@ readme = "README.md"
 # The design specs and implementation plans under docs/superpowers/ are
 # internal process artifacts — they are addressed to whoever implements a
 # stage, not to anyone consuming the crate — and they are half the package by
-# size. They stay in the repository. docs/tech-debt.md does ship: what a crate
-# is known to be weak at is worth knowing before depending on it.
+# size. They stay in the repository and out of the package.
 exclude = ["docs/superpowers/**", ".superpowers/**", ".idea/**", "fuzz/**"]
 keywords = [
   "evaluator",
