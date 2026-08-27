@@ -10,12 +10,14 @@ style.css                     design tokens and layout
 repl.js                       terminal playback and clipboard, both
                               progressive enhancements
 og.png                        1200x630 card for link previews
+robots.txt                    crawl rules, and where the sitemap is
+sitemap.xml                   one URL, because there is one page
 tools/og-card.html            the source that card is rendered from
 tools/verify-transcript.py    checks every printed value against the binary
 tools/bench-against-bc.py     checks the speed claim against GNU bc
 ```
 
-The four files at the top are the site. Nothing under `tools/` ships.
+The six files at the top are the site. Nothing under `tools/` ships.
 
 ## Running it
 
@@ -100,6 +102,13 @@ and `<span class="ln ln--out">` for what came back, one output line per
 expression. Bento cells use `<span class="expr">` and `<span class="ret">`, and
 may quote only the results worth showing; each `ret` is checked against the
 expression directly above it.
+
+A fourth kind of claim lives in ordinary prose. Marking a pair as
+`<code class="ex">sqrt(2)^2</code> is <code class="val">2.0000000000000004</code>`
+puts it under the same check as everything else. The classes are required
+rather than inferred: guessing which inline code spans are expressions would
+pick up `5!=3` in the note above it, which is being discussed and not
+evaluated.
 
 A third kind of block holds shell commands rather than expressions. It is
 `<pre class="code code--shell">`, its commands are `<span class="ln ln--cmd">`

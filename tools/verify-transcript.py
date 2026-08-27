@@ -30,6 +30,8 @@ DISPLAY_BLOCK = re.compile(r'<article class="cell[^"]*">(.*?)</article>', re.S)
 CELL_TITLE = re.compile(r"<h3>(.*?)</h3>", re.S)
 DISPLAY_ITEM = re.compile(r'<span class="(expr|ret[^"]*)">(.*?)</span>', re.S)
 SHELL_BLOCK = re.compile(r'<pre class="code code--shell"[^>]*>(.*?)</pre>', re.S)
+INLINE_PAIR = re.compile(
+    r'<code class="ex">(.*?)</code>.*?<code class="val">(.*?)</code>', re.S)
 SHELL_LINE = re.compile(r'<span class="(ln[^"]*)">(.*?)</span>', re.S)
 
 BANNER = re.compile(r"^(Yarer v\.|License )")
@@ -201,6 +203,29 @@ def check_shells(binary: pathlib.Path, page: str) -> list[str]:
     return failures
 
 
+def check_inline(binary: pathlib.Path, page: str) -> list[str]:
+    """Values quoted inside a sentence rather than inside a transcript.
+
+    Prose makes claims too, and a number in a paragraph is as capable of going
+    stale as one in a terminal. The pair is marked explicitly, `<code class=
+    "ex">` for the expression and `<code class="val">` for what it answers,
+    because guessing which inline code spans are expressions would pick up
+    things like `5!=3` that are being discussed rather than evaluated.
+    """
+    failures = []
+    for expr, claimed in INLINE_PAIR.findall(page):
+        expr, claimed = plain(expr), plain(claimed)
+        actual = evaluate(binary, [expr])
+        got = actual[0] if actual else "<no output>"
+        ok = got == claimed
+        print(f"  inline {expr!r} ... {'match' if ok else 'MISMATCH'}")
+        if not ok:
+            failures.append(f"inline claim {expr!r}\n"
+                            f"    page:   {claimed!r}\n"
+                            f"    binary: {got!r}")
+    return failures
+
+
 def main() -> int:
     binary = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_BIN
     if not PAGE.is_file():
@@ -211,7 +236,8 @@ def main() -> int:
 
     failures = (check_terminals(binary, page)
                 + check_displays(binary, page)
-                + check_shells(binary, page))
+                + check_shells(binary, page)
+                + check_inline(binary, page))
 
     print()
     if failures:

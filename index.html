@@ -3,24 +3,57 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>yarer - math expressions, evaluated exactly</title>
-<meta name="description" content="yarer is a Rust library and CLI for evaluating mathematical expressions. Decimals are exact rationals, integers are unbounded, and every error carries the position of the token that broke.">
+<title>yarer: Rust expression evaluator with exact rationals</title>
+<meta name="description" content="A Rust library and CLI that evaluates mathematical expressions with a shunting yard parser: exact rational arithmetic, unbounded integers, and typed errors carrying the position of the token that broke.">
 <meta name="color-scheme" content="light">
 
 <link rel="canonical" href="https://davassi.github.io/yarer/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="yarer">
 <meta property="og:url" content="https://davassi.github.io/yarer/">
-<meta property="og:title" content="yarer - math expressions, evaluated exactly">
+<meta property="og:title" content="yarer: Rust expression evaluator with exact rationals">
 <meta property="og:description" content="A Rust library and CLI for mathematical expressions. Exact rationals, unbounded integers, and tens of times faster than GNU bc on the big ones.">
 <meta property="og:image" content="https://davassi.github.io/yarer/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="yarer: math expressions, evaluated exactly. A terminal showing 2^64/3*3 answering 18446744073709551616.">
+<meta property="og:image:alt" content="yarer: math expressions, arbitrary precision. A terminal showing 2^64/3*3 answering 18446744073709551616.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://davassi.github.io/yarer/og.png">
 
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f8f2e9'/%3E%3Ctext x='16' y='24' font-family='Georgia,serif' font-size='24' fill='%23cc5c32' text-anchor='middle'%3E%CE%BB%3C/text%3E%3C/svg%3E">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "yarer",
+  "alternateName": "Yet Another Rust Expression Resolver",
+  "description": "A Rust library and command line tool that evaluates mathematical expressions using the shunting yard algorithm, with exact rational arithmetic, unbounded integers and typed errors carrying a position.",
+  "url": "https://davassi.github.io/yarer/",
+  "codeRepository": "https://github.com/davassi/yarer",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "Rust"
+  },
+  "runtimePlatform": "Rust 1.88",
+  "license": "https://spdx.org/licenses/MIT.html",
+  "softwareVersion": "0.4.1",
+  "downloadUrl": "https://crates.io/crates/yarer",
+  "author": {
+    "@type": "Person",
+    "name": "Gianluigi Davassi",
+    "url": "https://github.com/davassi"
+  },
+  "keywords": [
+    "expression evaluator",
+    "shunting yard",
+    "reverse polish notation",
+    "arbitrary precision",
+    "rational arithmetic",
+    "Rust",
+    "CLI calculator"
+  ]
+}
+</script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -45,7 +78,7 @@
     <div class="shell hero__inner">
       <div class="hero__copy">
         <p class="eyebrow"><span class="eyebrow__i">[00]</span>Overview</p>
-        <h1>Math expressions,<br><span class="h1__accent">evaluated exactly.</span></h1>
+        <h1>Math expressions,<br><span class="h1__accent">arbitrary precision.</span></h1>
         <p class="lede">A Rust library and CLI. Fractions stay exact, integers have no ceiling,
           and the big ones run tens of times faster than GNU bc.</p>
 
@@ -241,6 +274,10 @@
             <li>Nothing short-circuits. <code>0 and 1/0</code> is a division error, not
               <code>0</code>, because a stack machine holds both operands before it sees the
               operator.</li>
+            <li>Precision is unbounded for arithmetic and not for functions. <code>sqrt</code>,
+              <code>ln</code>, <code>sin</code> and the rest go through <code>f64</code>, so
+              <code class="ex">sqrt(2)^2</code> is <code class="val">2.0000000000000004</code>. Add, subtract,
+              multiply, divide and raise to an integer power, and nothing is rounded.</li>
           </ul>
         </div>
 
