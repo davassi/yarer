@@ -96,44 +96,35 @@ breaking change; everything that moved is in this table.
 
 Four of those rows want a sentence more than a cell.
 
-**Module paths.** `Number`, `Session`, `ConversionError` and `MathFunction`
-are unchanged as types, but `token`, `session` and `rpn_resolver` are no
-longer public modules — everything public is re-exported from the crate root,
-so one `use yarer::{..}` covers it. 0.2.0's own crate documentation told
-adopters to write `use yarer::{rpn_resolver::RpnResolver, session::Session,
-token::Number};`, so every 0.2.0 user has imports that need rewriting even
-where the type they name did not move.
+**Module paths.** The types are unchanged; the modules are not. `token`,
+`session` and `rpn_resolver` are private, and everything public is re-exported
+from the crate root, so one `use yarer::{..}` covers it. 0.2.0's own
+documentation told adopters to write `use yarer::{rpn_resolver::RpnResolver,
+session::Session, token::Number};` — so every 0.2.0 user has imports to rewrite
+even where the type did not move.
 
 **`ConversionError` is no longer `Eq`.** The new `NotFinite { value: f64 }`
-carries an `f64`, which is not `Eq`, and no manual implementation can honestly
-supply one. `PartialEq` is unchanged, so `==` still works; a bound of `T: Eq`
-does not. It is also `#[non_exhaustive]` now, like every other public enum
-here, so an exhaustive `match` on it needs a `_` arm.
+carries an `f64`, which no manual implementation can honestly make `Eq`.
+`PartialEq` is unchanged, so `==` still works; a `T: Eq` bound does not. It is
+`#[non_exhaustive]` now too, so an exhaustive `match` needs a `_` arm.
 
 **`Number::decimal` reduces.** It used to test `denom().is_one()` without
-reducing, so an externally built `Ratio::new_raw(4, 2)` was integral but
-unreduced and came back as a `DecimalNumber` — which also made `PartialEq` and
-`PartialOrd` disagree about it. Values built from yarer's own arithmetic are
-unaffected: `BigRational` reduces its own results.
+reducing, so an externally built `Ratio::new_raw(4, 2)` came back as a
+`DecimalNumber` that `PartialEq` and `PartialOrd` disagreed about. Values from
+yarer's own arithmetic are unaffected: `BigRational` reduces its own results.
 
-**Ten operators are new**, and one of them takes something away. `<` `>` `<=`
-`>=` `==` `<>`, `and` `or` `xor` `not`, and `mod` are described under
-[Operators](#operators) above. Everything about them is additive except the
-five words, which stop being usable as variable names — the one break in this
-half of the release. An expression that used `mod` or `and` as a variable now
-fails to compile with `ParseError::ExpectedValue` rather than silently reading
-the undefined variable as `0`, so the failure is loud and positioned.
+**Ten operators are new** — `<` `>` `<=` `>=` `==` `<>`, `and` `or` `xor` `not`
+and `mod`, laid out in the README's [operator table](README.md#operators). Only
+the five words break anything: an expression that used `mod` as a variable now
+fails with `ParseError::ExpectedValue` rather than silently reading the
+undefined variable as `0`.
 
-Nothing that evaluated before changes value. The precedence ladder grew from
-six levels to ten, but the six operators that predate the new ones keep their
-order relative to one another and no new level was interleaved between two old
-ones, so no existing expression re-groups. The suite's 143 value assertions are
-the test of that claim and are unmodified.
-
-Unchanged on purpose: undefined variables still read as `0`; `sin[5]` still
-evaluates; chained assignment (`x=y=5`) and chained expressions
-(`x=2; y=3; x*y`) are unaffected; every numeric result already documented
-above stays the same.
+Nothing that evaluated before changes value: the ladder grew from six
+precedence levels to ten with the old six in their old order and no new level
+between two of them, so nothing re-groups, and the suite's 143 value assertions
+are unmodified.
+Undefined variables still read as `0`, `sin[5]` still evaluates, and chained
+assignment (`x=y=5`) and chained expressions (`x=2; y=3; x*y`) are untouched.
 
 ## [0.2.0] - 2025-06-14
 
