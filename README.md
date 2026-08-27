@@ -12,6 +12,8 @@ YARER - The math expression Evaluator
 
 Yarer (Yet Another Rust Expression Resolver) is a library for evaluating mathematical expressions. Internally it uses the shunting yard algorithm.
 
+**[davassi.github.io/yarer](https://davassi.github.io/yarer/)** shows what it does on one page, with every printed value taken from the release binary.
+
 ## Usage
 
 Example of usage of the library:
