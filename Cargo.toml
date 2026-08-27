@@ -1,6 +1,6 @@
 [package]
 name = "yarer"
-version = "0.4.0"
+version = "0.4.1"
 description = "Yarer (Yet Another Rust Expression Resolver) is a library for resolving mathematical expressions. Internally it uses the shunting yard algorithm."
 repository = "https://github.com/davassi/yarer"
 homepage = "https://github.com/davassi/yarer"

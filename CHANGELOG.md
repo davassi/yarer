@@ -5,6 +5,25 @@ All notable changes to this project are documented here, in the format of
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html); while the major
 version is 0, a bump of the minor version is where breaking changes go.
 
+## [0.4.1] - 2026-08-27
+
+Documentation and packaging. `src/` and `tests/` are byte for byte what 0.4.0
+shipped, so the library and the binary behave identically to it.
+
+### Changed
+- The README calls the crate production ready and says what the claim rests on:
+  every failure it can report is a typed error carrying a position, no
+  evaluation path panics, no expression can be routed around the size guards,
+  and behind those sit 196 tests, a fuzz corpus replayed on every push, and a
+  CI that denies every clippy warning, pins the minimum Rust version and builds
+  the library without its CLI.
+
+### Removed
+- `docs/` and `.github/` no longer ship. The design specs, implementation plans
+  and debt register left the repository altogether; the CI workflow stays in
+  the repository, where GitHub reads it, and leaves the package, where nobody
+  does. The tarball is 42 files and 92.6 KiB compressed, from 44 and 100.2 KiB.
+
 ## [0.4.0] - 2026-08-26
 
 The surface release: yarer becomes usable from a shell, honest about what it
