@@ -1,0 +1,692 @@
+/* ==========================================================================
+   yarer landing page
+   Light, one accent, system typefaces. No build step, no network requests.
+   The page commits to one look rather than following the reader's system: the
+   terminal is meant to be the only dark surface on it, and that reading is
+   lost the moment the page around it can go dark too.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* Taken from the wordmark, not chosen next to it: the cream, the ink and the
+     orange below are the three colours sampled out of the logo file. */
+  --bg:        #f8f2e9;
+  --surface:   #fffcf6;
+  --surface-2: #f0e9dc;
+  --line:      #e2d8c8;
+  --line-soft: #ede5d8;
+  --ink:       #302b22;
+  --ink-2:     #6f665a;
+
+  /* The lambda's orange reaches 3.6:1 on that cream. That is enough for display
+     type and for a mark, and not enough for anything set small, so small accent
+     text uses a darkened version of the same hue at 5.4:1 instead. */
+  --accent:      #cc5c32;
+  --accent-text: #a8431f;
+  --accent-ink:  #f8f2e9;
+  --accent-wash: rgb(204 92 50 / .07);
+
+  /* The terminal is the one dark island on a light page. It keeps its own set
+     of the same token names, scoped to the blocks below, so every rule that
+     already reads var(--ink) or var(--accent) follows it in without being
+     rewritten. Inside a terminal the accent is warm rather than red: red type
+     on a dark ground is hard to read, and the two never appear together. */
+  --term-bg:     #241f18;
+  --term-bar:    #2e2820;
+  --term-line:   #3d352a;
+  --term-ink:    #f0e9dc;
+  --term-ink-2:  #9c9184;
+  --term-accent: #e08a5a;
+
+  /* One radius rule for the page: panels 12px, controls 8px. Nothing else. */
+  --r-panel:   12px;
+  --r-control: 8px;
+
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono",
+          "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --nav-h: 68px;
+}
+
+/* Scoped inversion. Redefining the page tokens on these blocks is what makes
+   every rule inside them dark without a single one of them naming a colour. */
+.term,
+.code {
+  --surface:   var(--term-bg);
+  --surface-2: var(--term-bar);
+  --line:      var(--term-line);
+  --line-soft: var(--term-line);
+  --ink:       var(--term-ink);
+  --ink-2:     var(--term-ink-2);
+  --accent:      var(--term-accent);
+  --accent-text: var(--term-accent);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.65 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: inherit; }
+
+code { font-family: var(--mono); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10;
+  padding: .7rem 1rem;
+  background: var(--accent-text);
+  color: var(--accent-ink);
+  font: 600 14px/1 var(--sans);
+  text-decoration: none;
+}
+.skip:focus { left: 0; }
+
+.shell {
+  width: min(1160px, 100% - 2 * clamp(20px, 5vw, 48px));
+  margin-inline: auto;
+}
+
+/* ── Navigation ───────────────────────────────────────────────────────────
+   One line at every width, capped well under the 80px ceiling. */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.nav__inner {
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+/* The wordmark, inline as a 3KB indexed PNG rather than a request. Rendered at
+   three times its display height so it stays sharp on a dense screen, and the
+   only image on the page. */
+.nav__mark {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.nav__mark img {
+  display: block;
+  height: 26px;
+  width: auto;
+}
+
+.nav__links {
+  display: flex;
+  gap: clamp(.9rem, 2.4vw, 1.9rem);
+  font: 400 14.5px/1 var(--sans);
+  white-space: nowrap;
+}
+
+.nav__links a {
+  color: var(--ink-2);
+  text-decoration: none;
+  transition: color .18s ease;
+}
+.nav__links a:hover { color: var(--ink); }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────
+   Asymmetric split: the argument on the left, the proof of it on the right. */
+
+.hero { padding-block: clamp(40px, 5.4vw, 68px) clamp(48px, 6.4vw, 84px); }
+
+.hero__inner {
+  display: grid;
+  gap: clamp(36px, 5vw, 64px);
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.hero h1 {
+  margin: 0;
+  font: 600 clamp(2.1rem, 5.2vw, 3.5rem)/1.08 var(--sans);
+  letter-spacing: -.035em;
+}
+
+.lede {
+  margin: 1.15rem 0 0;
+  max-width: 44ch;
+  color: var(--ink-2);
+  font-size: clamp(1rem, 1.3vw, 1.12rem);
+}
+
+.install {
+  display: inline-flex;
+  align-items: stretch;
+  margin-top: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  overflow: hidden;
+}
+
+.install__cmd {
+  display: flex;
+  align-items: center;
+  padding: .78rem 1rem;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.install__copy {
+  border: 0;
+  padding: 0 1.15rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 600 12.5px/1 var(--sans);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: filter .18s ease;
+}
+.install__copy:hover { filter: brightness(1.08); }
+.install__copy:active { transform: translateY(1px); }
+
+.install__status {
+  min-height: 1.4em;
+  margin: .55rem 0 0;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+/* ── Terminal ─────────────────────────────────────────────────────────────
+   Real text in a <pre>, not an image and not a mock: every output below was
+   produced by the yarer 0.3.0 binary. See README for how to re-capture. */
+
+/* Three numbers under the install line. Label above value, the way the
+   reference site sets its own, so the eye reads the category first. */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: clamp(28px, 3.4vw, 40px) 0 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  overflow: hidden;
+  width: fit-content;
+  background: var(--surface);
+}
+.stat { padding: .7rem 1.15rem .75rem; border-left: 1px solid var(--line); }
+.stat:first-child { border-left: 0; }
+.stat dt {
+  font: 500 10.5px/1 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.stat dd { margin: .42rem 0 0; font: 600 15px/1 var(--sans); color: var(--ink); }
+
+.term {
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.term__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .5rem .75rem .5rem 1.1rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.term__name {
+  font: 400 12px/1 var(--mono);
+  color: var(--ink-2);
+}
+
+.term__replay {
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  padding: .35rem .7rem;
+  background: transparent;
+  color: var(--ink-2);
+  font: 500 11.5px/1 var(--sans);
+  letter-spacing: .03em;
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease;
+}
+.term__replay:hover { color: var(--ink); border-color: var(--ink-2); }
+
+.term__body,
+.code {
+  margin: 0;
+  padding: 1.05rem 1.15rem 1.2rem;
+  font: 400 13px/1.72 var(--mono);
+  overflow-wrap: anywhere;
+}
+
+/* Inside a <pre> the newline between two line spans is preserved and renders
+   as a second break on top of the one each block-level .ln already produces.
+   Handing whitespace control down one level fixes it: between block boxes a
+   whitespace-only text node produces no line box at all, while pre-wrap on the
+   line itself keeps the leading spaces the caret diagram depends on and still
+   lets a long line wrap, which plain `pre` would not. */
+.term__body,
+.code--term,
+.code--shell { white-space: normal; }
+
+.ln { display: block; white-space: pre-wrap; }
+.ln--in { color: var(--ink-2); }
+.ln--in::before { content: "> "; color: var(--accent); }
+.ln--out { color: var(--ink); }
+
+/* A shell block is a level up from the REPL: the sigil says which prompt the
+   reader is looking at, and nothing else changes. */
+.ln--cmd { color: var(--ink-2); }
+.ln--cmd::before { content: "$ "; color: var(--accent); }
+
+/* A diagnostic is one unit — message, echo, caret — so the message takes the
+   same accent the caret already had rather than a second hue the page does
+   not otherwise own. Weight is what separates it from an answer worth
+   pointing at. */
+.ln--err { color: var(--accent); }
+.ln--caret,
+.ln--hit { color: var(--accent); font-weight: 600; }
+
+/* Typing mechanics. Untyped text keeps its box (visibility, not display), so
+   the terminal's height is constant by construction: no measurement, no CLS,
+   and no JavaScript at all still leaves the full transcript readable. */
+.ln.is-hidden { visibility: hidden; }
+.term.is-playing .ln .rest { visibility: hidden; }
+
+.ln.is-typing .typed::after {
+  content: "";
+  display: inline-block;
+  width: 0;                    /* zero-width: the caret is drawn by a shadow, */
+  height: 1em;                 /* so it can never reflow the line it sits in */
+  vertical-align: -.16em;
+  box-shadow: .3em 0 0 0 var(--accent);
+  animation: caret 1s steps(1) infinite;
+}
+
+@keyframes caret { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+/* ── Section rhythm ───────────────────────────────────────────────────────
+   Hairlines separate sections, never individual rows. */
+
+.band { padding-block: clamp(52px, 6.4vw, 92px); }
+.band + .band { border-top: 1px solid var(--line-soft); }
+
+/* Section eyebrows. The bracketed index is a reading aid rather than
+   decoration: it tells a reader how far down a long single page they are
+   without making them look at a scrollbar. */
+.eyebrow {
+  margin: 0 0 .85rem;
+  font: 500 11.5px/1 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+.eyebrow__i { color: var(--ink-2); margin-right: .65em; }
+
+.h1__accent { color: var(--accent); }
+
+.h2 {
+  margin: 0 0 clamp(28px, 3.5vw, 48px);
+  font: 600 clamp(1.5rem, 3.1vw, 2.2rem)/1.14 var(--sans);
+  letter-spacing: -.028em;
+  max-width: 20ch;
+}
+
+.pane__label {
+  margin: 0 0 .7rem;
+  color: var(--ink-2);
+  font: 400 12.5px/1 var(--mono);
+}
+
+.pane__note {
+  margin: .85rem 0 0;
+  max-width: 52ch;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ── Properties bento ─────────────────────────────────────────────────────
+   Three items, three cells, three distinct treatments. Nothing repeats. */
+
+/* Every track below is minmax(0, ...) rather than a bare fr. `1fr` expands to
+   minmax(auto, 1fr), and that `auto` floor is the content's min-content width:
+   a 111-digit integer and an unbroken line of Rust have no break opportunity,
+   so they push the track past the viewport and defeat both the overflow-x on
+   the <pre> and the narrow-viewport rules further down. Flooring the track at
+   zero is what lets those two mechanisms do their job. */
+.bento {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cell {
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  padding: clamp(20px, 2.3vw, 30px);
+}
+
+.cell--wide   { grid-column: 1 / 3; background: var(--accent-wash); }
+.cell--digits { grid-column: 3 / 4; background: var(--surface); }
+.cell--mask   { grid-column: 1 / 4; }
+
+.cell h3 {
+  margin: 1.35rem 0 .55rem;
+  font: 600 1.06rem/1.3 var(--sans);
+  letter-spacing: -.012em;
+}
+
+.cell p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--ink-2);
+  font-size: 14.5px;
+}
+
+.cell p code {
+  color: var(--ink);
+  font-size: .92em;
+}
+
+.cell__display {
+  font: 400 13px/1.7 var(--mono);
+  overflow-wrap: anywhere;      /* the long integer has to be allowed to break */
+}
+
+.cell__display--split {
+  display: grid;
+  gap: 1.1rem clamp(20px, 4vw, 56px);
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+}
+
+.expr, .ret { display: block; }
+.expr { color: var(--ink-2); }
+.expr::before { content: "> "; color: var(--accent); }
+.ret { color: var(--ink); }
+.ret--hit { color: var(--accent-text); font-size: 1.5rem; font-weight: 600; line-height: 1.5; }
+.ret--flow { color: var(--ink); font-size: 12px; line-height: 1.55; letter-spacing: -.01em; }
+
+/* Two columns need two children. The heading and its body are wrapped so the
+   text travels as one block, otherwise the paragraph becomes a third grid item
+   and drops onto a row of its own underneath the display. */
+.cell--mask { display: grid; gap: clamp(20px, 3vw, 44px);
+              grid-template-columns: minmax(0, 1fr); }
+
+.cell__text h3 { margin-top: 0; }
+
+/* ── Usage panes ──────────────────────────────────────────────────────────
+   Side-by-side code, a layout family used exactly once on the page. */
+
+.panes {
+  display: grid;
+  gap: clamp(20px, 2.6vw, 34px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  overflow-x: auto;
+  color: var(--ink);
+}
+
+.code--term,
+.code--shell { overflow-wrap: anywhere; }
+
+/* Two tokens only. Anything more turns a code sample into a colour test. */
+.k, .m { color: var(--accent); }
+.s, .n { color: var(--ink-2); }
+.fn    { color: var(--ink); }
+
+.use__install {
+  margin: clamp(24px, 3vw, 38px) 0 0;
+  max-width: 78ch;
+  color: var(--ink-2);
+  font-size: 14.5px;
+}
+.use__install code {
+  color: var(--ink);
+  font-size: .93em;
+  padding: .12em .4em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+/* ── Worked example ───────────────────────────────────────────────────────
+   Full-width band, prose beside a single unbroken session. */
+
+.proof__inner { display: grid; gap: clamp(28px, 4vw, 56px); align-items: center;
+                grid-template-columns: minmax(0, 1fr); }
+.proof__copy p { margin: 0 0 .85rem; max-width: 46ch; color: var(--ink-2); }
+.proof__copy p:last-child { margin-bottom: 0; }
+.proof__copy .h2 { margin-bottom: 1rem; }
+.proof__term { align-self: center; }
+
+/* ── Reference ────────────────────────────────────────────────────────────
+   A precedence ladder, not a ten-row table with a hairline under every row.
+   The left rail deepens toward the accent as binding gets tighter. */
+
+.ref__grid { display: grid; gap: clamp(36px, 4.5vw, 68px);
+              grid-template-columns: minmax(0, 1fr); }
+
+.ladder { list-style: none; margin: 0; padding: 0; }
+
+.ladder li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.2rem;
+  padding: .48rem 0 .48rem 1rem;
+  border-left: 2px solid var(--line);
+  border-left-color: color-mix(in oklab,
+                     var(--accent) calc(var(--t) * 100%), var(--line));
+}
+
+.ops { display: flex; flex-wrap: wrap; align-items: baseline; gap: .4rem; }
+
+.ops code {
+  padding: .2em .5em;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+
+.ops__gloss { color: var(--ink-2); font-size: 12.5px; }
+
+.assoc {
+  color: var(--ink-2);
+  font: 400 12px/1 var(--mono);
+  white-space: nowrap;
+}
+
+.notes {
+  margin: 1.6rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: .75rem;
+  max-width: 62ch;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.notes code { color: var(--ink); font-size: .93em; }
+
+.ref__sets { display: grid; gap: clamp(28px, 3.5vw, 44px); align-content: start;
+              grid-template-columns: minmax(0, 1fr); }
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chips li {
+  padding: .4rem .6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  font: 400 12.5px/1 var(--mono);
+}
+
+.consts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: .5rem 1.2rem;
+  margin: 0;
+  font: 400 13px/1.4 var(--mono);
+}
+.consts dt { color: var(--accent); }
+.consts dd { margin: 0; color: var(--ink-2); }
+
+/* ── Footer ───────────────────────────────────────────────────────────── */
+
+.foot {
+  border-top: 1px solid var(--line-soft);
+  padding-block: clamp(40px, 5vw, 64px);
+}
+
+.foot__inner { display: grid; gap: 1.1rem; }
+
+.foot__lead {
+  margin: 0;
+  font: 400 14px/1.5 var(--mono);
+  color: var(--ink-2);
+}
+
+.foot__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.4rem;
+  font-size: 14.5px;
+}
+.foot__links a { color: var(--ink-2); text-decoration: none; transition: color .18s ease; }
+.foot__links a:hover { color: var(--ink); }
+
+.foot__legal { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+
+/* Who made it and where it lives. Underlined rather than grey, because these
+   are the three links on the page a reader is most likely to want. */
+.foot__meta {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+  align-items: baseline;
+}
+.foot__meta a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  transition: border-color .18s ease;
+}
+.foot__meta a:hover { border-bottom-color: var(--accent); }
+.foot__dot { color: var(--line); }
+
+/* ── Wide viewports ───────────────────────────────────────────────────── */
+
+@media (min-width: 860px) {
+  /* The transcript is the argument, so it gets the wider half. The copy loses
+     nothing: the lede is capped at 44ch and was never using the width, while
+     the diagnostic line the hero now ends on is 91 characters and wraps once
+     fewer for every column it gains. */
+  .hero__inner  { grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); }
+  .panes        { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .proof__inner { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+  .ref__grid    { grid-template-columns: minmax(0, 1.12fr) minmax(0, .88fr); }
+  .cell--mask   { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+                  align-items: center; }
+  .foot__inner  {
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    row-gap: 1.6rem;
+  }
+  .foot__meta,
+  .foot__legal  { grid-column: 1 / -1; }
+}
+
+@media (min-width: 860px) and (min-height: 660px) {
+  /* Centring inside a nearly full-viewport box, on top of the block padding
+     the hero already carries, pushes the headline close to halfway down a tall
+     screen, which reads as a bug rather than as space. Capping the box keeps
+     the composition anchored near the top on tall displays while still filling
+     a laptop screen, and the padding shrinks because the centring now supplies
+     most of the breathing room. */
+  .hero {
+    display: grid;
+    align-content: center;
+    min-height: min(720px, calc(100dvh - var(--nav-h)));
+    padding-block: clamp(32px, 4vw, 56px);
+  }
+}
+
+/* ── Narrow viewports ─────────────────────────────────────────────────── */
+
+/* Below roughly a small phone the three nav labels plus the wordmark stop
+   fitting on one line, and a nav that wraps is a broken nav. crates.io is the
+   one that goes: it is reachable from the footer on the same screen, so
+   nothing is actually lost, whereas hiding the source or the docs would be. */
+@media (max-width: 560px) {
+  .nav__crates { display: none; }
+  .nav__links { gap: 1.1rem; font-size: 13.5px; }
+}
+
+@media (max-width: 859px) {
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .cell--wide, .cell--digits, .cell--mask { grid-column: 1 / -1; }
+  .term__body, .code { font-size: 12.2px; padding: .9rem 1rem 1rem; }
+  .install { width: 100%; }
+  .install__cmd { flex: 1; }
+  .ladder li { flex-wrap: wrap; gap: .35rem .8rem; }
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────
+   The typewriter is exactly the class of animation that hurts: repeating,
+   unpredictable, and sitting under text people are trying to read. The
+   fallback is not a degraded page, it is the finished transcript. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

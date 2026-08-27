@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>yarer - math expressions, evaluated exactly</title>
+<meta name="description" content="yarer is a Rust library and CLI for evaluating mathematical expressions. Decimals are exact rationals, integers are unbounded, and every error carries the position of the token that broke.">
+<meta name="color-scheme" content="light">
+
+<link rel="canonical" href="https://davassi.github.io/yarer/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="yarer">
+<meta property="og:url" content="https://davassi.github.io/yarer/">
+<meta property="og:title" content="yarer - math expressions, evaluated exactly">
+<meta property="og:description" content="A Rust library and CLI for mathematical expressions. Exact rationals, unbounded integers, and tens of times faster than GNU bc on the big ones.">
+<meta property="og:image" content="https://davassi.github.io/yarer/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="yarer: math expressions, evaluated exactly. A terminal showing 2^64/3*3 answering 18446744073709551616.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://davassi.github.io/yarer/og.png">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23f8f2e9'/%3E%3Ctext x='16' y='24' font-family='Georgia,serif' font-size='24' fill='%23cc5c32' text-anchor='middle'%3E%CE%BB%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="shell nav__inner">
+    <a class="nav__mark" href="#main"><img src="data:image/png;base64,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" alt="yarer" width="327" height="96"></a>
+    <nav class="nav__links" aria-label="Project links">
+      <a href="https://github.com/davassi/yarer">GitHub</a>
+      <a class="nav__crates" href="https://crates.io/crates/yarer">crates.io</a>
+      <a href="https://docs.rs/yarer">Documentation</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── Hero: asymmetric split, copy left, live transcript right ───────── -->
+  <section class="hero">
+    <div class="shell hero__inner">
+      <div class="hero__copy">
+        <p class="eyebrow"><span class="eyebrow__i">[00]</span>Overview</p>
+        <h1>Math expressions,<br><span class="h1__accent">evaluated exactly.</span></h1>
+        <p class="lede">A Rust library and CLI. Fractions stay exact, integers have no ceiling,
+          and the big ones run tens of times faster than GNU bc.</p>
+
+        <div class="install">
+          <code class="install__cmd" id="install-cmd">cargo add yarer</code>
+          <button class="install__copy" type="button" data-copy="#install-cmd">Copy</button>
+        </div>
+        <p class="install__status" role="status" data-copy-status></p>
+
+        <dl class="stats">
+          <div class="stat">
+            <dt>Downloads</dt>
+            <dd>9,522</dd>
+          </div>
+          <div class="stat">
+            <dt>vs GNU bc</dt>
+            <dd>30x to 55x</dd>
+          </div>
+          <div class="stat">
+            <dt>Dependencies</dt>
+            <dd>41 crates</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div class="hero__demo">
+        <div class="term" data-term>
+          <div class="term__bar">
+            <span class="term__name">yarer 0.4.1</span>
+            <button class="term__replay" type="button" data-term-replay hidden>Replay</button>
+          </div>
+          <pre class="term__body"><code
+><span class="ln ln--in">2^64/3*3</span>
+<span class="ln ln--out">18446744073709551616</span>
+<span class="ln ln--in">52!/(5!*47!)</span>
+<span class="ln ln--out">2598960</span>
+<span class="ln ln--in">(1+1/1000000)^1000000</span>
+<span class="ln ln--out ln--err">Eval error: the result would need about 40000000 bits, over the size limit of 1048576 bits</span>
+<span class="ln ln--out">  (1+1/1000000)^1000000</span>
+<span class="ln ln--out ln--caret">               ^</span></code></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Properties: asymmetric bento, 3 cells, 3 different treatments ──── -->
+  <section class="band props">
+    <div class="shell">
+      <p class="eyebrow"><span class="eyebrow__i">[01]</span>Properties</p>
+      <h2 class="h2">Exact, unbounded, branchless.</h2>
+
+      <div class="bento">
+        <article class="cell cell--wide">
+          <div class="cell__display cell__display--split">
+            <div>
+              <span class="expr">2^64/3</span>
+              <span class="ret">6148914691236517000</span>
+            </div>
+            <div>
+              <span class="expr">2^64/3*3</span>
+              <span class="ret ret--hit">18446744073709551616</span>
+            </div>
+          </div>
+          <h3>Decimals are exact</h3>
+          <p>Fractions are kept as exact rationals, not floats. The printed number is
+            rounded and ends in three zeros it does not have. The value behind it is not, so
+            multiplying by three gives <code>2^64</code> back to the digit.</p>
+        </article>
+
+        <article class="cell cell--digits">
+          <div class="cell__display">
+            <span class="expr">100!</span>
+            <span class="ret ret--flow">93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000</span>
+          </div>
+          <h3>Integers have no ceiling</h3>
+          <p>Whole numbers are <code>BigInt</code>, so <code>100!</code> prints all 158
+            digits. And <code>52!/(5!*47!)</code> gives exactly <code>2598960</code>, the
+            number of poker hands, through 68-digit numbers on the way.</p>
+        </article>
+
+        <article class="cell cell--mask">
+          <div class="cell__display">
+            <span class="expr">S=120; K=100</span>
+            <span class="expr">(S &gt; K) * (S - K) + (K &gt; S) * (K - S)</span>
+            <span class="ret ret--hit">20</span>
+          </div>
+          <div class="cell__text">
+            <h3>Comparisons are numbers</h3>
+            <p>A comparison gives <code>1</code> or <code>0</code>, as in GNU bc. Multiply by
+              it and you get a branch without having one. Both halves are computed, one is
+              zeroed, and the answer is <code>20</code> either way.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Usage: two code panes, library and shell ───────────────────────── -->
+  <section class="band use">
+    <div class="shell">
+      <p class="eyebrow"><span class="eyebrow__i">[02]</span>Usage</p>
+      <h2 class="h2">In a program, or in a shell.</h2>
+
+      <div class="panes">
+        <div class="pane">
+          <p class="pane__label">Library</p>
+<pre class="code"><code><span class="k">use</span> yarer::{Expression, Session};
+
+<span class="k">fn</span> <span class="fn">main</span>() -&gt; Result&lt;(), yarer::Error&gt; {
+    <span class="k">let</span> session = Session::init();
+    <span class="k">let</span> expr = Expression::compile(<span class="s">"1/cos(x^2)"</span>)?;
+
+    session.set(<span class="s">"x"</span>, <span class="n">1</span>)?;
+    <span class="m">println!</span>(<span class="s">"{}"</span>, expr.eval(&amp;session)?);
+    Ok(())
+}</code></pre>
+          <p class="pane__note">Compile once, evaluate as often as you like, against any
+            value of <code>x</code>.</p>
+        </div>
+
+        <div class="pane">
+          <p class="pane__label">Command line</p>
+<pre class="code code--shell"><code><span class="ln ln--cmd">yarer -e '16*atan(1/5)-4*atan(1/239)'</span>
+<span class="ln ln--out">3.1415926535897936</span>
+<span class="ln ln--cmd">printf '2^64/3*3\n52!/(5!*47!)\n' | yarer</span>
+<span class="ln ln--out">18446744073709551616</span>
+<span class="ln ln--out">2598960</span></code></pre>
+          <p class="pane__note">Machin's formula for pi. Piped input runs a line at a time,
+            as in GNU bc, and repeated <code>-e</code> flags share one session. Values go to
+            stdout, errors to stderr.</p>
+        </div>
+      </div>
+
+      <p class="use__install">
+        <code>cargo install yarer</code> builds the command line.
+        <code>cargo add yarer --no-default-features</code> gives a program the evaluator alone:
+        41 crates instead of 74.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Proof: full-width band, one worked example ─────────────────────── -->
+  <section class="band proof">
+    <div class="shell proof__inner">
+      <div class="proof__copy">
+        <p class="eyebrow"><span class="eyebrow__i">[03]</span>Worked example</p>
+        <h2 class="h2">Black-Scholes, one line at a time.</h2>
+        <p>Variables live in the session, so a formula can be built a line at a time and
+          every step stays available. This is a European call priced with Black-Scholes.</p>
+        <p>The refusal at the top of the page is the same idea from the other side.
+          <code>(1+1/1000000)^1000000</code> needs forty million bits, and yarer knows it
+          before computing any of them. You get an error, not a hang.</p>
+        <p>Version 0.4.1 is production ready: 196 tests, a fuzz corpus replayed on every push,
+          and no way past the size guards.</p>
+      </div>
+<pre class="code code--term proof__term"><code><span class="ln ln--in ln--static">S=100;K=100;T=1;r=0.05;sigma=0.2;</span>
+<span class="ln ln--out">0.2</span>
+<span class="ln ln--in ln--static">d1=(ln(S/K)+(r+sigma^2/2)*T)/(sigma*sqrt(T))</span>
+<span class="ln ln--out">0.35</span>
+<span class="ln ln--in ln--static">d2=d1-sigma*sqrt(T)</span>
+<span class="ln ln--out">0.15</span>
+<span class="ln ln--in ln--static">S*cdf(d1)-K*exp(-r*T)*cdf(d2)</span>
+<span class="ln ln--out ln--hit">10.45058357218556</span></code></pre>
+    </div>
+  </section>
+
+  <!-- ── Reference: precedence ladder + glyph sets ──────────────────────── -->
+  <section class="band ref">
+    <div class="shell">
+      <p class="eyebrow"><span class="eyebrow__i">[04]</span>Reference</p>
+      <h2 class="h2">The whole language, on one screen.</h2>
+
+      <div class="ref__grid">
+        <div class="ref__ladder">
+          <p class="pane__label">Precedence, weakest to strongest</p>
+          <ol class="ladder">
+            <li style="--t:.10"><span class="ops"><code>=</code></span><span class="assoc">right</span></li>
+            <li style="--t:.20"><span class="ops"><code>or</code><code>xor</code></span><span class="assoc">left</span></li>
+            <li style="--t:.30"><span class="ops"><code>and</code></span><span class="assoc">left</span></li>
+            <li style="--t:.40"><span class="ops"><code>not</code></span><span class="assoc">right, prefix</span></li>
+            <li style="--t:.50"><span class="ops"><code>&lt;</code><code>&gt;</code><code>&lt;=</code><code>&gt;=</code><code>==</code><code>&lt;&gt;</code></span><span class="assoc">left</span></li>
+            <li style="--t:.60"><span class="ops"><code>+</code><code>-</code></span><span class="assoc">left</span></li>
+            <li style="--t:.70"><span class="ops"><code>*</code><code>/</code><code>mod</code></span><span class="assoc">left</span></li>
+            <li style="--t:.80"><span class="ops"><code>^</code></span><span class="assoc">right</span></li>
+            <li style="--t:.90"><span class="ops"><code>-</code> <span class="ops__gloss">unary</span></span><span class="assoc">right</span></li>
+            <li style="--t:1"><span class="ops"><code>!</code> <span class="ops__gloss">factorial</span></span><span class="assoc">left, postfix</span></li>
+          </ol>
+          <ul class="notes">
+            <li>There is no <code>!=</code>. Since <code>!</code> is the postfix factorial,
+              <code>5!=3</code> would be ambiguous, so the spelling is <code>&lt;&gt;</code>.</li>
+            <li><code>and</code>, <code>or</code>, <code>xor</code>, <code>not</code> and
+              <code>mod</code> are reserved words in every casing, and cannot name a variable.</li>
+            <li>Nothing short-circuits. <code>0 and 1/0</code> is a division error, not
+              <code>0</code>, because a stack machine holds both operands before it sees the
+              operator.</li>
+          </ul>
+        </div>
+
+        <div class="ref__sets">
+          <div>
+            <p class="pane__label">Functions</p>
+            <ul class="chips">
+              <li>sin</li><li>cos</li><li>tan</li><li>asin</li><li>acos</li><li>atan</li>
+              <li>ln</li><li>log</li><li>abs</li><li>sqrt</li><li>max</li><li>min</li>
+              <li>floor</li><li>ceil</li><li>round</li><li>exp</li><li>pdf</li><li>cdf</li>
+            </ul>
+            <p class="pane__note">Matched case-insensitively. Arguments are always parenthesised.</p>
+          </div>
+          <div>
+            <p class="pane__label">Constants</p>
+            <dl class="consts">
+              <dt>pi</dt><dd>3.14159265</dd>
+              <dt>e</dt><dd>2.71828182</dd>
+              <dt>tau</dt><dd>6.28318530</dd>
+              <dt>phi</dt><dd>1.61803398</dd>
+              <dt>gamma</dt><dd>0.57721566</dd>
+            </dl>
+            <p class="pane__note">Held as exact rationals, not as the decimals shown here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="shell foot__inner">
+    <p class="foot__lead">yarer, yet another Rust expression resolver.</p>
+    <nav class="foot__links" aria-label="Footer links">
+      <a href="https://github.com/davassi/yarer">GitHub</a>
+      <a href="https://crates.io/crates/yarer">crates.io</a>
+      <a href="https://docs.rs/yarer">Documentation</a>
+      <a href="https://github.com/davassi/yarer/issues">Issues</a>
+    </nav>
+    <p class="foot__meta">
+      Built by <a href="https://github.com/davassi" rel="author">Gianluigi Davassi</a>
+      <span class="foot__dot" aria-hidden="true">&middot;</span>
+      <a href="https://github.com/davassi/yarer">github.com/davassi/yarer</a>
+      <span class="foot__dot" aria-hidden="true">&middot;</span>
+      <a href="https://crates.io/crates/yarer">9,522 downloads on crates.io</a>
+    </p>
+    <p class="foot__legal">MIT or Apache-2.0, at your option. Requires Rust 1.88.</p>
+  </div>
+</footer>
+
+<script src="repl.js" defer></script>
+</body>
+</html>
