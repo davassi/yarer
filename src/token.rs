@@ -465,8 +465,8 @@ impl Number {
     /// constructor on [`Number`], even though the body only ever borrows it
     /// through [`BigRational::reduced`] (which clones internally regardless);
     /// taking `&BigRational` here would save nothing and would put this
-    /// constructor's signature out of step with its callers and its sibling
-    /// [`Number::decimal_unchecked`].
+    /// constructor's signature out of step with its callers and its
+    /// crate-internal sibling `decimal_unchecked`.
     #[must_use]
     #[expect(
         clippy::needless_pass_by_value,
